@@ -150,10 +150,10 @@
       ],
       "lighting" : "individual",
       "position" : {
-        "scale" : 1.25,
+        "scale" : 1.3328,
         "translation-in-points" : [
-          0,
-          0
+          2.36,
+          -45.99
         ]
       },
       "refractivity" : {
@@ -279,10 +279,10 @@
       ],
       "lighting" : "individual",
       "position" : {
-        "scale" : 1.25,
+        "scale" : 1.3328,
         "translation-in-points" : [
-          0,
-          0
+          2.36,
+          -45.99
         ]
       },
       "refractivity" : {
