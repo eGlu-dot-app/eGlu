@@ -28,6 +28,12 @@
 // anything in a row that scrolls sideways (a carousel), which a swipe brings
 // out from under the strip.
 //
+// Nothing it does lays the page out again while the page moves: what
+// changed would show as a jump under the finger. It looks at the page
+// only once a scroll has stopped, never takes the room it gave away to
+// measure again, and measures what it moved by holding just those boxes
+// in place, which reflows nothing.
+//
 // It runs in the app's own content world. The app calls set() with the
 // strip in the page view's points, or null when the page no longer runs
 // under one (Page.strip).
@@ -59,7 +65,12 @@
   // A group with more inside than this is a part of the page, not a few controls.
   const MOST = 150;
   // At most one look at the page in this many milliseconds.
-  const PACE = 300;
+  const PACE = 600;
+  // A look waits until the page has been still this long.
+  const STILL = 300;
+  // Looks that change nothing come further apart, up to this: a page that
+  // changes all the time (GitHub's) isn't looked at all the time.
+  const SLOWEST = 5000;
   // What draws itself, whatever its style: its box is what it shows.
   const DRAWN = /^(IMG|SVG|VIDEO|CANVAS|IFRAME|INPUT|BUTTON|SELECT|TEXTAREA|PICTURE|OBJECT|EMBED|svg)$/;
   // Text that is not laid out as text on the page.
@@ -68,19 +79,24 @@
     CSS.supports('animation-timeline: scroll()') && CSS.supports('animation-range: 0px 1px');
 
   let strip = null;
-  // The sheets: the room given (text and rows), the groups moved, and no
-  // transitions while the page is measured without them. Sheets made by
-  // the script and adopted by the document: a <style> added to the page is
-  // refused where its Content-Security-Policy allows no inline style
-  // (DuckDuckGo's), and a constructed sheet is not.
+  // The sheets: the room given (text and rows), and the groups moved.
+  // Sheets made by the script and adopted by the document: a <style> added
+  // to the page is refused where its Content-Security-Policy allows no
+  // inline style (DuckDuckGo's), and a constructed sheet is not.
   const roomSheet = new CSSStyleSheet();
   const moveSheet = new CSSStyleSheet();
-  const freeze = new CSSStyleSheet();
   const written = new Map();
   let numbers = new WeakMap();
   let count = 0;
   let marked = new Set();
-  let roomed = new Set();
+  // The room given, kept from look to look: each text block or bar's row,
+  // with the page's own padding on the strip's side, read before any was
+  // added, and how much more it has.
+  let given = new Map();
+  // Blocks padding only made wider (a box as wide as what is in it): left as they are from then on.
+  let refused = new WeakSet();
+  // When the page last scrolled.
+  let lastScroll = 0;
   // Groups inside a shadow root (a chat widget's button), which the sheets
   // don't reach: moved by their own style, set by the script.
   let inlined = new Set();
@@ -92,6 +108,8 @@
   let measure = null;
   let timer = 0;
   let last = 0;
+  // How long to wait after the last look when only the page's own changes call for one.
+  let pace = PACE;
   let frame = 0;
   let idle = 0;
   let watched = null;
@@ -147,7 +165,17 @@
   // only for VoiceOver (text in a box a pixel wide) or parked out of the
   // window: Apple's header's icons each hold such a label. Nil for nothing
   // shown.
+  // What boxes show, as found in this look: a row's boxes are looked at for
+  // each group in it.
+  let shownCache = new Map();
   function extent(node) {
+    if (shownCache.has(node)) return shownCache.get(node);
+    const r = extentNow(node);
+    shownCache.set(node, r);
+    return r;
+  }
+
+  function extentNow(node) {
     if (node.nodeType === Node.TEXT_NODE) return textExtent(node);
     if (node.nodeType !== Node.ELEMENT_NODE) return null;
     const box = node.getBoundingClientRect();
@@ -241,13 +269,34 @@
     return null;
   }
 
-  // The blocks of running text whose lines reach under the strip, each with
-  // how far: given that much more padding at the strip's side, their lines
-  // end at its edge. Not text in a control or a group that moves (a
-  // button's label), nor text in a row that scrolls sideways or in
-  // something typed in. The outermost such block
-  // only: the blocks inside it wrap with it.
-  function textBlocks(m) {
+  // The room text blocks need. A block given room already keeps it, its
+  // need worked out again from its box, which the padding doesn't change,
+  // and the page's own padding: taking the padding away to measure would
+  // wrap its lines anew and move the page under the reader. Its room only
+  // grows: a block that slides past the strip's edge and back (GitHub's
+  // home page moves its text about) would otherwise have its lines wrapped
+  // anew, and the page laid out again, at every look. Then the blocks of
+  // running text whose lines newly reach under the strip, each given that
+  // much more padding at the strip's side, so their lines end at its edge.
+  // Not text in a control or a group that moves (a button's label), nor
+  // text in a row that scrolls sideways or in something typed in. The
+  // outermost such block only: the blocks inside it wrap with it.
+  function rooms(m) {
+    for (const [node, room] of [...given]) {
+      if (!node.isConnected) {
+        given.delete(node);
+        continue;
+      }
+      if (room.kind !== 'text') continue;
+      const box = node.getBoundingClientRect();
+      const style = getComputedStyle(node);
+      const border = parseFloat(m.right ? style.borderRightWidth : style.borderLeftWidth) || 0;
+      const reach = Math.ceil(m.right ? box.right - border - room.pad - m.edge : m.edge - box.left - border - room.pad);
+      if (reach + room.widen > room.extra) {
+        room.extra = reach + room.widen;
+        room.fresh = true;
+      }
+    }
     const found = new Map();
     const looked = new Set();
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
@@ -258,7 +307,7 @@
       const r = parent.getBoundingClientRect();
       if (r.width < 1 || into(m, r) < 1 || !inView(m, r)) continue;
       const block = lineBlock(parent);
-      if (!block || found.has(block)) continue;
+      if (!block || found.has(block) || given.has(block) || refused.has(block)) continue;
       const box = block.getBoundingClientRect();
       const style = getComputedStyle(block);
       // Text kept on one line takes the padding too: where its box clips it, its ellipsis comes sooner.
@@ -269,17 +318,13 @@
       const pad = parseFloat(m.right ? style.paddingRight : style.paddingLeft) || 0;
       const border = parseFloat(m.right ? style.borderRightWidth : style.borderLeftWidth) || 0;
       const reach = m.right ? box.right - border - pad - m.edge : m.edge - box.left - border - pad;
-      if (reach >= 1) found.set(block, { pad, extra: Math.ceil(reach), box, sized: false });
+      if (reach >= 1) found.set(block, { kind: 'text', pad, extra: Math.ceil(reach), widen: 0, box, sized: false, fresh: true });
     }
-    for (const block of [...found.keys()]) {
-      for (let up = block.parentElement; up; up = up.parentElement) {
-        if (found.has(up)) {
-          found.delete(block);
-          break;
-        }
-      }
+    for (const [block, room] of found) {
+      let inside = false;
+      for (let up = block.parentElement; up && !inside; up = up.parentElement) inside = found.has(up) || given.has(up);
+      if (!inside) given.set(block, room);
     }
-    return found;
   }
 
   // Whether a node is in a row that scrolls sideways (a carousel).
@@ -292,41 +337,46 @@
   }
 
   // The room given, as rules: each block's padding at the strip's side, and
-  // its box sized to hold it where padding alone made it wider.
-  function writeRoom(m, given) {
+  // its box sized to hold it where padding alone made it wider. Written
+  // only when it changed, as anything written lays the page out again.
+  function writeRoom(m) {
     const rules = [];
     for (const [node, room] of given) {
       const who = `[${ROOM}="${number(node)}"]`;
       rules.push(`${who}{${side(m)}:${(room.pad + room.extra).toFixed(1)}px !important` +
         `${room.sized ? ';box-sizing:border-box !important' : ''}}`);
     }
-    const text = rules.join('\n');
-    write(roomSheet, text);
-    roomSheet.disabled = false;
+    return write(roomSheet, rules.join('\n'));
   }
 
-  // The room given, laid out: a block that grew wider for its padding (a
-  // width the page set, outside its padding) is sized to hold it; one that
-  // still grows (a box as wide as what is in it) gets none.
-  function giveRoom(m, given) {
-    writeRoom(m, given);
-    for (let pass = 0; pass < 2; pass++) {
-      let changed = false;
-      for (const [node, room] of given) {
-        if (node.getBoundingClientRect().width <= room.box.width + 1) continue;
-        if (room.sized) given.delete(node);
-        else room.sized = true;
-        changed = true;
-      }
-      if (!changed) break;
-      writeRoom(m, given);
-    }
-    for (const node of roomed) if (!given.has(node)) node.removeAttribute(ROOM);
+  // The room given, laid out: a block new to it that grew wider for its
+  // padding (a width the page set, outside its padding) is sized to hold
+  // it; one that still grows (a box as wide as what is in it) gets none.
+  function giveRoom(m) {
     for (const node of given.keys()) {
       const n = String(number(node));
       if (node.getAttribute(ROOM) !== n) node.setAttribute(ROOM, n);
     }
-    roomed = new Set(given.keys());
+    if (writeRoom(m)) {
+      for (let pass = 0; pass < 2; pass++) {
+        let changed = false;
+        for (const [node, room] of given) {
+          if (!room.fresh || node.getBoundingClientRect().width <= room.box.width + 1) continue;
+          if (room.sized) {
+            given.delete(node);
+            refused.add(node);
+            node.removeAttribute(ROOM);
+          } else {
+            room.sized = true;
+          }
+          changed = true;
+        }
+        if (!changed) break;
+        writeRoom(m);
+      }
+    }
+    for (const room of given.values()) room.fresh = false;
+    for (const node of document.querySelectorAll(`[${ROOM}]`)) if (!given.has(node)) node.removeAttribute(ROOM);
   }
 
   function number(node) {
@@ -477,10 +527,13 @@
       const element = child.nodeType === Node.ELEMENT_NODE ? child : null;
       // Reaching under the group: what it stands on (a search field under its buttons).
       const behind = m.right ? r.right > shown.left + 1 : r.left < shown.right - 1;
-      // A row that draws nothing of its own, too wide to move along or
-      // reaching behind the group: what is in it, one by one (Apple's
-      // header's list, its search and its bag beside the menu at the end).
-      if (element && depth < 3 && (behind || r.width > WIDE * m.width) && !paints(element)) {
+      // A row that draws nothing of its own, too wide to move along,
+      // reaching behind the group, or that can't move itself: what is in
+      // it, one by one (Apple's header's list, its search and its bag
+      // beside the menu at the end; the bag's item, whose badge hangs from
+      // outside it, and the bag inside it, which can move).
+      if (element && depth < 3 && !paints(element) &&
+          (behind || r.width > WIDE * m.width || (element.children.length && untouchable(element)))) {
         for (const inner of laidOut(element)) consider(inner, depth + 1);
         return;
       }
@@ -523,14 +576,14 @@
 
   // What the page marks as pressable only by its cursor (a div with a click
   // handler, as naver's cards' "…"), in the window under the strip: the
-  // strip's column looked at every 12 pixels down, and what is at each
-  // place and round it up to a few boxes, if the page gives it a pointing
-  // hand. Only what is in the window: the rest is found as it scrolls into it.
+  // strip's column looked at every 30 pixels down, along its middle, and
+  // what is at each place and round it up to a few boxes, if the page
+  // gives it a pointing hand. Only what is in the window: the rest is
+  // found as it scrolls into it.
   function pointed(m) {
     const found = new Set();
-    const xs = m.right ? [m.edge + 6, (m.edge + m.left + m.width) / 2, m.left + m.width - 6]
-      : [m.left + 6, (m.left + m.edge) / 2, m.edge - 6];
-    for (let y = 6; y < window.innerHeight; y += 12) {
+    const xs = [m.right ? (m.edge + m.left + m.width) / 2 : (m.left + m.edge) / 2];
+    for (let y = 15; y < window.innerHeight; y += 30) {
       for (const x of xs) {
         let node = document.elementFromPoint(x, y);
         // Into open shadow roots: a chat widget's button is drawn in one.
@@ -559,15 +612,30 @@
     return false;
   }
 
+  // Whether a row lays the group out: nothing from the group up to it placed outside the flow.
+  function laidIn(mover, row) {
+    for (let node = mover; node && node !== row; node = node.parentElement) {
+      if (/absolute|fixed/.test(getComputedStyle(node).position)) return false;
+    }
+    return true;
+  }
+
+  // Whether a row stands beside the strip's top band when the page is at its
+  // top: a page's own header, which the page shows first, under the status bar.
+  function atTop(m, row) {
+    const band = m.bands[0];
+    return !!band && band[0] <= 1 && row.getBoundingClientRect().top + window.scrollY < band[1];
+  }
+
   // The groups to move, rightmost first (leftmost beside a strip on the
   // left), each with what moves along with it and how far it can go; and
-  // the rows of fixed bars to give room where a group in one had none.
-  function plan(m, rows) {
+  // the rows of bars that make the room themselves, by flexing.
+  function plan(m) {
     const scrolling = rootScrolls();
     const found = new Map();
     for (const node of [...document.querySelectorAll(PRESSABLE), ...pointed(m)]) {
       const whole = node.getBoundingClientRect();
-      if (whole.width < 1 || whole.height < 1) continue;
+      if (whole.width < 1 || whole.height < 1 || into(m, whole) < 1) continue;
       const r = visible(node, whole);
       if (!r || into(m, r) < 1 || !inView(m, r) || r.width > WIDE * m.width) continue;
       const g = group(m, node, r);
@@ -592,6 +660,10 @@
     const taken = new Set();
     const groups = [];
     const widened = new Set();
+    // Whether padding a row would carry along something slid already, which
+    // would then move twice (Apple's search and bag, slid with its menu);
+    // one placed absolutely in it (the country banner's ✕) stays put.
+    const carries = (row) => [...taken].some((node) => row.contains(node) && laidIn(node, row));
     let more = false;
     for (const g of order) {
       // The widest box round it that can move: one round something the page
@@ -606,38 +678,47 @@
       if (!how) continue;
       const near = room(m, pick.mover, pick.box, how, taken, scrolling);
       if (near.reach < 1) continue;
+      // A bar's row laid out by flex or grid makes the room itself, its
+      // buttons flexing together inside the safe area, the gaps between
+      // them its own: a bar the page fixes or makes sticky, as far as it
+      // reaches where it stands, and the page's header at its top, beside
+      // the status bar, all the way (GitHub's). Only for a group the row
+      // lays out: one placed absolutely in it (Apple's menu button) doesn't
+      // move with the row's padding, and slides with its neighbours instead.
+      const row = g.row;
+      if (row && !given.has(row) && !refused.has(row) && laidIn(pick.mover, row) && !carries(row) &&
+          /flex|grid/.test(getComputedStyle(row).display) &&
+          row.getBoundingClientRect().height <= ROW(pick.box.height) &&
+          (how === 'fixed' || how === 'sticky' || (how === 'page' && atTop(m, row)))) {
+        const needed = how === 'page' ? near.reach : near.reach * cover(m, near.union.top, near.union.bottom);
+        if (needed >= 1) {
+          const style = getComputedStyle(row);
+          given.set(row, {
+            kind: 'row', pad: parseFloat(m.right ? style.paddingRight : style.paddingLeft) || 0,
+            extra: Math.ceil(needed + GAP), widen: 0, box: row.getBoundingClientRect(), sized: false, fresh: true,
+          });
+          more = true;
+          continue;
+        }
+      }
       let push = Math.max(0, Math.min(near.reach, near.space));
       // Kept from moving far enough by a block of text given room already:
-      // the text gives a little more, and the group moves the whole way.
+      // the text gives a little more, kept from look to look, and the group
+      // moves the whole way.
       const short = Math.ceil(near.reach - push);
       if (short >= 1 && near.blocker && !widened.has(near.blocker)) {
         const block = lineBlock(near.blocker.nodeType === Node.TEXT_NODE ? near.blocker.parentElement : near.blocker);
-        const wrap = block && rows.get(block);
-        if (wrap && !wrap.widened) {
+        const wrap = block && given.get(block);
+        if (wrap && wrap.kind === 'text') {
+          wrap.widen += short;
           wrap.extra += short;
-          wrap.widened = true;
+          wrap.fresh = true;
           widened.add(near.blocker);
           more = true;
           continue;
         }
       }
-      if (push < Math.min(near.reach, LEAST)) {
-        // A bar fixed in the window, its row laid out by flex or grid: the
-        // row makes the room, as wide as is needed where the bar stands.
-        if ((how === 'fixed' || how === 'sticky') && g.row && !rows.has(g.row) &&
-            /flex|grid/.test(getComputedStyle(g.row).display)) {
-          const needed = near.reach * cover(m, near.union.top, near.union.bottom);
-          if (needed >= 1) {
-            const style = getComputedStyle(g.row);
-            rows.set(g.row, {
-              pad: parseFloat(m.right ? style.paddingRight : style.paddingLeft) || 0,
-              extra: Math.ceil(needed + GAP), box: g.row.getBoundingClientRect(), sized: false,
-            });
-            more = true;
-          }
-        }
-        continue;
-      }
+      if (push < Math.min(near.reach, LEAST)) continue;
       for (const member of near.members) taken.add(member);
       groups.push({ members: near.members, union: near.union, push, how, lead: pick.box.top });
     }
@@ -648,49 +729,79 @@
 
   function look() {
     timer = 0;
-    last = Date.now();
     if (!strip || !document.body || document.hidden) return;
+    // Never while the page moves: what changed then would show as a jump under the finger.
+    const moving = Date.now() - lastScroll;
+    if (moving < STILL) {
+      timer = setTimeout(look, STILL - moving + 20);
+      return;
+    }
+    last = Date.now();
     watch();
     watchRoots();
     adopt();
-    // The page as it lays itself out: what was given room and moved back as
-    // it was, at once, not by a transition of the page's.
-    write(freeze, `[${MARK}],[${ROOM}]{transition:none !important}`);
-    roomSheet.disabled = true;
-    moveSheet.disabled = true;
-    unInline();
     const m = measured();
     measure = m;
-    // Running text wraps at the strip's edge first: the groups are where it leaves them.
-    const given = textBlocks(m);
-    giveRoom(m, given);
-    let planned = plan(m, given);
+    shownCache = new Map();
+    const before = written.get(roomSheet) + written.get(moveSheet);
+    // What was moved, back in its place for the measuring.
+    hold(true);
+    unInline();
+    rooms(m);
+    giveRoom(m);
+    let planned = plan(m);
     if (planned.more) {
-      giveRoom(m, given);
-      planned = plan(m, given);
+      giveRoom(m);
+      planned = plan(m);
     }
+    hold(false);
     move(m, planned.groups);
-    // Laid out with the rules in, before the transitions come back.
-    void document.documentElement.getBoundingClientRect();
-    write(freeze, '');
     // Holding on to nothing of the page's.
     range.setStart(document, 0);
     range.collapse(true);
+    shownCache = new Map();
+    pace = before === written.get(roomSheet) + written.get(moveSheet) ? Math.min(pace * 2, SLOWEST) : PACE;
     follow();
+  }
+
+  // The groups moved, held in their places, or let go again, each by its
+  // own style: a translate lays nothing out, so holding them reflows
+  // nothing; and no transition of the page's carries them back meanwhile.
+  // What the page had in their style comes back as it was.
+  const held = new Map();
+  function hold(on) {
+    if (!on) {
+      for (const [node, saved] of held) {
+        node.style.removeProperty('translate');
+        node.style.removeProperty('transition');
+        if (saved) node.style.setProperty('transition', saved.value, saved.priority);
+      }
+      held.clear();
+      return;
+    }
+    for (const node of marked) {
+      if (inlined.has(node) || held.has(node)) continue;
+      const value = node.style.getPropertyValue('transition');
+      held.set(node, value ? { value, priority: node.style.getPropertyPriority('transition') } : null);
+      node.style.setProperty('transition', 'none', 'important');
+      node.style.setProperty('translate', 'none', 'important');
+    }
   }
 
   // The script's sheets among the document's, last, as the page may have replaced the list.
   function adopt() {
     const adopted = document.adoptedStyleSheets;
-    if ([roomSheet, moveSheet, freeze].every((sheet) => adopted.includes(sheet))) return;
-    document.adoptedStyleSheets = [...adopted.filter((sheet) => sheet !== roomSheet && sheet !== moveSheet && sheet !== freeze),
-      roomSheet, moveSheet, freeze];
+    if (adopted.includes(roomSheet) && adopted.includes(moveSheet)) return;
+    document.adoptedStyleSheets = [...adopted.filter((sheet) => sheet !== roomSheet && sheet !== moveSheet),
+      roomSheet, moveSheet];
   }
 
+  // A sheet's rules, written only when they changed; whether they did.
   function write(sheet, text) {
-    if (written.get(sheet) === text) return;
+    if (written.get(sheet) === text) return false;
     written.set(sheet, text);
     sheet.replaceSync(text);
+    return true;
   }
 
   // The groups moved, as rules: by where they stand, by the page's scroll,
@@ -746,7 +857,6 @@
     tracked = tracking;
     const text = rules.join('\n');
     write(moveSheet, text);
-    moveSheet.disabled = false;
   }
 
   // A group that scrolls with the page, as keyframes on the page's scroll:
@@ -801,10 +911,13 @@
   // What was moved in shadow roots, back in its place, at once.
   function unInline() {
     for (const node of inlined) {
+      const value = node.style.getPropertyValue('transition');
+      const priority = node.style.getPropertyPriority('transition');
       node.style.setProperty('transition', 'none', 'important');
       node.style.removeProperty('translate');
       void node.getBoundingClientRect();
       node.style.removeProperty('transition');
+      if (value) node.style.setProperty('transition', value, priority);
     }
     inlined = new Set();
   }
@@ -822,14 +935,16 @@
       node.removeAttribute(MARK);
       node.style.removeProperty('--eglu-strip');
     }
-    for (const node of roomed) node.removeAttribute(ROOM);
+    for (const node of given.keys()) node.removeAttribute(ROOM);
+    hold(false);
     unInline();
     marked = new Set();
-    roomed = new Set();
+    given = new Map();
+    refused = new WeakSet();
     tracked = [];
     measure = null;
-    for (const sheet of [roomSheet, moveSheet, freeze]) write(sheet, '');
-    document.adoptedStyleSheets = document.adoptedStyleSheets.filter((sheet) => sheet !== roomSheet && sheet !== moveSheet && sheet !== freeze);
+    for (const sheet of [roomSheet, moveSheet]) write(sheet, '');
+    document.adoptedStyleSheets = document.adoptedStyleSheets.filter((sheet) => sheet !== roomSheet && sheet !== moveSheet);
     if (watched) {
       watched.mutations.disconnect();
       watched.sizes.disconnect();
@@ -839,11 +954,18 @@
 
   // MARK: When to look again
 
-  // Soon, but not more often than PACE allows: a page that changes all the
-  // time is looked at a few times a second, not at every change.
-  function soon(delay = 0) {
-    if (!strip || timer) return;
-    timer = setTimeout(look, Math.max(delay, last + PACE - Date.now(), 0));
+  // Soon, but no sooner than the pace allows after the last look. What the
+  // person does (a tap, a scroll ended, the window's size) calls for a look
+  // at the usual pace; the page's own changes at the pace its last looks
+  // earned, which slows while they change nothing.
+  function soon(delay = 0, eager = true) {
+    if (!strip) return;
+    const wait = Math.max(delay, last + (eager ? PACE : pace) - Date.now(), 0);
+    if (timer) {
+      if (!eager) return;
+      clearTimeout(timer);
+    }
+    timer = setTimeout(look, wait);
   }
 
   // The page's changes: what it adds and takes away, a class or a menu
@@ -854,12 +976,12 @@
   function watch() {
     if (watched) return;
     const mutations = new MutationObserver((records) => {
-      if (records.length) soon();
+      if (records.length) soon(0, false);
     });
     mutations.observe(document.documentElement, {
       childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'hidden', 'open'],
     });
-    const sizes = new ResizeObserver(() => soon());
+    const sizes = new ResizeObserver(() => soon(0, false));
     sizes.observe(document.documentElement);
     sizes.observe(document.body);
     watched = { mutations, sizes, roots: new WeakSet() };
@@ -889,20 +1011,27 @@
     soon(350);
     setTimeout(() => soon(), 1200);
   }, true);
-  document.addEventListener('scroll', () => {
+  // The page's own scroll is what moves under the finger: a box scrolling
+  // by itself (Apple's galleries turn on their own) doesn't hold looks back.
+  document.addEventListener('scroll', (event) => {
     if (!strip) return;
     if (tracked.length && !frame) frame = requestAnimationFrame(follow);
+    if (event.target !== document && event.target !== document.scrollingElement) return;
+    lastScroll = Date.now();
     clearTimeout(idle);
-    idle = setTimeout(() => soon(), 200);
+    idle = setTimeout(() => soon(), STILL);
   }, { capture: true, passive: true });
 
   function set(next) {
+    const was = strip;
     strip = next && Array.isArray(next.bands) && next.width > 0 ? next : null;
-    if (!strip) {
-      clear();
-      return;
-    }
-    soon();
+    // None, or a strip on another side or of another width: what was given
+    // and moved for the old one goes, once. Its bands alone changing (the
+    // status bar and the strip's items come in one by one as the page
+    // shows) leaves the text's room as it is: the next look moves what
+    // needs moving, and nothing is laid out again meanwhile.
+    if (!strip || (was && (was.side !== strip.side || was.width !== strip.width))) clear();
+    if (strip) soon();
   }
 
   // What the last look did, for Diagnostics and tests.
