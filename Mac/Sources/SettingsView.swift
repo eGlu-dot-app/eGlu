@@ -235,6 +235,13 @@ private struct GeneralSettings: View {
                 Text("Window")
             }
             Section {
+                Toggle("Automatic Picture in Picture", isOn: $session.preferences.automaticPictureInPicture)
+            } header: {
+                Text("Picture in Picture")
+            } footer: {
+                Note(String(localized: "Keep playing videos and supported calls visible when you switch tabs, spaces or apps."))
+            }
+            Section {
                 Picker("Links from other apps open in", selection: $session.preferences.linksFromApps) {
                     Text("A Little Window").tag(Preferences.LinksFromApps.littleWindow)
                     Text("A New Tab").tag(Preferences.LinksFromApps.newTab)

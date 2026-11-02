@@ -19,8 +19,11 @@ final class DocumentPictureTests: XCTestCase {
                        DocumentPicture.Request(returnsToOpener: false, initialPlacement: true))
         XCTAssertEqual(DocumentPicture.Request(url: URL(string: "ABOUT:BLANK#eglu-picture&initial")),
                        DocumentPicture.Request(initialPlacement: true))
+        XCTAssertEqual(DocumentPicture.Request(url: URL(string: "about:blank%23eglu-picture&noreturn")),
+                       DocumentPicture.Request(returnsToOpener: false))
         for other in ["about:blank", "about:blank#other", "about:blank#eglu-pictures", "about:srcdoc#eglu-picture",
-                      "https://meet.google.com/#eglu-picture", "about:blank?x#eglu-picture"] {
+                      "https://meet.google.com/#eglu-picture", "about:blank?x#eglu-picture",
+                      "about:blank%23other", "about:blank%2523eglu-picture"] {
             XCTAssertNil(DocumentPicture.Request(url: URL(string: other)), other)
         }
         XCTAssertNil(DocumentPicture.Request(url: nil))

@@ -96,6 +96,9 @@ public struct Preferences: Codable, Equatable, Sendable {
     /// A link from a pinned tab to another site opens in a Peek over the
     /// tab (Peek.opensFromPinned), as in Arc; on unless turned off. The Mac's alone.
     public var peekFromPinnedTabs = true
+    /// Float a playing video or a site's picture window when its tab leaves
+    /// the screen, or another app comes forward. The Mac's alone.
+    public var automaticPictureInPicture = true
     /// Where a link from another app opens, with eGlu the default
     /// browser: a little window of its own, as Arc's Little Arc, or a new
     /// tab of the window in front. The Mac's alone.
@@ -190,7 +193,7 @@ public struct Preferences: Codable, Equatable, Sendable {
         case bookmarksBar
         case historyRetention, historySync
         case hiddenStartSections
-        case peekFromPinnedTabs, linksFromApps
+        case peekFromPinnedTabs, linksFromApps, automaticPictureInPicture
         case writing, writingDialect, writingRules, writingOffSites
         case writingOtherApps, writingApps, writingNewApps
         case developerSites, formatJSON, developerKeys, developerLocal
@@ -225,6 +228,7 @@ public struct Preferences: Codable, Equatable, Sendable {
         historySync = (try? c.decodeIfPresent(Bool.self, forKey: .historySync)) ?? false
         hiddenStartSections = (try? c.decodeIfPresent(Set<StartSection>.self, forKey: .hiddenStartSections)) ?? []
         peekFromPinnedTabs = (try? c.decodeIfPresent(Bool.self, forKey: .peekFromPinnedTabs)) ?? true
+        automaticPictureInPicture = (try? c.decodeIfPresent(Bool.self, forKey: .automaticPictureInPicture)) ?? true
         linksFromApps = (try? c.decodeIfPresent(LinksFromApps.self, forKey: .linksFromApps)) ?? .littleWindow
         writing = (try? c.decodeIfPresent(Bool.self, forKey: .writing)) ?? false
         writingDialect = (try? c.decodeIfPresent(String.self, forKey: .writingDialect)) ?? "American"

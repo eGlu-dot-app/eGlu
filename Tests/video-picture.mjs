@@ -15,6 +15,7 @@ function video(left, top, width, height, extra = {}) {
     webkitAudioDecodedByteCount: 1, style: { visibility: 'visible', opacity: '1' },
     getBoundingClientRect: () => ({ left, top, width, height, right: left + width, bottom: top + height }),
     async requestPictureInPicture() { item.chosen = true; },
+    addEventListener(type, listener) { item[type] = listener; },
     ...extra,
   };
   return item;
@@ -54,4 +55,43 @@ test('sound, paused state and the site opt-out still govern eligibility', async 
 test('a rejected PiP request reports failure', async () => {
   const item = video(0, 0, 640, 360, { async requestPictureInPicture() { throw new Error('unavailable'); } });
   assert.equal(await select([item]), false);
+});
+
+const sinkBody = swift.match(/public static let sink = """\n([\s\S]*?)\n    """/)[1];
+const sink = new (Object.getPrototypeOf(async function () {}).constructor)('document', 'window', sinkBody);
+
+test('an existing manually opened picture is left alone', async () => {
+  const item = video(0, 0, 640, 360);
+  let exits = 0;
+  const document = { pictureInPictureElement: item, async exitPictureInPicture() { exits++; } };
+  assert.equal(await run(false, document, () => item.style, 1000, 700, {}), false);
+  assert.equal(item.chosen, undefined);
+  await sink(document, {});
+  assert.equal(exits, 0);
+});
+
+test('returning restores only the video floated automatically', async () => {
+  const item = video(0, 0, 640, 360), window = {};
+  let exits = 0;
+  const document = { querySelectorAll: () => [item], pictureInPictureElement: null,
+    async exitPictureInPicture() { exits++; } };
+  await run(false, document, () => item.style, 1000, 700, window);
+  document.pictureInPictureElement = item;
+  await sink(document, window);
+  assert.equal(exits, 1);
+  assert.equal(window.__egluFloated, null);
+  await sink(document, window);
+  assert.equal(exits, 1);
+});
+
+test('a video reopened manually is no longer owned by automatic PiP', async () => {
+  const item = video(0, 0, 640, 360), window = {};
+  let exits = 0;
+  const document = { querySelectorAll: () => [item], pictureInPictureElement: null,
+    async exitPictureInPicture() { exits++; } };
+  await run(false, document, () => item.style, 1000, 700, window);
+  item.leavepictureinpicture();
+  document.pictureInPictureElement = item;
+  await sink(document, window);
+  assert.equal(exits, 0);
 });
