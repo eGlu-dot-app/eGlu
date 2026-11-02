@@ -88,7 +88,7 @@ extension ExtensionTrial {
 
     /// Its copy, from its prepared folder, in a controller that keeps
     /// nothing, granted what it asks for but Google's sign-in and cookies,
-    /// as every extension is: its content scripts on the test page, then
+    /// as every extension is until the person allows it cookies: its content scripts on the test page, then
     /// its popup and its settings page, each given five seconds. The
     /// copy's own requests (a tab, a window, the app) go unanswered, and
     /// nothing it does lands in a space.
@@ -113,13 +113,13 @@ extension ExtensionTrial {
         let context = WKWebExtensionContext(for: package)
         context.uniqueIdentifier = id
         context.baseURL = URL(string: "\(Extensions.scheme)://\(id)/")!
-        for permission in package.requestedPermissions where !ExtensionPolicy.deniedPermissions.contains(permission.rawValue) {
+        for permission in package.requestedPermissions where !ExtensionPolicy.heldPermissions.contains(permission.rawValue) {
             context.setPermissionStatus(.grantedExplicitly, for: permission)
         }
         Extensions.letRulesRedirect(context, package)
         for pattern in Extensions.sites(of: package) { context.setPermissionStatus(.grantedExplicitly, for: pattern) }
         Extensions.fence(context)
-        for permission in ExtensionPolicy.deniedPermissions {
+        for permission in ExtensionPolicy.heldPermissions {
             context.setPermissionStatus(.deniedExplicitly, for: WKWebExtension.Permission(rawValue: permission))
         }
         guard (try? controller.load(context)) != nil else { return checked }

@@ -26,7 +26,7 @@ public enum ExtensionAccessDescription {
             "menus": BrowserText.localized("Add items to page menus"),
             "alarms": BrowserText.localized("Schedule background tasks"),
             "offscreen": BrowserText.localized("Run an extension page in the background"),
-            "cookies": BrowserText.localized("Cookie access is blocked by eGlu"),
+            "cookies": BrowserText.localized("Read and change cookies on allowed sites, sign-ins included"),
             "identity": BrowserText.localized("Request sign-in for the extension"),
             "tabCapture": BrowserText.localized("Capture a tab after you allow it"),
             "desktopCapture": BrowserText.localized("Request screen sharing"),
@@ -124,8 +124,6 @@ public enum ExtensionAccessDescription {
         "system.cpu", "system.memory", "system.display", "fontSettings",
         // Only where its sites allow, which the line for its sites says.
         "scripting", "webRequest", "webRequestBlocking",
-        // Refused whatever it asks.
-        "cookies",
     ]
 }
 
@@ -152,6 +150,9 @@ public struct ExtensionAccessSummary: Equatable, Sendable {
     public let routine: [Line]
     /// Every site as asked for, in words.
     public let siteLines: [String]
+    /// It asks for cookies, which it gets only once the person allows them
+    /// (ExtensionPolicy.heldPermissions): a choice of its own, not a line.
+    public let cookies: Bool
 
     public init(permissions: [String], sites: [String]) {
         let permissions = Array(Set(permissions)).sorted()
@@ -163,8 +164,10 @@ public struct ExtensionAccessSummary: Equatable, Sendable {
             var seen = Set<String>()
             return lines.filter { seen.insert($0.text).inserted }.sorted { $0.text < $1.text }
         }
-        notable = once(permissions.filter { !ExtensionAccessDescription.routine.contains($0) }.map(line))
-        routine = once(permissions.filter { ExtensionAccessDescription.routine.contains($0) }.map(line))
+        cookies = permissions.contains("cookies")
+        let lined = permissions.filter { $0 != "cookies" }
+        notable = once(lined.filter { !ExtensionAccessDescription.routine.contains($0) }.map(line))
+        routine = once(lined.filter { ExtensionAccessDescription.routine.contains($0) }.map(line))
         let sites = Array(Set(sites)).sorted()
         siteLines = Array(Set(sites.map(ExtensionAccessDescription.site))).sorted()
         localFiles = sites.contains { $0.hasPrefix("file:") }
@@ -183,7 +186,7 @@ public struct ExtensionAccessSummary: Equatable, Sendable {
                   sites: grants.filter { $0.hasPrefix("site:") }.map { String($0.dropFirst(5)) })
     }
 
-    public var isEmpty: Bool { reach == .none && !localFiles && notable.isEmpty && routine.isEmpty }
+    public var isEmpty: Bool { reach == .none && !localFiles && notable.isEmpty && routine.isEmpty && !cookies }
 
     /// The line for its sites; with `onClick`, as When I Click It leaves it.
     public func siteHeadline(onClick: Bool) -> String? {

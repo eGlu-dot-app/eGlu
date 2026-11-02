@@ -290,6 +290,13 @@ private struct ExtensionDetail: View {
             ForEach(summary.notable, id: \.self) { line in
                 AccessLabel(symbol: line.symbol, text: line.text)
             }
+            // Its cookies, the person's choice for it: blocked until allowed.
+            if extensions.asksForCookies(item) {
+                Toggle(isOn: Binding(get: { item.readsCookies == true }, set: { extensions.setReadsCookies(item.id, $0) })) {
+                    Text("Allow cookies")
+                    Text(ExtensionAccessGroups.cookiesNote + " " + String(localized: "It restarts when you change this."))
+                }
+            }
             if summary.isEmpty {
                 AccessLabel(symbol: "checkmark.shield", text: String(localized: "It asks for no sites and no special capabilities."))
             } else if !summary.routine.isEmpty || summary.siteLines.count > 1 {
@@ -310,7 +317,7 @@ private struct ExtensionDetail: View {
         } header: {
             Text("Access")
         } footer: {
-            Note(String(localized: "Applies in every space. On allowed sites it can read and change page content and send that content elsewhere. Google's sign-in pages and cookie access stay blocked."))
+            Note(String(localized: "Applies in every space. On allowed sites it can read and change page content and send that content elsewhere. Google's sign-in pages stay blocked, and cookies unless you allow them."))
         }
         // Its commands' keys, none until you give one (ExtensionKeys);
         // from its manifest while it is on in no space.
