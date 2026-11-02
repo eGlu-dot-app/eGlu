@@ -73,7 +73,8 @@
     return { x: r.left, y: r.top, width: r.width, height: r.height };
   }
   // `clicked`: the field was clicked since last told, which may ask macOS's
-  // question for passkeys (Passkeys.field).
+  // question for passkeys (Passkeys.field). Only a click of the person's
+  // counts: WebKit marks it trusted, and a page's own event never is.
   var field = null, pending = 0, clicked = false;
   function tell() {
     pending = 0;
@@ -111,7 +112,10 @@
   }, true);
   // A click in the field the list was closed over brings it back.
   document.addEventListener('mousedown', function (event) {
-    if (forPasskeys(event.target)) { field = event.target; clicked = true; soon(); }
+    if (!forPasskeys(event.target)) return;
+    field = event.target;
+    if (event.isTrusted === true) clicked = true;
+    soon();
   }, true);
   document.addEventListener('focusout', function (event) {
     if (event.target !== field) return;

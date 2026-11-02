@@ -74,7 +74,8 @@ function page(answer = () => null, { top = true, ancestors = [], timers = null, 
   if (bridgeFirst) vm.runInContext(written(bridgeScript), ours);
   vm.runInContext(written(pageScript), own);
   if (!bridgeFirst) vm.runInContext(written(bridgeScript), ours);
-  const fire = (type, target) => (listeners[type] || []).forEach((f) => f({ target }));
+  // `isTrusted`: as WebKit marks the person's own input; a page's events are not.
+  const fire = (type, target, isTrusted = true) => (listeners[type] || []).forEach((f) => f({ target, isTrusted }));
   return { own, ours, sent, native, fire, run: (code) => vm.runInContext(code, own) };
 }
 
@@ -358,7 +359,10 @@ const field = (autocomplete) => ({
   p.fire('mousedown', marked);
   await tick(5);
   check('a click in the field says so', p.sent[1] && p.sent[1].kind === 'field' && p.sent[1].clicked === true, JSON.stringify(p.sent[1]));
-  p.sent.splice(1, 1);
+  p.fire('mousedown', marked, false);
+  await tick(5);
+  check('a page\'s own mousedown is no click', p.sent[2] && p.sent[2].kind === 'field' && p.sent[2].clicked === false, JSON.stringify(p.sent[2]));
+  p.sent.splice(1, 2);
   p.fire('focusout', marked);
   await tick(5);
   check('and when it lets go', p.sent[1] && p.sent[1].kind === 'field' && p.sent[1].rect === null);
