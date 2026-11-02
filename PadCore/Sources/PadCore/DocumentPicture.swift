@@ -42,14 +42,16 @@ public enum DocumentPicture {
         }
 
         /// The request in an address picture.js opened, or nil for any other address.
-        /// Read from the address's text: an `about:` URL is not hierarchical, and
-        /// the URL WebKit hands over (an NSURL's) gives no fragment for one.
+        /// WebKit's NSURL can escape the hash in an `about:` URL as `%23`
+        /// instead of giving it a fragment.
         public init?(url: URL?) {
-            guard let text = url?.absoluteString, let hash = text.firstIndex(of: "#"),
+            guard let address = url?.absoluteString else { return nil }
+            let text = address.removingPercentEncoding ?? address
+            guard let hash = text.firstIndex(of: "#"),
                   text[..<hash].lowercased() == "about:blank"
             else { return nil }
             let fragment = String(text[text.index(after: hash)...])
-            let parts = (fragment.removingPercentEncoding ?? fragment).split(separator: "&").map(String.init)
+            let parts = fragment.split(separator: "&").map(String.init)
             guard parts.first == DocumentPicture.marker else { return nil }
             returnsToOpener = !parts.contains("noreturn")
             initialPlacement = parts.contains("initial")
@@ -80,8 +82,8 @@ public enum DocumentPicture {
     }
 }
 
-/// A page's video in macOS's own picture in picture, when eGlu goes
-/// behind another app (Mac/Sources/Page.appWentBehind), as Arc does: the
+/// A page's video in macOS's own picture in picture, when its tab leaves
+/// the screen or eGlu goes behind another app (Page.appWentBehind): the
 /// system's window, not one of eGlu's, since it takes the video as it
 /// plays, from wherever a site's player keeps it (a stream, a protected
 /// film), where moving the element into a window of eGlu's would break
@@ -118,6 +120,9 @@ public enum VideoPicture {
       return false;
     }
     window.__egluFloated = chosen;
+    chosen.addEventListener('leavepictureinpicture', () => {
+      if (window.__egluFloated === chosen) window.__egluFloated = null;
+    }, { once: true });
     return true;
     """
 

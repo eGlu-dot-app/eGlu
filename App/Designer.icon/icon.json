@@ -186,10 +186,10 @@
         }
       ],
       "position" : {
-        "scale" : 2.3,
+        "scale" : 2.7647,
         "translation-in-points" : [
-          0,
-          0
+          -70.93,
+          -19.28
         ]
       },
       "shadow" : {
@@ -261,10 +261,10 @@
       ],
       "lighting" : "individual",
       "position" : {
-        "scale" : 1.15,
+        "scale" : 1.219,
         "translation-in-points" : [
-          0,
-          0
+          4.3,
+          -49.7
         ]
       },
       "refractivity" : {
@@ -389,10 +389,10 @@
       ],
       "lighting" : "individual",
       "position" : {
-        "scale" : 1.15,
+        "scale" : 1.219,
         "translation-in-points" : [
-          0,
-          0
+          4.3,
+          -49.7
         ]
       },
       "refractivity" : {

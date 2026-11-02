@@ -24,6 +24,23 @@ public enum FootRoom {
     /// Sizes come as fractions of a point: within one, two heights are the same.
     static let slack = 1.0
 
+    /// The page's native viewport above a docked keyboard. Insets alone
+    /// leave `100vh` layouts at their old height, with their fields covered.
+    /// A hidden guide occupies only the bottom safe area; a floating or
+    /// partial-width keyboard must not shorten the whole page.
+    public static func aboveKeyboard(_ room: CGRect, keyboard: CGRect, bottomSafeArea: CGFloat,
+                                     avoiding: Bool = true) -> CGRect {
+        let slack = CGFloat(Self.slack)
+        guard avoiding, room.width > 0, room.height > 0,
+              keyboard.height > bottomSafeArea + slack,
+              keyboard.minX <= room.minX + slack, keyboard.maxX >= room.maxX - slack,
+              keyboard.maxY >= room.maxY - slack, keyboard.minY < room.maxY
+        else { return room }
+        var frame = room
+        frame.size.height = max(1, keyboard.minY - room.minY)
+        return frame
+    }
+
     /// - Parameters:
     ///   - content: how tall the page is as it is laid out now, in the window's points, at the smallest it zooms to.
     ///   - window: how tall the window's room for the page is, bar and all.

@@ -823,6 +823,9 @@
     "Australian" : {
 
     },
+    "Automatic Picture in Picture" : {
+
+    },
     "Back" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3577,6 +3580,9 @@
     "Keep history for" : {
 
     },
+    "Keep playing videos and supported calls visible when you switch tabs, spaces or apps." : {
+
+    },
     "Keyboard" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4846,6 +4852,9 @@
 
     },
     "Picking…" : {
+
+    },
+    "Picture in Picture" : {
 
     },
     "Picture copied" : {

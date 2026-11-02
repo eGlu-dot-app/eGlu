@@ -48,7 +48,7 @@ Uploaded together as one set, the inner pictures first. Check that they were tak
 | `iPad-13.mp4` | 1200 by 1600, 15 to 30 s | Plays first on the iPad product page, before the pictures: shows a desktop web app answering the trackpad and keyboard, then spaces. |
 | `iPhone-6.9.mp4` | 886 by 1920, 15 to 30 s | The same on iPhone: the bar under the thumb and Trackpad View. |
 
-Both previews show the interface from before 1.0.3; record them again when the interface in them has changed.
+Both previews were recaptured from checkpoint `b94e7e5` on 2026-10-26 with isolated synthetic data. The iPad preview shows Split View resizing, command-bar typing, spaces and bookmarks. The iPhone preview shows the bottom bar, Trackpad View, minimap movement, zoom controls, Exit and spaces. Capture constraints and measured export properties are in `Marketing/AppStore/source/README.md` and `source/raw-current/manifest.json`.
 
 ## Text (`Marketing/AppStore/metadata.md`)
 

@@ -1430,7 +1430,7 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
     /// round them, the grip in the gap and a line of the space's colour round
     /// the one with the keys, as the Mac's.
     private func layoutPanes() {
-        let bounds = stage.bounds
+        let bounds = pageRoom
         var main = bounds
         var cards: [CGRect]?
         let split = model.tabID.flatMap { Session.shared.workspace.split(containing: $0) }
@@ -1658,11 +1658,19 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
     /// Whether the page on screen was last laid out clear of the phone bar (Page.standsClear).
     private var laidClear = false
 
+    private var pageRoom: CGRect {
+        FootRoom.aboveKeyboard(stage.bounds,
+                               keyboard: stage.convert(view.keyboardLayoutGuide.layoutFrame, from: view),
+                               bottomSafeArea: view.safeAreaInsets.bottom,
+                               avoiding: !model.editingAddress && desktopPad == nil)
+    }
+
     /// How much of the stage's bottom the phone bar covers, with the home
     /// indicator under it: always the bar's resting height, so typing an
-    /// address doesn't move the page.
+    /// address doesn't move the page. Above the keyboard, the bar is
+    /// below the page rather than over it: no second inset for it.
     private var phoneCovered: CGFloat {
-        guard model.phone, phoneBar?.view.isHidden == false else { return 0 }
+        guard model.phone, phoneBar?.view.isHidden == false, pageRoom == stage.bounds else { return 0 }
         return view.safeAreaInsets.bottom + PhoneBar.resting(strip: model.strip != nil)
     }
 

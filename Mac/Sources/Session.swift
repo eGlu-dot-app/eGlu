@@ -127,6 +127,7 @@ final class Session: ObservableObject {
     /// page on screen floats its call or its video (Page.appWentBehind). A
     /// quick ⌘-Tab out and back floats nothing.
     private func appWentBehind() {
+        guard preferences.automaticPictureInPicture else { return }
         goingBehind?.cancel()
         goingBehind = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(300))
@@ -135,15 +136,21 @@ final class Session: ObservableObject {
         }
     }
 
-    /// eGlu in front again: what floated goes back (Page.appCameBack),
-    /// a video even of a page no longer on screen (a tab switched or a
-    /// window closed meanwhile), and a tab it kept from freezing may freeze.
+    /// Only visible pages return from PiP. A background tab's picture
+    /// stays afloat until that tab comes back on screen.
     private func appCameBack() {
         goingBehind?.cancel()
         goingBehind = nil
         let shown = pagesOnScreen
         for page in shown { page.appCameBack() }
-        for page in pages.live.values where !shown.contains(where: { $0 === page }) { page.sinkVideo() }
+        pages.enforce()
+    }
+
+    func automaticPictureChanged() {
+        guard !preferences.automaticPictureInPicture else { return }
+        goingBehind?.cancel()
+        goingBehind = nil
+        for page in pages.live.values { page.cameOnScreen() }
         pages.enforce()
     }
 

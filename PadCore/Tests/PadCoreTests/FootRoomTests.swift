@@ -5,6 +5,54 @@ import XCTest
 /// (FootRoom). The sizes are an iPhone 17 Pro Max's: 894 points of window
 /// for the page, of which the bar and the home indicator cover 138.
 final class FootRoomTests: XCTestCase {
+    private let room = CGRect(x: 0, y: 0, width: 430, height: 894)
+
+    func testADockedKeyboardShortensTheNativeViewport() {
+        let keyboard = CGRect(x: 0, y: 550, width: 430, height: 344)
+        XCTAssertEqual(FootRoom.aboveKeyboard(room, keyboard: keyboard, bottomSafeArea: 34),
+                       CGRect(x: 0, y: 0, width: 430, height: 550))
+    }
+
+    func testTheHiddenKeyboardGuideLeavesTheHomeIndicatorUnderThePage() {
+        let hidden = CGRect(x: 0, y: 860, width: 430, height: 34)
+        XCTAssertEqual(FootRoom.aboveKeyboard(room, keyboard: hidden, bottomSafeArea: 34), room)
+        XCTAssertEqual(FootRoom.aboveKeyboard(room, keyboard: .zero, bottomSafeArea: 0), room)
+    }
+
+    func testTypingAnAddressOrUsingTheDesktopPadCanLeaveThePageAlone() {
+        let keyboard = CGRect(x: 0, y: 550, width: 430, height: 344)
+        XCTAssertEqual(FootRoom.aboveKeyboard(room, keyboard: keyboard, bottomSafeArea: 34, avoiding: false), room)
+    }
+
+    func testFloatingAndPartialWidthKeyboardsDoNotShortenThePage() {
+        let floating = CGRect(x: 100, y: 400, width: 280, height: 200)
+        let partial = CGRect(x: 100, y: 550, width: 330, height: 344)
+        let undocked = CGRect(x: 0, y: 400, width: 430, height: 200)
+        for keyboard in [floating, partial, undocked] {
+            XCTAssertEqual(FootRoom.aboveKeyboard(room, keyboard: keyboard, bottomSafeArea: 34), room)
+        }
+    }
+
+    func testKeyboardMovementAndDismissalRestoreThePageRoom() {
+        for top in [550.0, 650, 800, 860, 894] {
+            let keyboard = CGRect(x: 0, y: top, width: 430, height: 894 - top)
+            let expected = top < 860 ? top : 894
+            XCTAssertEqual(FootRoom.aboveKeyboard(room, keyboard: keyboard, bottomSafeArea: 34).height, expected)
+        }
+    }
+
+    func testTheKeyboardCanCoverAStageInsetFromTheWindow() {
+        let pane = CGRect(x: 16, y: 44, width: 398, height: 834)
+        let keyboard = CGRect(x: 0, y: 550, width: 430, height: 344)
+        XCTAssertEqual(FootRoom.aboveKeyboard(pane, keyboard: keyboard, bottomSafeArea: 34),
+                       CGRect(x: 16, y: 44, width: 398, height: 506))
+    }
+
+    func testAKeyboardAboveTheStageStillLeavesAValidWebViewHeight() {
+        let keyboard = CGRect(x: 0, y: -20, width: 430, height: 914)
+        XCTAssertEqual(FootRoom.aboveKeyboard(room, keyboard: keyboard, bottomSafeArea: 34).height, 1)
+    }
+
     private func clear(_ content: Double, standing: Bool = false, window: Double = 894, covered: Double = 138) -> Bool {
         FootRoom.standsClear(content: content, window: window, covered: covered, standing: standing)
     }
