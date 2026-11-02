@@ -74,5 +74,38 @@ struct StripBandsTests {
         let json = String(decoding: try JSONEncoder().encode(strip), as: UTF8.self)
         #expect(json.contains("\"side\":\"right\""))
         #expect(json.contains("\"bands\":[[0,340],[538,648]]"))
+        #expect(json.contains("\"known\":true"))
+    }
+
+    private let back = CGRect(x: 395, y: 180, width: 46, height: 46)
+    private let forward = CGRect(x: 395, y: 230, width: 46, height: 46)
+    private let tabs = CGRect(x: 395, y: 542, width: 46, height: 102)
+
+    @Test func `the items and the regions above them, where all the items have a place`() {
+        let status = CGRect(x: 382, y: 0, width: 84, height: 160)
+        let cover = DuoLayout.stripBands(items: [back, forward, tabs], occlusions: [status], pageTop: 0, pageHeight: 586, margin: 4)
+        #expect(cover.known)
+        #expect(cover.bands == [[-4, 164], [176, 280], [538, 648]])
+    }
+
+    @Test func `without the regions, the strip above the topmost item is theirs`() {
+        let cover = DuoLayout.stripBands(items: [back, forward, tabs], occlusions: nil, pageTop: 0, pageHeight: 586, margin: 4)
+        #expect(cover.known)
+        #expect(cover.bands == [[-4, 280], [538, 648]])
+    }
+
+    @Test(arguments: [CGRect?.none, .some(.zero)])
+    func `an item without a place makes the whole strip one band`(missing: CGRect?) {
+        let cover = DuoLayout.stripBands(items: [back, forward, missing, tabs], occlusions: [], pageTop: 0, pageHeight: 585.5,
+                                         margin: 4)
+        #expect(!cover.known)
+        #expect(cover.bands == [[0, 586]])
+    }
+
+    @Test func `no items at all is not known`() {
+        let cover = DuoLayout.stripBands(items: [], occlusions: [CGRect(x: 382, y: 0, width: 84, height: 160)],
+                                         pageTop: 0, pageHeight: 586, margin: 4)
+        #expect(!cover.known)
+        #expect(cover.bands == [[0, 586]])
     }
 }

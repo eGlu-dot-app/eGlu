@@ -524,17 +524,18 @@ final class StripItems {
         tabs.accessibilityLabel = String(localized: "Tabs, \(count)")
     }
 
-    /// Where the items the system shows stand, in `view`'s points: the
-    /// strip's bands come from them (Browser.stripCover). The system draws
-    /// the strip outside the app's windows, and no API places its overflow
-    /// (…) under Back and Forward: it is taken as one more item, its own
-    /// capsule's gap under Forward, as measured on the iOS 27.2 simulator.
-    func frames(in view: UIView) -> [CGRect] {
-        var frames = [back, forward, foot.newTab, tabs].compactMap { $0.frame(in: view) }.filter { !$0.isEmpty }
-        if let last = forward.frame(in: view), !last.isEmpty {
-            frames.append(last.offsetBy(dx: 0, dy: last.height + Self.overflowGap))
-        }
-        return frames
+    /// Where the items the system shows stand, in `view`'s points, nil for
+    /// one it gives no place for: the strip's bands come from them
+    /// (Browser.stripCover), and one without a place makes the whole strip
+    /// a band. The system draws the strip outside the app's windows, and no
+    /// API places its overflow (…) under Back and Forward: it is taken as
+    /// one more item, its own capsule's gap under Forward, as measured on
+    /// the iOS 27.2 simulator.
+    func frames(in view: UIView) -> [CGRect?] {
+        let place = { (item: UIBarButtonItem) in item.frame(in: view).flatMap { $0.isEmpty ? nil : $0 } }
+        let forward = place(self.forward)
+        let overflow = forward.map { $0.offsetBy(dx: 0, dy: $0.height + Self.overflowGap) }
+        return [place(back), forward, overflow, place(foot.newTab)] + (tabsShown ? [place(tabs)] : [])
     }
 
     /// From Forward's foot to the overflow's top, between the two capsules.

@@ -5,6 +5,7 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 import WebKit
+import os
 
 /// The tab a sideways drag on the phone bar brings in: from the right (1)
 /// or the left (-1), and whether the bar will say its name or its address.
@@ -1697,7 +1698,10 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
     /// beside a split, in the desktop view, on the start page, and on a
     /// hands-off page, which gets no scripts, it stops at the strip, the
     /// window's own colour behind it.
-    private func placeUnderStrip() {
+    /// `measuring` on a layout pass, where the strip's items are looked for
+    /// again; otherwise (a page's change, several times a second while it
+    /// scrolls) the strip as last measured, asking the system nothing.
+    private func placeUnderStrip(measuring: Bool = true) {
         let edgeToEdge = model.url != nil && !carded && divider.isHidden
             && page.map { desktopPad?.page !== $0 && !$0.isHandsOff } == true
         let side = edgeToEdge ? stripSide : nil
@@ -1712,19 +1716,40 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         }
         // Once the page reaches the window's edge: told meanwhile, it would move what is still clear of the strip.
         let under = reach.map { reach in abs(reach == .maxXEdge ? stack.frame.maxX - view.bounds.maxX : stack.frame.minX) < 1 } ?? false
-        page?.strip = under ? reach.flatMap(stripCover) : nil
+        guard under, let reach else {
+            measuredStrip = nil
+            page?.strip = nil
+            return
+        }
+        if measuring || measuredStrip == nil { measuredStrip = stripCover(on: reach) }
+        page?.strip = measuredStrip
     }
 
     /// The side the page runs on under the strip, and how far, as last laid out (placeUnderStrip).
     private var laidUnderStrip: CGRectEdge?
     private var laidStripWidth: CGFloat = 0
+    /// The strip as the last layout pass found it (stripCover).
+    private var measuredStrip: DuoLayout.Strip? {
+        didSet {
+            guard measuredStrip != oldValue, let strip = measuredStrip else { return }
+            let bands = strip.bands.map { "\(Int($0[0]))–\(Int($0[1]))" }.joined(separator: " ")
+            let line = "strip \(strip.side.rawValue) \(Int(strip.width)) pt, "
+                + "\(strip.known ? "items placed" : "an item unplaced, all one band"): \(bands) · \(stripSources)"
+            Diagnostics.strip = line
+            Self.stripLog.info("\(line, privacy: .public)")
+        }
+    }
+    /// What the last stripCover found, for the log and Diagnostics.
+    private var stripSources = ""
+    private static let stripLog = Logger(subsystem: "net.taehee.safience", category: "strip")
 
     /// What the strip on `side` takes of the page (DuoLayout.Strip), in the
     /// page view's points: its width, and the bands down it where something
     /// stands: the status bar's and the cameras' regions, and the system's
     /// bar's items with its overflow (…), from the items themselves
     /// (StripItems.frames). The system draws the strip outside the app's
-    /// windows, so nothing of it is found among their views.
+    /// windows, so nothing of it is found among their views; where it gives
+    /// no place for an item, the whole strip is one band (DuoLayout.stripBands).
     private func stripCover(on side: CGRectEdge) -> DuoLayout.Strip? {
         guard let page, let window = view.window else { return nil }
         let width = side == .maxXEdge ? view.safeAreaInsets.right : view.safeAreaInsets.left
@@ -1732,16 +1757,26 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         let bounds = window.bounds
         let column = CGRect(x: side == .maxXEdge ? bounds.maxX - width : bounds.minX, y: bounds.minY,
                             width: width, height: bounds.height)
-        var frames: [CGRect] = []
+        var occlusions: [CGRect]?
         if #available(iOS 27.1, *) {
-            frames += view.reservedRegions(kind: .occlusion)
+            occlusions = view.reservedRegions(kind: .occlusion)
                 .map { view.convert($0.frame, to: window) }
                 .filter { $0.intersects(column) }
         }
-        frames += (stripItems?.frames(in: window) ?? []).filter { $0.intersects(column) }
+        // An item the system shows elsewhere than in the strip isn't placed in it.
+        var items = (stripItems?.frames(in: window) ?? []).map { $0.flatMap { $0.intersects(column) ? $0 : nil } }
+        #if DEBUG
+        // -stripUnplaced YES: as on a device that gives the items no place, the whole strip one band.
+        if UserDefaults.standard.bool(forKey: "stripUnplaced") { items = items.map { _ in nil } }
+        #endif
         let shown = page.view.convert(page.view.bounds, to: window)
-        let bands = DuoLayout.stripBands(of: frames, pageTop: shown.minY, pageHeight: shown.height, margin: Self.stripMargin)
-        return DuoLayout.Strip(side: side == .maxXEdge ? .right : .left, width: width, bands: bands, ramp: Self.stripRamp)
+        let cover = DuoLayout.stripBands(items: items, occlusions: occlusions, pageTop: shown.minY, pageHeight: shown.height,
+                                         margin: Self.stripMargin)
+        let systemVersion = ProcessInfo.processInfo.operatingSystemVersionString
+        stripSources = "items \(items.map { $0.map { "\(Int($0.minY))–\(Int($0.maxY))" } ?? "none" }.joined(separator: ", "))"
+            + " · regions \(occlusions.map { "\($0.count)" } ?? "unasked") · iOS \(systemVersion)"
+        return DuoLayout.Strip(side: side == .maxXEdge ? .right : .left, width: width, bands: cover.bands, ramp: Self.stripRamp,
+                               known: cover.known)
     }
 
     /// Room kept above and below what stands in the strip (the items'
@@ -1967,7 +2002,7 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         if laidClear { stage.backgroundColor = page.footColor?.uiColor ?? view.underPageBackgroundColor }
         model.set(\.url, to: page.displayURL ?? Session.shared.workspace.tab(page.tab)?.url)
         // Whether the page runs on under the strip: not the start page, nor a hands-off page.
-        placeUnderStrip()
+        placeUnderStrip(measuring: false)
         model.set(\.title, to: view.title ?? "")
         model.set(\.loading, to: view.isLoading)
         if model.load.fraction != view.estimatedProgress { model.load.fraction = view.estimatedProgress }

@@ -53,13 +53,39 @@ public enum DuoLayout {
         /// How far below and above a band the room for what can be pressed
         /// takes to widen back to the window's edge: a slant rather than a step.
         public let ramp: CGFloat
+        /// Whether the bands are where the strip's items are: false when the
+        /// system didn't say where one stands, and the whole strip is one band.
+        public let known: Bool
 
-        public init(side: Side, width: CGFloat, bands: [[CGFloat]], ramp: CGFloat) {
+        public init(side: Side, width: CGFloat, bands: [[CGFloat]], ramp: CGFloat, known: Bool = true) {
             self.side = side
             self.width = width
             self.bands = bands
             self.ramp = ramp
+            self.known = known
         }
+    }
+
+    /// The strip's bands from what stands in it, in the window's points: the
+    /// system's items (`items`, nil for one the system gave no place for),
+    /// and the status bar's and the cameras' regions (`occlusions`, nil where
+    /// the system can't say). An item without a place makes the whole strip
+    /// one band, as nothing then says where it is empty: a band never left
+    /// out for want of a frame. Without the regions, the strip above its
+    /// topmost item is taken as theirs.
+    public static func stripBands(items: [CGRect?], occlusions: [CGRect]?, pageTop: CGFloat, pageHeight: CGFloat,
+                                  margin: CGFloat) -> (bands: [[CGFloat]], known: Bool) {
+        let placed = items.compactMap { $0 }.filter { !$0.isEmpty && !$0.isInfinite && !$0.isNull }
+        guard !items.isEmpty, placed.count == items.count, let top = placed.min(by: { $0.minY < $1.minY }) else {
+            return ([[0, pageHeight.rounded(.up)]], false)
+        }
+        var frames = placed
+        if let occlusions, !occlusions.isEmpty {
+            frames += occlusions
+        } else {
+            frames.append(CGRect(x: top.minX, y: pageTop, width: top.width, height: max(0, top.minY - pageTop)))
+        }
+        return (stripBands(of: frames, pageTop: pageTop, pageHeight: pageHeight, margin: margin), true)
     }
 
     /// The strip's bands from what stands in it, as frames in the window's

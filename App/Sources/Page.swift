@@ -1364,8 +1364,14 @@ final class Page: NSObject {
     /// they changed. Never on a hands-off page, which gets no scripts.
     private func tellStrip() {
         guard !HandsOff.covers(view.url), !HandsOff.covers(committed), view.url != nil else { return }
-        let source = (strip == nil ? "" : Scripts.strip + "\n") + Scripts.strip(set: strip)
-        view.callAsyncJavaScript(source, arguments: [:], in: nil, in: Page.world) { _ in }
+        // The strip alone where the script is in already: the script's
+        // whole source again would be parsed again for nothing.
+        let told = "if (!window.__egluStrip) return false;\n" + Scripts.strip(set: strip) + "\nreturn true;"
+        view.callAsyncJavaScript(told, arguments: [:], in: nil, in: Page.world) { [weak self] result in
+            guard let self, let strip = self.strip, case .success(let done) = result, done as? Bool == false else { return }
+            self.view.callAsyncJavaScript(Scripts.strip + "\n" + Scripts.strip(set: strip), arguments: [:], in: nil,
+                                          in: Page.world) { _ in }
+        }
     }
 
     /// After what is under the bar may have changed.
