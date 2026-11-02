@@ -67,7 +67,7 @@ nonisolated final class SiteIconsTests: XCTestCase {
         try assertColour(reopened.image(for: page, dark: true), .blue)
     }
 
-    @MainActor func testCachedLightAndDarkIconsMigrateWithoutRefetching() throws {
+    @MainActor func testCachedLightAndDarkIconsMigrateWithoutRefetching() async throws {
         let storage = try Storage()
         defer { storage.remove() }
         try storage.write(picture(.red), key: "example.com", root: storage.caches)
@@ -77,6 +77,7 @@ nonisolated final class SiteIconsTests: XCTestCase {
         try assertColour(icons.image(for: page), .red)
         try assertColour(icons.image(for: page, dark: true), .blue)
         XCTAssertFalse(icons.needs(page))
+        await icons.settled()
         try FileManager.default.removeItem(at: storage.caches)
 
         let reopened = storage.icons()
@@ -85,7 +86,7 @@ nonisolated final class SiteIconsTests: XCTestCase {
         XCTAssertFalse(reopened.needs(page))
     }
 
-    @MainActor func testFormerIconsMigrateButStillNeedReselection() throws {
+    @MainActor func testFormerIconsMigrateButStillNeedReselection() async throws {
         let storage = try Storage()
         defer { storage.remove() }
         try storage.write(picture(.red), key: "example.com", root: storage.caches, former: true)
@@ -95,6 +96,7 @@ nonisolated final class SiteIconsTests: XCTestCase {
         try assertColour(icons.image(for: page), .red)
         try assertColour(icons.image(for: page, dark: true), .blue)
         XCTAssertTrue(icons.needs(page))
+        await icons.settled()
         try FileManager.default.removeItem(at: storage.caches)
 
         let reopened = storage.icons()
@@ -111,12 +113,14 @@ nonisolated final class SiteIconsTests: XCTestCase {
         try assertColour(storage.icons().image(for: page), .red)
     }
 
-    @MainActor func testCorruptDurableIconFallsBackToAndMigratesCachedIcon() throws {
+    @MainActor func testCorruptDurableIconFallsBackToAndMigratesCachedIcon() async throws {
         let storage = try Storage()
         defer { storage.remove() }
         try storage.write(Data("not an image".utf8), key: "example.com", root: storage.support)
         try storage.write(picture(.blue), key: "example.com", root: storage.caches)
-        try assertColour(storage.icons().image(for: page), .blue)
+        let icons = storage.icons()
+        try assertColour(icons.image(for: page), .blue)
+        await icons.settled()
         try FileManager.default.removeItem(at: storage.caches)
         try assertColour(storage.icons().image(for: page), .blue)
     }
@@ -155,6 +159,26 @@ nonisolated final class SiteIconsTests: XCTestCase {
         icons.adopt(["example.com": try picture(.red)])
         await fulfillment(of: [saved], timeout: 10)
         try assertColour(icons.image(for: page), .red)
+    }
+
+    /// A Mac test copy with a data folder of its own neither reads the real
+    /// app's Caches folder nor removes anything from it.
+    @MainActor func testWithoutCachesTheCachesFolderIsLeftAlone() async throws {
+        let storage = try Storage()
+        defer { storage.remove() }
+        try storage.write(picture(.blue), key: "example.com", root: storage.caches)
+        try storage.write(picture(.blue), key: "example.com~dark", root: storage.caches)
+        let icons = storage.icons(caches: false)
+        XCTAssertNil(icons.image(for: page))
+        XCTAssertTrue(icons.needs(page))
+        let saved = expectation(description: "Icon saved")
+        let changes = icons.$revision.dropFirst().sink { _ in saved.fulfill() }
+        defer { changes.cancel() }
+        icons.adopt(["example.com": try picture(.red)])
+        await fulfillment(of: [saved], timeout: 10)
+        try assertColour(storage.icons(caches: false).image(for: page), .red)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: storage.file("example.com~dark", root: storage.caches).path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: storage.file("example.com", root: storage.caches).path))
     }
 
     private func picture(_ colour: NSColor) throws -> Data {
@@ -196,7 +220,9 @@ nonisolated final class SiteIconsTests: XCTestCase {
             try FileManager.default.createDirectory(at: caches, withIntermediateDirectories: true)
         }
 
-        @MainActor func icons() -> SiteIcons { SiteIcons(applicationSupport: support, caches: caches) }
+        @MainActor func icons(caches keepsCaches: Bool = true) -> SiteIcons {
+            SiteIcons(data: support.appendingPathComponent("Safience"), caches: keepsCaches ? caches : nil)
+        }
 
         func file(_ key: String, root: URL? = nil, former: Bool = false) -> URL {
             (root ?? support).appendingPathComponent("Safience/" + (former ? "SiteIcons" : "Icons") + "/" + key + ".png")

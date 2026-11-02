@@ -16,8 +16,10 @@ typealias SiteImage = UIImage
 ///
 /// A page names its icons (bridge.js siteIcons()), the site's own first, as
 /// browsers show it; the first of them that loads as a picture is kept, once
-/// for the whole site, in Application Support, and a bookmarks file's own icons
-/// (Chrome's) are kept the same way. An icon drawn as SVG is drawn into a
+/// for the whole site, in the app's data folder (Session.folder), and a
+/// bookmarks file's own icons (Chrome's) are kept the same way. Files are
+/// written and removed away from the main thread, one at a time and in
+/// order, and an icon is announced once its file is written. An icon drawn as SVG is drawn into a
 /// picture by WebKit (SVGRaster), and a second time in its dark look where
 /// it has one, which a dark screen shows. The app fetches them itself, not
 /// the page, with no cookies and nothing kept by the system, and only ever
@@ -29,7 +31,8 @@ typealias SiteImage = UIImage
 /// its site is next opened, and that site's icon is then chosen again.
 @MainActor
 final class SiteIcons: ObservableObject {
-    static let shared = SiteIcons()
+    // The app's own store (`shared`) is made where the app's data folder is
+    // known: each platform's Session.swift.
 
     /// Moves on each time an icon arrives, so the views showing it look again.
     @Published private(set) var revision = 0
@@ -46,25 +49,35 @@ final class SiteIcons: ObservableObject {
     private var darkShapes: [String: Bool] = [:]
 
     /// After a site's key, the name its dark look is kept under.
-    private static let darkMark = "~dark"
+    nonisolated private static let darkMark = "~dark"
 
     /// The pixel size kept: sharp at 48 points, the largest the app draws.
     nonisolated private static let side: CGFloat = 96
 
     private let folder: URL
     private let formerFolder: URL
-    private let cachedFolder: URL
-    private let formerCachedFolder: URL
+    /// Where icons were kept before, in the Caches folder, which the system
+    /// may empty: read, and copied into the data folder, as they are found.
+    private let cachedFolders: (current: URL, former: URL)?
 
-    init(applicationSupport: URL = .applicationSupportDirectory, caches: URL = .cachesDirectory) {
-        folder = applicationSupport.appendingPathComponent("Safience/Icons", isDirectory: true)
-        formerFolder = applicationSupport.appendingPathComponent("Safience/SiteIcons", isDirectory: true)
-        cachedFolder = caches.appendingPathComponent("Safience/Icons", isDirectory: true)
-        formerCachedFolder = caches.appendingPathComponent("Safience/SiteIcons", isDirectory: true)
+    /// `data` is the app's data folder; `caches` the Caches folder icons
+    /// were kept in before, or nil to leave it alone (a Mac test copy's,
+    /// whose Caches folder is the real app's).
+    init(data: URL, caches: URL?) {
+        folder = data.appendingPathComponent("Icons", isDirectory: true)
+        formerFolder = data.appendingPathComponent("SiteIcons", isDirectory: true)
+        cachedFolders = caches.map {
+            ($0.appendingPathComponent("Safience/Icons", isDirectory: true),
+             $0.appendingPathComponent("Safience/SiteIcons", isDirectory: true))
+        }
     }
 
     private var locations: [(folder: URL, current: Bool)] {
-        [(folder, true), (cachedFolder, true), (formerFolder, false), (formerCachedFolder, false)]
+        var locations = [(folder, true)]
+        if let cachedFolders { locations.append((cachedFolders.current, true)) }
+        locations.append((formerFolder, false))
+        if let cachedFolders { locations.append((cachedFolders.former, false)) }
+        return locations
     }
 
     private lazy var session: URLSession = {
@@ -152,8 +165,11 @@ final class SiteIcons: ObservableObject {
             guard let file = Self.file(for: name, in: location), let data = try? Data(contentsOf: file),
                   let image = SiteImage(data: data)
             else { continue }
+            // Found where it was kept before: copied over, without waiting for the disk.
             let destination = now ? folder : formerFolder
-            if location != destination { Self.write(data, as: name, in: destination) }
+            if location != destination, let copy = Self.file(for: name, in: destination) {
+                Self.disk.async { Self.write(data, to: copy) }
+            }
             known[name] = image
             if now { current.insert(name) }
             return image
@@ -172,8 +188,9 @@ final class SiteIcons: ObservableObject {
             defer { fetching.remove(key) }
             for candidate in candidates.prefix(6) {
                 if let fetched = await fetch(candidate) {
-                    keep(fetched.light, as: key)
-                    if let dark = fetched.dark { keep(dark, as: key + Self.darkMark) }
+                    var changes = [keep(fetched.light, as: key)]
+                    if let dark = fetched.dark { changes.append(keep(dark, as: key + Self.darkMark)) }
+                    await Self.save(changes)
                     revision += 1
                     return
                 }
@@ -196,12 +213,10 @@ final class SiteIcons: ObservableObject {
                     SiteImage(data: data).flatMap(Self.prepared).map { (key: key, picture: $0) }
                 }
             }.value
-            var took = false
-            for icon in shaped where !current.contains(icon.key) {
-                keep(icon.picture, as: icon.key)
-                took = true
-            }
-            if took { revision += 1 }
+            let changes = shaped.filter { !current.contains($0.key) }.map { keep($0.picture, as: $0.key) }
+            guard !changes.isEmpty else { return }
+            await Self.save(changes)
+            revision += 1
         }
     }
 
@@ -259,33 +274,63 @@ final class SiteIcons: ObservableObject {
         return head.range(of: "<svg", options: .caseInsensitive) != nil
     }
 
-    private func keep(_ picture: Picture, as key: String) {
-        Self.write(picture.png, as: key, in: folder)
+    /// What the disk is told for an icon taken in: its file written, and
+    /// the files of a dark look it replaces removed.
+    nonisolated private struct Change: Sendable {
+        let png: Data
+        let file: URL?
+        let removed: [URL]
+    }
+
+    /// The icon taken in for this run at once; its file is left to `save`.
+    private func keep(_ picture: Picture, as key: String) -> Change {
         known[key] = picture.image
         darkShapes[key] = nil
         current.insert(key)
         absent.remove(key)
         // A site's new icon puts away the dark look of its last, if it had one.
+        var removed: [URL] = []
         if !key.hasSuffix(Self.darkMark) {
             let dark = key + Self.darkMark
             known[dark] = nil
             current.remove(dark)
             absent.insert(dark)
-            for (location, _) in locations {
-                if let file = Self.file(for: dark, in: location) { try? FileManager.default.removeItem(at: file) }
+            removed = locations.compactMap { Self.file(for: dark, in: $0.folder) }
+        }
+        return Change(png: picture.png, file: Self.file(for: key, in: folder), removed: removed)
+    }
+
+    /// The disk's work, in the order it was asked for, away from the main
+    /// thread: a bookmarks file can bring hundreds of icons at once.
+    nonisolated private static let disk = DispatchQueue(label: "SiteIcons.disk", qos: .utility)
+
+    /// The changes' files written and removed, in order; back once they are.
+    private static func save(_ changes: [Change]) async {
+        await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
+            disk.async {
+                for change in changes {
+                    for file in change.removed { try? FileManager.default.removeItem(at: file) }
+                    if let file = change.file { write(change.png, to: file) }
+                }
+                done.resume()
             }
         }
     }
 
-    private static func write(_ data: Data, as key: String, in folder: URL) {
-        guard let file = file(for: key, in: folder) else { return }
+    /// Back once everything asked of the disk so far is done: for the tests.
+    func settled() async {
+        await Self.save([])
+    }
+
+    nonisolated private static func write(_ data: Data, to file: URL) {
+        let folder = file.deletingLastPathComponent()
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             // Re-creatable, but not purgeable: icons survive restarts without enlarging device backups.
-            var folder = folder
+            var marked = folder
             var values = URLResourceValues()
             values.isExcludedFromBackup = true
-            try? folder.setResourceValues(values)
+            try? marked.setResourceValues(values)
             try data.write(to: file, options: .atomic)
         } catch {
             // An unwritable disk must not stop a loaded icon from showing this run.
@@ -343,7 +388,7 @@ final class SiteIcons: ObservableObject {
 
     /// A host only ever becomes a file name of letters, digits, dots and
     /// dashes, and a dark look's has its mark after it.
-    private static func file(for key: String, in folder: URL) -> URL? {
+    nonisolated private static func file(for key: String, in folder: URL) -> URL? {
         let host = key.hasSuffix(darkMark) ? String(key.dropLast(darkMark.count)) : key
         guard !host.isEmpty, host.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "." || $0 == "-") })
         else { return nil }
