@@ -5,6 +5,7 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 ## Unreleased
 
 - On the iPhone Duo closed, the page runs on under the strip beside the screen to its edge, its pictures, colours and backgrounds seen through the strip's glass, where a stretched picture of its edge used to be. Text wraps at the strip's edge. Buttons, links and fields slide out from under the strip's status bar and buttons as the page scrolls towards them, and back where the strip is empty; icons side by side move together, keeping their gaps.
+- On the iPhone Duo closed, the bar at the bottom is the address alone: the space's button is in the tabs' sheet, as on any iPhone.
 - On iPhone and iPad, a page laid out above the keyboard grows back to the window's foot when the keyboard goes, instead of staying cut short with an empty band below it.
 - On the Mac, dragging the sidebar's edge resizes it smoothly instead of making the sidebar jump back and forth.
 - On the Mac, playing videos and supported calls open Picture in Picture when you switch tabs or spaces, as they do when you switch apps, and return when you come back to the page. Settings › General › Automatic Picture in Picture turns this off without changing manually opened PiP.

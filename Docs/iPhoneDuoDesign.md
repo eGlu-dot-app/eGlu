@@ -90,7 +90,7 @@ A window that is compact width and whose `verticalBarEdge` names a side. Only ha
 
 ### The bar at the bottom
 
-One row: the space button, then the address (with its star and reload), as wide as the rest allows. While an address is typed, the address and Cancel, over the keyboard, as now. 6 + 44 + 6 = 56 points instead of 104, so more of the page shows. The swipe up for the tabs and the swipe sideways for the tab beside stay on this bar (`BarSwipe`, `Browser.slidBar`). The page runs under its blur, as under the phone bar now.
+One row: the address (with its star and reload), as wide as the rest allows; a pinned tab's button before it. The space button stood before the address until 2 November 2026, when the user asked for it in the tabs' sheet only, as on any iPhone (`TabOverview`'s `SpaceHeading`). While an address is typed, the address and Cancel, over the keyboard, as now. 6 + 44 + 6 = 56 points instead of 104, so more of the page shows. The swipe up for the tabs and the swipe sideways for the tab beside stay on this bar (`BarSwipe`, `Browser.slidBar`). The page runs under its blur, as under the phone bar now.
 
 ### The strip at the side
 
