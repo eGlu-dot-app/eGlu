@@ -155,7 +155,8 @@ struct BrowserView: View {
             .contentShape(Rectangle())
             .pointerStyle(.columnResize)
             .gesture(
-                DragGesture(minimumDistance: 1)
+                // The edge moves as the width changes; measure outside its moving coordinates.
+                DragGesture(minimumDistance: 1, coordinateSpace: .global)
                     .onChanged { drag in
                         let start = widthAtStart ?? model.sidebarWidth
                         widthAtStart = start

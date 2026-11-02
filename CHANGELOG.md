@@ -4,6 +4,7 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+- On the Mac, dragging the sidebar's edge resizes it smoothly instead of making the sidebar jump back and forth.
 - On iPhone and iPad, full-height web apps resize above a docked keyboard so their fields and controls are not hidden behind it. Typing an address and floating iPad keyboards leave the page's size unchanged.
 - Safience is now eGlu, on iPhone, iPad and Mac. Your spaces, bookmarks, tabs, sign-ins, extensions and iCloud sync carry over as they are: the app's identifier and the folders it keeps them in are unchanged.
 - eGlu's home on GitHub is now github.com/eGlu-dot-app/eGlu, and its old addresses lead there. On the Mac, the copy downloaded from the website looks for updates there.
