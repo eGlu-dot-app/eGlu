@@ -6,6 +6,7 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 - On the Mac, dragging the sidebar's edge resizes it smoothly instead of making the sidebar jump back and forth.
 - On the Mac, playing videos and supported calls open Picture in Picture when you switch tabs or spaces, as they do when you switch apps, and return when you come back to the page. Settings › General › Automatic Picture in Picture turns this off without changing manually opened PiP.
+- Site icons stay available after fully quitting and reopening eGlu, even when the system clears its temporary caches. Existing icons carry over without downloading them again.
 - On iPhone and iPad, full-height web apps resize above a docked keyboard so their fields and controls are not hidden behind it. Typing an address and floating iPad keyboards leave the page's size unchanged.
 - Release signing credentials can be restored at session runtime for TestFlight and iCloud-enabled Mac DMG releases, without saving plaintext private keys to persistent storage or snapshots.
 - Safience is now eGlu, on iPhone, iPad and Mac. Your spaces, bookmarks, tabs, sign-ins, extensions and iCloud sync carry over as they are: the app's identifier and the folders it keeps them in are unchanged.

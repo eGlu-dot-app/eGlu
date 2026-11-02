@@ -134,6 +134,22 @@ targets:
         ENABLE_HARDENED_RUNTIME: YES
         # In the app, not beside it in an archive.
         SKIP_INSTALL: YES
+  Site Icons Tests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Shared/SiteIcons.swift
+      - path: Shared/SVGRaster.swift
+      - path: Tests/SiteIconsTests.swift
+    dependencies:
+      - package: PadCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: net.taehee.safience.site-icons-tests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_STRICT_CONCURRENCY: complete
+        SWIFT_APPROACHABLE_CONCURRENCY: YES
+        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
   # eGlu for Mac: the same spaces, pinned tabs and blocking, in a window
   # with Arc's sidebar down its side and the page beside it. Its own sources
   # in Mac/, with the few of the iPad's that are WebKit and Foundation only.
@@ -169,6 +185,13 @@ targets:
           plutil -replace SUPublicEDKey -string "$SPARKLE_PUBLIC_KEY" "$plist"
           plutil -replace SUEnableAutomaticChecks -bool YES "$plist"
 schemes:
+  Site Icons Tests:
+    build:
+      targets:
+        Site Icons Tests: [test]
+    test:
+      targets:
+        - Site Icons Tests
   eGlu:
     build:
       targets:

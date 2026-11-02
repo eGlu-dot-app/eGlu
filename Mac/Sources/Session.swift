@@ -584,3 +584,11 @@ enum FileAccess {
         if stale { keep(found, as: url) }
     }
 }
+
+extension SiteIcons {
+    /// The app's icons, kept with its other data. A test copy with a data
+    /// folder of its own (EGLU_DATA_ROOT) leaves the Caches folder alone:
+    /// out of the sandbox, it is the real app's too.
+    static let shared = SiteIcons(data: Session.folder,
+                                  caches: Session.dataRootOverride == nil ? .cachesDirectory : nil)
+}

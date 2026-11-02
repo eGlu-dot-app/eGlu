@@ -164,6 +164,7 @@
 		6C15686481A0F0ED1CA4D021 /* DefaultBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F50FC2DEC29500EDEB132F0 /* DefaultBrowser.swift */; };
 		6C41972B0A8D699A299C4486 /* ExtensionTabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDEB5BABE9D909C725D3A5E1 /* ExtensionTabs.swift */; };
 		6D46FEEDABAA594A4188285C /* HistoryCloud.swift in Sources */ = {isa = PBXBuildFile; fileRef = E485660AE45A3F89FFCA8F7B /* HistoryCloud.swift */; };
+		6E52F09C7B1C916388A356D1 /* PadCore in Frameworks */ = {isa = PBXBuildFile; productRef = 2271776904CC92AD375454BD /* PadCore */; };
 		6ED3B55E6EB269985CC01DE7 /* HandoffDocumentSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7928413F1DE4B3B456E6F1BC /* HandoffDocumentSource.swift */; };
 		6F0002BBCCDC23D76C0C5340 /* SyncStatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DE1911440614E5B875748F1 /* SyncStatusView.swift */; };
 		6F00F3DAB44C69852FDEEA28 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = F10DA949033005003F869CAF /* InfoPlist.strings */; };
@@ -245,6 +246,7 @@
 		AF58DF795CB5CC7D54F3F020 /* Sidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5572F19BC2243A821F2D625F /* Sidebar.swift */; };
 		B0FDAC51000B050421A33C4D /* WorkspaceRecoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 836D811F61B46FE395B73A95 /* WorkspaceRecoveryView.swift */; };
 		B174748623F73BD563B09544 /* Browser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87930B53944FBD7C4B4F4134 /* Browser.swift */; };
+		B181232E07D508F039EE9684 /* SiteIcons.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA58432FCB7289B0C712A1F6 /* SiteIcons.swift */; };
 		B19A16F8404947FC6DD47E7E /* Page.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04FA69EDE3EEE4B6AAB23745 /* Page.swift */; };
 		B3E4A9598535144E4DB720E5 /* StartPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83E41571AA2CD611290A7611 /* StartPage.swift */; };
 		B3EFE1F06E8AAF26504EC4E4 /* Engines in Frameworks */ = {isa = PBXBuildFile; productRef = 8186CD19C08A53E7D9766CCD /* Engines */; };
@@ -311,6 +313,7 @@
 		E0A5C6D48AD5E040C89E07DA /* ExtensionAuth.swift in Sources */ = {isa = PBXBuildFile; fileRef = 350EB51F36EDA73FD343F885 /* ExtensionAuth.swift */; };
 		E0EF52F8C770EB0E34825FF5 /* MeasurePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 295F884323DB72655D014BD3 /* MeasurePanel.swift */; };
 		E10F72CEC53D6AB2414416D5 /* Pages.swift in Sources */ = {isa = PBXBuildFile; fileRef = E34DC13D7028D0404EE9C142 /* Pages.swift */; };
+		E16E68F5D645ECBD9DBE5534 /* SiteIconsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A23DF8DB256F464D8F6D74E /* SiteIconsTests.swift */; };
 		E17FF97862BF894A4E893B7E /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = F10DA949033005003F869CAF /* InfoPlist.strings */; };
 		E29AD1A0DFB207C444099B2E /* Menus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58E0FB552996C2816E62272B /* Menus.swift */; };
 		E346ACE0B0B0240023757F91 /* TopTabBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = F62E29110C1CE10DA506CB2C /* TopTabBar.swift */; };
@@ -356,6 +359,7 @@
 		FA5F4348D031B6250381C3E2 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 905513BDE88D793B2A06F935 /* SettingsView.swift */; };
 		FAD3AA078535B04F28FB6326 /* Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07E7BF332E9C4215EE6C7215 /* Extensions.swift */; };
 		FAD7F63B08C43F9144F4F394 /* PinnedLook.swift in Sources */ = {isa = PBXBuildFile; fileRef = 979AD767A1E50195F11316AD /* PinnedLook.swift */; };
+		FBE1376E1102FC63032383DE /* SVGRaster.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67D1622D20840F5386645C79 /* SVGRaster.swift */; };
 		FBFED4E4695DF4722A494F35 /* WritingHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F66F0340300C67A64807FA9 /* WritingHandler.swift */; };
 		FCF273A94676E2B7095C94BC /* Pages.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8CF2A3A921F7506994D255C /* Pages.swift */; };
 		FD6F507EDD98485F1D2E829E /* ExtensionCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AA47374F100620B5D221A40 /* ExtensionCapture.swift */; };
@@ -426,6 +430,7 @@
 		17A829B7FF8B1CE19086B4B2 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		18B265C71B0477CE9C358898 /* Feather.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Feather.swift; sourceTree = "<group>"; };
 		199CA3489A3A93C47AE8C0A6 /* PopupModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PopupModel.swift; sourceTree = "<group>"; };
+		1A23DF8DB256F464D8F6D74E /* SiteIconsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiteIconsTests.swift; sourceTree = "<group>"; };
 		1AA47374F100620B5D221A40 /* ExtensionCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionCapture.swift; sourceTree = "<group>"; };
 		1B70EF23A163A13878E63AC8 /* Globe.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = Globe.icon; sourceTree = "<group>"; };
 		1BE7235512B40B5AB1898B0D /* FieldWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FieldWriter.swift; sourceTree = "<group>"; };
@@ -553,6 +558,7 @@
 		BC1AB4644B617A408C5773D1 /* PageActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageActions.swift; sourceTree = "<group>"; };
 		BDB2462136DEDBFA50899FAF /* Diagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Diagnostics.swift; sourceTree = "<group>"; };
 		BDFE00C3523F162439D9FECE /* Stores.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stores.swift; sourceTree = "<group>"; };
+		C11B86EA360AE983B440F527 /* Site Icons Tests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Site Icons Tests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		C3CFF5DE706D5A2E39CB3728 /* ExtensionLanguage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionLanguage.swift; sourceTree = "<group>"; };
 		C3F113E61795114C1E040F4D /* HandoffPicture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandoffPicture.swift; sourceTree = "<group>"; };
 		C616BF3DD906A7B37D7BD28D /* WritingChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WritingChecker.swift; sourceTree = "<group>"; };
@@ -597,6 +603,14 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		4E0D6B8AA310216D73B7323B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6E52F09C7B1C916388A356D1 /* PadCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		688B4A86621B1F83EB34BCD6 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -768,6 +782,14 @@
 			path = Mac;
 			sourceTree = "<group>";
 		};
+		B06105E670E5DE1D5B1FF70F /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				1A23DF8DB256F464D8F6D74E /* SiteIconsTests.swift */,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
 		B4288AC9D64849BAC8FA376A = {
 			isa = PBXGroup;
 			children = (
@@ -776,6 +798,7 @@
 				9E889E1B095DBBA0499B49E8 /* Mac */,
 				1F3AE0C1D658BE999E3C6848 /* Packages */,
 				25C23F2766E11592B3BF3322 /* Shared */,
+				B06105E670E5DE1D5B1FF70F /* Tests */,
 				C088F5E4E70A27299996026B /* Products */,
 			);
 			sourceTree = "<group>";
@@ -846,6 +869,7 @@
 				75F696893FA4631D9BC29459 /* eGlu Mac Direct.app */,
 				10496D9AD4F6CDEF628F68D1 /* eGlu Mac.app */,
 				399707CDDDB91841856589D7 /* eGlu.app */,
+				C11B86EA360AE983B440F527 /* Site Icons Tests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -990,6 +1014,25 @@
 			productReference = 75F696893FA4631D9BC29459 /* eGlu Mac Direct.app */;
 			productType = "com.apple.product-type.application";
 		};
+		454CCA10CF2DEE55F4B798B4 /* Site Icons Tests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CF2FB88664D4EC8B89306533 /* Build configuration list for PBXNativeTarget "Site Icons Tests" */;
+			buildPhases = (
+				788C4DAAF8C104E28B7C4191 /* Sources */,
+				4E0D6B8AA310216D73B7323B /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "Site Icons Tests";
+			packageProductDependencies = (
+				2271776904CC92AD375454BD /* PadCore */,
+			);
+			productName = "Site Icons Tests";
+			productReference = C11B86EA360AE983B440F527 /* Site Icons Tests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		7126FC58004C2B43A2826F45 /* eGlu */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = ED165068436760344CC52E07 /* Build configuration list for PBXNativeTarget "eGlu" */;
@@ -1077,6 +1120,7 @@
 			targets = (
 				7126FC58004C2B43A2826F45 /* eGlu */,
 				FDF93AA12748F1084E76ABE0 /* eGlu Dock Tile */,
+				454CCA10CF2DEE55F4B798B4 /* Site Icons Tests */,
 				006DFBE71CA87B99F5F3BA1E /* eGlu Mac */,
 				2B6BAA258BAAFCFB949DAEEC /* eGlu Mac Direct */,
 			);
@@ -1276,6 +1320,16 @@
 				C2C8C12DDCE819558D0C5AA8 /* WritingScript.swift in Sources */,
 				3E35CE7C76ED134361935A2B /* WritingSpelling.swift in Sources */,
 				019BFF0D346FD80F3FA57C85 /* WritingWords.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		788C4DAAF8C104E28B7C4191 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FBE1376E1102FC63032383DE /* SVGRaster.swift in Sources */,
+				B181232E07D508F039EE9684 /* SiteIcons.swift in Sources */,
+				E16E68F5D645ECBD9DBE5534 /* SiteIconsTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1534,6 +1588,25 @@
 /* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
+		02F5EFEF21E3325D7302654B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "net.taehee.safience.site-icons-tests";
+				SDKROOT = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_STRICT_CONCURRENCY = complete;
+			};
+			name = Release;
+		};
 		10309FE9FB794AF831EE5760 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 2CEE898E644183959A0DD1B6 /* Mac.xcconfig */;
@@ -1755,6 +1828,25 @@
 			};
 			name = Debug;
 		};
+		8E3C7890BB78F95B641C4A1B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "net.taehee.safience.site-icons-tests";
+				SDKROOT = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_STRICT_CONCURRENCY = complete;
+			};
+			name = Debug;
+		};
 		8F79FBEAE44C74F2F95BF72C /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1894,6 +1986,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
+		CF2FB88664D4EC8B89306533 /* Build configuration list for PBXNativeTarget "Site Icons Tests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8E3C7890BB78F95B641C4A1B /* Debug */,
+				02F5EFEF21E3325D7302654B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		ED165068436760344CC52E07 /* Build configuration list for PBXNativeTarget "eGlu" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -1929,6 +2030,10 @@
 
 /* Begin XCSwiftPackageProductDependency section */
 		1E6294E532A75DB0AD2BEF03 /* PadCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = PadCore;
+		};
+		2271776904CC92AD375454BD /* PadCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = PadCore;
 		};

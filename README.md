@@ -483,6 +483,7 @@ A team without the entitlement (a fork, a personal team) can't sign with it. It 
 
 ```
 cd PadCore && swift test                    # PadCore; runs on macOS or Linux
+xcodebuild -scheme "Site Icons Tests" test CODE_SIGNING_ALLOWED=NO  # native icon storage; macOS
 node Tests/bridge.mjs                       # bridge.js in Chromium (needs Playwright)
 node Tests/bridge.mjs webkit                # the same in Playwright's WebKit
 node Tests/extension-shim.mjs               # the Mac's shim for Chrome extensions, against a stand-in for WebKit
