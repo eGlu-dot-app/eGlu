@@ -431,6 +431,17 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)
             .sink { [weak self] _ in self?.keyboardStarted() }
             .store(in: &subscriptions)
+        // The page is laid out above a docked keyboard (pageRoom), so every
+        // move of the keyboard lays the window out again. Nothing else did
+        // when it went: the page stayed cut short where the keyboard had
+        // been, the card's ground showing under it. Once as it starts to
+        // move, and again when it has, by which time the keyboard's guide
+        // has its new place for certain.
+        for notification in [UIResponder.keyboardWillChangeFrameNotification, UIResponder.keyboardDidChangeFrameNotification] {
+            NotificationCenter.default.publisher(for: notification)
+                .sink { [weak self] _ in self?.view.setNeedsLayout() }
+                .store(in: &subscriptions)
+        }
         for notification in [UIAccessibility.voiceOverStatusDidChangeNotification, UIAccessibility.switchControlStatusDidChangeNotification] {
             NotificationCenter.default.publisher(for: notification)
                 .receive(on: DispatchQueue.main)

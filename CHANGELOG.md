@@ -4,6 +4,7 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+- On iPhone and iPad, a page laid out above the keyboard grows back to the window's foot when the keyboard goes, instead of staying cut short with an empty band below it.
 - On the Mac, dragging the sidebar's edge resizes it smoothly instead of making the sidebar jump back and forth.
 - On the Mac, playing videos and supported calls open Picture in Picture when you switch tabs or spaces, as they do when you switch apps, and return when you come back to the page. Settings › General › Automatic Picture in Picture turns this off without changing manually opened PiP.
 - Site icons stay available after fully quitting and reopening eGlu, even when the system clears its temporary caches. Existing icons carry over without downloading them again.
