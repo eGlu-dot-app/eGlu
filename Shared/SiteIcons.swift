@@ -70,7 +70,22 @@ final class SiteIcons: ObservableObject {
             ($0.appendingPathComponent("Safience/Icons", isDirectory: true),
              $0.appendingPathComponent("Safience/SiteIcons", isDirectory: true))
         }
+        _ = Self.finishesOnLeaving
     }
+
+    /// The disk's work finished before the app quits, or before iOS may
+    /// end it in the background: an icon found in Caches, shown and still
+    /// to be copied, would otherwise be lost if Caches were then emptied.
+    nonisolated private static let finishesOnLeaving: Void = {
+        #if os(macOS)
+        let leaving = [NSApplication.willTerminateNotification]
+        #else
+        let leaving = [UIApplication.didEnterBackgroundNotification, UIApplication.willTerminateNotification]
+        #endif
+        for name in leaving {
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: nil) { _ in disk.sync {} }
+        }
+    }()
 
     private var locations: [(folder: URL, current: Bool)] {
         var locations = [(folder, true)]
