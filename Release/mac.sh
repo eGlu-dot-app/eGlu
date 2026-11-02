@@ -80,6 +80,7 @@ TEAM="${DEVELOPMENT_TEAM:-$(echo "$IDENTITY_LINE" | sed -E 's/.*\(([A-Z0-9]+)\)"
 NOTARY=()
 if [[ -n "${NOTARY_PROFILE:-}" ]]; then
   NOTARY=(--keychain-profile "$NOTARY_PROFILE")
+  [[ -n "${NOTARY_KEYCHAIN:-}" ]] && NOTARY+=(--keychain "$NOTARY_KEYCHAIN")
 elif [[ -n "${ASC_KEY_PATH:-}" && -n "${ASC_KEY_ID:-}" && -n "${ASC_ISSUER_ID:-}" ]]; then
   NOTARY=(--key "$ASC_KEY_PATH" --key-id "$ASC_KEY_ID" --issuer "$ASC_ISSUER_ID")
 fi
