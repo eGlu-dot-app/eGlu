@@ -4,6 +4,7 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+- On the Mac, an extension's own page in a tab hears the messages its background sends to that tab, as in Chrome. NordPass's sign-in stopped at Continue, its email field greyed out, and now goes on to NordAccount.
 - On the Mac, dragging the sidebar's edge resizes it smoothly instead of making the sidebar jump back and forth.
 - On the Mac, playing videos and supported calls open Picture in Picture when you switch tabs or spaces, as they do when you switch apps, and return when you come back to the page. Settings › General › Automatic Picture in Picture turns this off without changing manually opened PiP.
 - Site icons stay available after fully quitting and reopening eGlu, even when the system clears its temporary caches. Existing icons carry over without downloading them again.
