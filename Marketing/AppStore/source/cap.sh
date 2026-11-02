@@ -8,13 +8,15 @@
 set -e
 D=$1; SHOT=$2; OUT=$3; READY=${4:-10}
 here=${0:A:h}
-xcrun simctl terminate $D net.taehee.safience 2>/dev/null || true
+bundle=${EGLU_CAPTURE_BUNDLE:-net.taehee.safience.MarketingQA}
+xcrun simctl terminate $D $bundle 2>/dev/null || true
 sleep 1
-C=$(xcrun simctl get_app_container $D net.taehee.safience data)
+C=$(xcrun simctl get_app_container $D $bundle data)
 python3 $here/state.py "$C" $SHOT >/dev/null
 # The window opens on the workspace's first space, not the one it was last in.
-rm -rf "$C/Library/Saved Application State/net.taehee.safience.savedState"
-xcrun simctl launch $D net.taehee.safience >/dev/null
+rm -rf "$C/Library/Saved Application State/$bundle.savedState"
+SIMCTL_CHILD_EGLU_ISOLATED_QA=1 SIMCTL_CHILD_EGLU_DATA_ROOT="$C/Library/Application Support/Safience" \
+  xcrun simctl launch $D $bundle >/dev/null
 if [[ $READY == <-> ]]; then
   sleep $READY
   [[ $OUT == /dev/null ]] || xcrun simctl io $D screenshot $OUT >/dev/null 2>&1

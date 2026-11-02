@@ -117,7 +117,7 @@
   }
 
   // What the app calls when the tab is left: the site's handler, if it has
-  // one and no window is open. Answers whether it was called, once the
+  // one and no window is open. Answers whether a window opened, once the
   // handler is done (or three seconds have passed), so a handler that waits
   // before asking for its window is still the app's call when it asks.
   Object.defineProperty(window, '__egluEnterPicture', {
@@ -132,7 +132,7 @@
       } finally {
         calledByApp = false;
       }
-      return true;
+      return !!(current && !current.closed);
     },
     writable: false, configurable: false, enumerable: false,
   });

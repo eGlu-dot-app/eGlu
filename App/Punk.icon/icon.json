@@ -52,10 +52,10 @@
       "lighting" : "individual",
       "opacity" : 1,
       "position" : {
-        "scale" : 1.7,
+        "scale" : 0.7821,
         "translation-in-points" : [
-          0,
-          0
+          188.28,
+          24.6
         ]
       },
       "shadow-specializations" : [
@@ -186,10 +186,10 @@
       "lighting" : "combined",
       "name" : "Group",
       "position" : {
-        "scale" : 1.25,
+        "scale" : 1.186,
         "translation-in-points" : [
-          0,
-          0
+          15.6,
+          -15.05
         ]
       },
       "refractivity" : {

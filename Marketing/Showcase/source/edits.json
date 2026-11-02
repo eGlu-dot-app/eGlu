@@ -1,0 +1,48 @@
+{
+  "sourceCheckpoint": "0ac99c1593fe9fe23e31831f4c5de8505d128987",
+  "scenes": [
+    {
+      "title": "Desktop web apps", "device": "mac", "source": "mac-browsing-tabs.mov",
+      "cuts": [{"in": 27.5, "out": 33}]
+    },
+    {
+      "title": "Tab layouts", "device": "mac", "source": "mac-browsing-tabs.mov",
+      "cuts": [{"in": 9, "out": 12}, {"in": 16, "out": 20}, {"in": 39.5, "out": 44.5}]
+    },
+    {
+      "title": "Split View", "device": "mac", "source": "mac-split.mov",
+      "cuts": [{"in": 10.5, "out": 16}, {"in": 24.2, "out": 28}, {"in": 32, "out": 35},
+               {"source": "01-design-notes-tight.mov", "device": "ipad", "in": 18, "out": 23}]
+    },
+    {
+      "title": "Spaces", "device": "mac", "source": "mac-spaces.mov",
+      "cuts": [{"in": 4.5, "out": 8.5}, {"in": 11.5, "out": 15},
+               {"in": 25.5, "out": 28.5}, {"in": 33, "out": 36}]
+    },
+    {
+      "title": "Command bar", "device": "mac", "source": "mac-command-bar.mov",
+      "cuts": [{"in": 9, "out": 13}, {"in": 18, "out": 22}, {"in": 25.5, "out": 30.5}]
+    },
+    {
+      "title": "Bookmarks", "device": "mac", "source": "mac-bookmarks.mov",
+      "cuts": [{"in": 40, "out": 43}, {"in": 50, "out": 54}, {"in": 58, "out": 63}]
+    },
+    {
+      "title": "Little windows", "device": "mac", "source": "mac-little-window.mov",
+      "cuts": [{"in": 2.8, "out": 5}, {"in": 19.8, "out": 24}, {"in": 35.5, "out": 39.5}]
+    },
+    {
+      "title": "History", "device": "mac", "source": "mac-history.mov",
+      "cuts": [{"in": 5, "out": 8}, {"in": 15, "out": 20}, {"in": 20, "out": 23}]
+    },
+    {
+      "title": "Developer tools", "device": "mac", "source": "mac-developer-held.mov",
+      "cuts": [{"in": 11, "out": 15}, {"in": 26.5, "out": 30.3}]
+    },
+    {
+      "title": "Trackpad View", "device": "iphone", "source": "03-phone-trackpad-tight.mov",
+      "cuts": [{"in": 11.5, "out": 15}, {"in": 34, "out": 40},
+               {"in": 42.5, "out": 48.5}, {"in": 62.5, "out": 69.5}]
+    }
+  ]
+}

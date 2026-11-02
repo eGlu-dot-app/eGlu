@@ -1,6 +1,22 @@
 import XCTest
 @testable import PadCore
 
+final class SidebarResizeTests: XCTestCase {
+    func testTheMovingSidebarEdgeMeasuresTheDragInFixedCoordinates() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(contentsOf: root.appendingPathComponent("Mac/Sources/BrowserView.swift"), encoding: .utf8)
+        let start = try XCTUnwrap(source.range(of: "private var edge: some View {"))
+        let end = try XCTUnwrap(source.range(of: "private var peek: some View {", range: start.upperBound..<source.endIndex))
+        let edge = source[start.lowerBound..<end.lowerBound]
+        XCTAssertTrue(edge.contains("DragGesture(minimumDistance: 1, coordinateSpace: .global)"),
+                      "The divider moves during resizing, so local drag coordinates make the sidebar oscillate")
+    }
+}
+
 final class PinchTests: XCTestCase {
     func testSpreadingZoomsInWithANegativeDelta() {
         XCTAssertLessThan(Pinch.wheelDelta(step: 1.1), 0)

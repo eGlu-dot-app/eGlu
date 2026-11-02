@@ -34,10 +34,10 @@
       "lighting" : "combined",
       "opacity" : 1,
       "position" : {
-        "scale" : 1.85,
+        "scale" : 2.0745,
         "translation-in-points" : [
-          0,
-          0
+          172.73,
+          99.96
         ]
       },
       "shadow" : {
@@ -117,10 +117,10 @@
       "lighting" : "individual",
       "opacity" : 1,
       "position" : {
-        "scale" : 1.25,
+        "scale" : 1.2087,
         "translation-in-points" : [
-          0,
-          0
+          -1.04,
+          -49.16
         ]
       },
       "shadow" : {
