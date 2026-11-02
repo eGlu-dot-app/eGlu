@@ -1,16 +1,24 @@
 {
-  "captured": "2026-10-23",
-  "sourceBranch": "codex/resolve-open-audit-items",
-  "sourceCheckpoint": "2ce596e0e1a93c4dba81d6eb8f4b7cbdc4028d37",
-  "uncommittedRemediationChanges": true,
-  "bundleIdentifier": "net.taehee.safience.RemediationQA",
-  "data": "Fresh synthetic spaces and original local demo pages; no production data",
+  "captured": "2026-10-27",
+  "timeZone": "Asia/Seoul",
+  "sourceBranch": "devin/1792986791-marketing-captures",
+  "sourceCheckpoint": "0ac99c1593fe9fe23e31831f4c5de8505d128987",
+  "designRefresh": "Latest-main pinned icons, compact glass Trackpad View controls and SwiftUI Trackpad View help sheet; help sheet exercised in the iPhone preview",
+  "bundleIdentifier": "net.taehee.safience.MarketingQA",
+  "captureBuild": {
+    "sdk": "iOS Simulator 27.0 (Xcode 27 RC)",
+    "configuration": "Debug, local Engines, signing disabled",
+    "compatibility": "Separate build copy guarded unavailable iOS 27.1-only layout/diagnostic APIs in Browser.swift, Diagnostics.swift and PhoneBar.swift. These branches do not run on the captured 27.0 devices. No app-source changes are included in this refresh."
+  },
+  "data": "Fresh synthetic spaces and original local demo pages on loopback port 8765; no production data",
   "runtimeIsolation": {
-    "SAFIENCE_ISOLATED_QA": "1",
-    "dataRoot": "/private/tmp/SafienceMarketingQA/<device>/<mode>",
+    "EGLU_ISOLATED_QA": "1",
+    "EGLU_DATA_ROOT": "<QA app container>/Library/Application Support/Safience",
     "sync": false,
     "remoteSuggestions": false,
-    "contentListDownloads": false
+    "intelligence": false,
+    "contentListDownloads": false,
+    "developerLocal": false
   },
   "nativeCaptures": {
     "iphone": {
@@ -40,45 +48,104 @@
     }
   },
   "excludedCoverage": [
-    "Duo postures and hinge transitions",
-    "Historical app previews"
+    "Duo postures and hinge transitions; archived stand-ins unchanged"
   ],
   "files": {
     "ipad/01-hero.png": {
-      "sha256": "9c33a6990e0aaa6581ae76e74c3b139c543b2b7c6857473fcc67d1f664fba5eb"
+      "pixels": [
+        2064,
+        2752
+      ],
+      "mode": "RGBA",
+      "sha256": "079f249178d262dfd48a6962fbae3ce66b9a2707d91d3c9af35b31b64fdf2b0b"
     },
     "ipad/02-split.png": {
-      "sha256": "83d7002e040e5f657a5c0a5c3347a6df2a9358a1d05e1877944194003b22cd6e"
+      "pixels": [
+        2064,
+        2752
+      ],
+      "mode": "RGBA",
+      "sha256": "aae662f888b4db94351d0778a12b408752db3db0617e89daec3019d95aa022cd"
     },
     "ipad/03-spaces.png": {
-      "sha256": "2a45d3064e1b881ff7e96051c9581e10f3b63cdc508b1473a5b6f1fe1dc4c70a"
+      "pixels": [
+        2064,
+        2752
+      ],
+      "mode": "RGBA",
+      "sha256": "58e4d8df8e942e055a9e4ae597cdf31a1d749568f5ac79908b251a2c505d9f5f"
     },
     "ipad/04-palette.png": {
-      "sha256": "2efd48138377071031e53fc0ff740472c432c03f3d491e3611f9082a11f9ccb7"
+      "pixels": [
+        2064,
+        2752
+      ],
+      "mode": "RGBA",
+      "sha256": "ae8fe6fa411b13f017a2bfd206753019c9964d450d756d7df44aa1e9a71d6da8"
     },
     "ipad/05-bookmarks.png": {
-      "sha256": "08363ab688bd2cb6016405aee4e1b10c18db896de1feaebd7f7dbfcd8f49092f"
+      "pixels": [
+        2064,
+        2752
+      ],
+      "mode": "RGBA",
+      "sha256": "7670e9247a29cd3265619fe0ec5c264bf8980b9f2da1a63d1db71eea90a40d43"
     },
     "ipad/06-notes.png": {
-      "sha256": "c9dd7742b23a4e93258584f6e589b0c293dd62ed50dfce5768306fba2a8a59be"
+      "pixels": [
+        2064,
+        2752
+      ],
+      "mode": "RGBA",
+      "sha256": "fa53af68a7974a9ab0a2e4890972e3c2db0983299f3213232ac8fa4c469fc65b"
     },
     "iphone/01-hero.png": {
-      "sha256": "9bd3fee766cd9ad4ff8ba17e0cad87716ecf2066ee5b61e4f7729f38f7eca47a"
+      "pixels": [
+        1320,
+        2868
+      ],
+      "mode": "RGBA",
+      "sha256": "e68498f2bea3122ba0049ff628306857dd9b8723bca54c6617139ea17a44f5db"
     },
     "iphone/02-desktop-view.png": {
-      "sha256": "d60d54af00ef9599c90d4bc066b6b2d828e46f76a46f77a828f9286fe087f514"
+      "pixels": [
+        1320,
+        2868
+      ],
+      "mode": "RGBA",
+      "sha256": "980d5e740f20c8f47a9b5958380649adf89664c837e8283bf42b70c56fcefea7"
     },
     "iphone/03-spaces.png": {
-      "sha256": "3ad2b5be5e159bfd1448fd6b0a062d7eb6b7c4c3b89487ea4c62c94cd68fbe62"
+      "pixels": [
+        1320,
+        2868
+      ],
+      "mode": "RGBA",
+      "sha256": "1e331ebdcb9c7f6fc67b686c853e32caafe5129715b57e3c59afdd473f166fd2"
     },
     "iphone/04-palette.png": {
-      "sha256": "bb8a714e68a706ca772d99904a68d7e0dea9502aa41ed0b63d66a8c60fd0c688"
+      "pixels": [
+        1320,
+        2868
+      ],
+      "mode": "RGBA",
+      "sha256": "b967faf217697b53537c335428964baf083d77e57ff73e847b4be68444bf4e08"
     },
     "iphone/05-bookmarks.png": {
-      "sha256": "5e68a507fe6d41e806cb756e0100aa80b812a6527c0eebb3354aaed3badd0764"
+      "pixels": [
+        1320,
+        2868
+      ],
+      "mode": "RGBA",
+      "sha256": "bd345a60888453994e59e1bea6ff36bd5b0729e7404c6306f77df5b9be6ab60c"
     },
     "iphone/06-notes.png": {
-      "sha256": "13312c31a2a55eb74e4df1529e62b9968d64a6a38aff4dc523b1acffd9add67c"
+      "pixels": [
+        1320,
+        2868
+      ],
+      "mode": "RGBA",
+      "sha256": "b9f85ecff7b1038efe19498aecdbd10ef96e502893fbc6039c498eb9d537a396"
     }
   },
   "framedOutputs": {
@@ -88,7 +155,7 @@
         2752
       ],
       "mode": "RGB",
-      "sha256": "febbb9d0168441a189f0bb7925ae482329c384b3c6dc496878c4d353a81a739e"
+      "sha256": "92210fbfe1cf75cc9acc180abab04e8a4f25ccd6e5615119d8d3658aaebc50b7"
     },
     "Marketing/AppStore/02-split.png": {
       "pixels": [
@@ -96,7 +163,7 @@
         2752
       ],
       "mode": "RGB",
-      "sha256": "d4e5fa9d387f060a92e7962f2006471afc22851067009dbe1de580429d29f5d5"
+      "sha256": "decc0c32357d706bcdb8b732dbe0b97fe4a9d4c4b09dbdd5228ae89db0db545e"
     },
     "Marketing/AppStore/03-spaces.png": {
       "pixels": [
@@ -104,7 +171,7 @@
         2752
       ],
       "mode": "RGB",
-      "sha256": "d28412874991c9987272db876f78f2b78ca5f640633d00c8f8e16323f2c022db"
+      "sha256": "dca5d6fb97b697fb3822c74469394c1716c31bf5c6557d3cb0edde199ae37b5e"
     },
     "Marketing/AppStore/04-palette.png": {
       "pixels": [
@@ -112,7 +179,7 @@
         2752
       ],
       "mode": "RGB",
-      "sha256": "d42570ea29e01703661924ad0ab8843e5d5e7705154086c4a69c18f65eccdc19"
+      "sha256": "cd325f09ea3e2377513f1c77fc1e55e595b93e251942e61afc4f5d4933cab12e"
     },
     "Marketing/AppStore/05-bookmarks.png": {
       "pixels": [
@@ -120,7 +187,7 @@
         2752
       ],
       "mode": "RGB",
-      "sha256": "604ff4dbb8429e7107a0907f7fe70fa979dfae19a6ba15415a3f855a3ce51a98"
+      "sha256": "dcd14494d0ec0f979c893a834a02e78c89795edeb3cdcbe71f49175d8aa7ce78"
     },
     "Marketing/AppStore/iPhone-6.9/01-hero.png": {
       "pixels": [
@@ -128,7 +195,7 @@
         2868
       ],
       "mode": "RGB",
-      "sha256": "fb84211c80826873baab4407b50797d49f9816c958d84172b06479bf876921d2"
+      "sha256": "9f47d889192dd7571df8ce940dd112f9b2b472db27e81fba8c5098fd9cf65402"
     },
     "Marketing/AppStore/iPhone-6.9/02-desktop-view.png": {
       "pixels": [
@@ -136,7 +203,7 @@
         2868
       ],
       "mode": "RGB",
-      "sha256": "2cfa1a537885ef4d0ac011704afe1a10d0e3fc986ed76d1bcbb3eb02040e4656"
+      "sha256": "7a6e30625a26a3b15236b4ae73177862c95ae9cb476e7da35460b3c485d11093"
     },
     "Marketing/AppStore/iPhone-6.9/03-spaces.png": {
       "pixels": [
@@ -144,7 +211,7 @@
         2868
       ],
       "mode": "RGB",
-      "sha256": "c22f947a700231a2ab6cdd4ded157ca28528a4ad59a039a592cba417564b0323"
+      "sha256": "fcaf220b835c0dac89348a4161a9963eb2c95aed41b7b124681f26397bc342cf"
     },
     "Marketing/AppStore/iPhone-6.9/04-palette.png": {
       "pixels": [
@@ -152,7 +219,7 @@
         2868
       ],
       "mode": "RGB",
-      "sha256": "8fbb9200a39319161eb5b79eace766dc6aff1969f66a0302f9492fcb64d66870"
+      "sha256": "ffd9e865519fa185fffbeb4c2bfb48287eaa90c51593f798f0ca5e2db58fdd1a"
     },
     "Marketing/AppStore/iPhone-6.9/05-bookmarks.png": {
       "pixels": [
@@ -160,7 +227,7 @@
         2868
       ],
       "mode": "RGB",
-      "sha256": "9dc416ce638b2d0d30ff80b397c75f2925d315db2906e5ceb0b8c7fa3511ba55"
+      "sha256": "caecb4e42c0cb5898a93b8ff532baac9f27f32e0b3663c1b7c952ae1ef71711d"
     },
     "Marketing/AppStore/iPhone-6.3/01-hero.png": {
       "pixels": [
@@ -168,7 +235,7 @@
         2622
       ],
       "mode": "RGB",
-      "sha256": "59f00d36567256c8d9f519e36d0d866d5411b0d01d1b9ef81484f7dbeb3547b9"
+      "sha256": "36fdcf29cea19b6064cf0677d4f36ff97a9ba79d230b94242a4724fb757f2a89"
     },
     "Marketing/AppStore/iPhone-6.3/02-desktop-view.png": {
       "pixels": [
@@ -176,7 +243,7 @@
         2622
       ],
       "mode": "RGB",
-      "sha256": "7d2ec7453495f47b9f1301d40e9768a066d89c28f9346325b662dd2744746a1b"
+      "sha256": "49fe6a2703764386a67b596b39bc97f3abd664ce82bb8442a2a3498ee6fc927e"
     },
     "Marketing/AppStore/iPhone-6.3/03-spaces.png": {
       "pixels": [
@@ -184,7 +251,7 @@
         2622
       ],
       "mode": "RGB",
-      "sha256": "135da27a771f2ac3b5217eccb1dc55471eee24e054bbb032eba8134982315edc"
+      "sha256": "c36040ad4a37bbe7a122d8319f026438ec8f25413db334622d028cfe434593af"
     },
     "Marketing/AppStore/iPhone-6.3/04-palette.png": {
       "pixels": [
@@ -192,7 +259,7 @@
         2622
       ],
       "mode": "RGB",
-      "sha256": "3463dfd38d8a6098b41e11462e95c5b2648f6d7ee1deb22b8a32b2a7ab75df7b"
+      "sha256": "481d15f4b54a385fbe86136d9aec996f6f0a7fea601f50a77a0ec8911c4e947e"
     },
     "Marketing/AppStore/iPhone-6.3/05-bookmarks.png": {
       "pixels": [
@@ -200,14 +267,60 @@
         2622
       ],
       "mode": "RGB",
-      "sha256": "1dde33278d69d755a1da396a536d0193674819f6c97e7602b12167153f2aa909"
+      "sha256": "cd037cf3bc154dec50f203b59450625956257d1d51d96623361f9e290447ab12"
+    }
+  },
+  "previews": {
+    "Marketing/AppStore/previews/iPad-13.mp4": {
+      "pixels": [
+        1200,
+        1600
+      ],
+      "durationSeconds": 16.166667,
+      "fps": 30,
+      "videoCodec": "H.264 High",
+      "pixelFormat": "yuv420p",
+      "audioCodec": "AAC",
+      "audioChannels": 2,
+      "audioSampleRate": 48000,
+      "silentAudio": true,
+      "fastStart": true,
+      "fullDecodePassed": true,
+      "sha256": "ed4d35bf7c081083a9bfd08c95dc19aca1489da8813597060e4e6355fe7287f8",
+      "tightenHoldSeconds": 1.2,
+      "previewStartSeconds": 0,
+      "previewLengthLimitSeconds": 30,
+      "visualReview": "Native flow reviewed; no black or empty ending"
+    },
+    "Marketing/AppStore/previews/iPhone-6.9.mp4": {
+      "pixels": [
+        886,
+        1920
+      ],
+      "durationSeconds": 27.766667,
+      "fps": 30,
+      "videoCodec": "H.264 High",
+      "pixelFormat": "yuv420p",
+      "audioCodec": "AAC",
+      "audioChannels": 2,
+      "audioSampleRate": 48000,
+      "silentAudio": true,
+      "fastStart": true,
+      "fullDecodePassed": true,
+      "sha256": "c52762a338925c127149e50202dba3280ba1e5bf8517ddbd1761af98f61c42cd",
+      "tightenHoldSeconds": 0.8,
+      "previewStartSeconds": 0,
+      "previewLengthLimitSeconds": 30,
+      "visualReview": "Native flow reviewed; no black or empty ending"
     }
   },
   "framedOutputValidation": {
     "count": 15,
     "opaqueRGB": true,
     "exactDimensions": true,
-    "renderer": "existing WebKit frame.html/render.mjs; matched installed Playwright and bundled Python/Pillow",
+    "renderer": "Existing WebKit frame.html/render.mjs with Playwright, Python/Pillow and local Apple bezels",
+    "typography": "Existing SF Pro stack retained; guideline ABC Areal was unavailable",
     "uploaded": false
-  }
+  },
+  "helperValidation": "Both demo workspace types and all six shot states passed; cap.sh default/custom QA bundle launches passed mocked simctl isolation checks; Python, zsh and renderer syntax checks passed"
 }
