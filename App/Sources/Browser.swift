@@ -317,9 +317,6 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
     private var afterTabs: BarAction?
     /// Behind the phone bar: the page through it, blurred more the lower it is (BarBackdrop).
     private let barBackdrop = BarBackdrop()
-    /// Behind the iPhone Duo's strip, beside the page: the page's edge on
-    /// that side drawn on across it (placeStripGround).
-    private let stripGround = UIImageView()
     private var addressBar: UIHostingController<AddressBar>?
     /// The space's bookmarks under the bars, where the tabs are along the top (BookmarksStrip).
     private var bookmarksStrip: UIHostingController<BookmarksStrip>?
@@ -585,12 +582,6 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
             ground.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
         ])
         windowGround = ground
-        // Stretched across from a picture one point wide, smoothly (Page.stripEdge).
-        stripGround.contentMode = .scaleToFill
-        stripGround.isUserInteractionEnabled = false
-        stripGround.isHidden = true
-        stripGround.accessibilityElementsHidden = true
-        view.insertSubview(stripGround, aboveSubview: ground.view)
         for (shadow, opacity, radius, drop) in [(cardShadow, Float(0.08), CGFloat(14), CGFloat(6)), (cardEdge, 0.16, 1, 0.5)] {
             shadow.isUserInteractionEnabled = false
             shadow.isHidden = true
@@ -634,6 +625,11 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         let banner = embed(BannerBar(window: model) { [weak self] in self?.act($0) })
         banner.sizingOptions = .intrinsicContentSize
         bannerBar = banner
+        // Over the page in the stack, which runs on under the iPhone Duo's
+        // strip (placeUnderStrip): what these say keeps clear of the strip.
+        saveStatus.safeAreaRegions = .container
+        splitStatus.safeAreaRegions = .container
+        banner.safeAreaRegions = .container
 
         stage.clipsToBounds = true
         stage.backgroundColor = Palette.UI.ground
@@ -1117,13 +1113,13 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         }
         if barBackdrop.overrideUserInterfaceStyle != footStyle { barBackdrop.overrideUserInterfaceStyle = footStyle }
         barBackdrop.tint = foot?.uiColor
-        // The iPhone Duo strip's items read on what is behind them: the page's
-        // edge drawn on across it (placeStripGround), else the window's colour;
-        // at its foot on a phone, the bar's ground, which runs on under the strip.
+        // The iPhone Duo strip's items read on what is behind them: the
+        // page, which runs on under the strip, or the window's colour, as
+        // the bars along the top do; at its foot on a phone, the bar's
+        // ground, which runs on under the strip.
         if let navigation = navigationController {
-            let column = stripGround.isHidden ? nil : page?.stripColumn
-            let top = column.map { $0.top.isDark ? UIUserInterfaceStyle.dark : .light } ?? style
-            let bottom = model.phone ? footStyle : column.map { $0.foot.isDark ? UIUserInterfaceStyle.dark : .light } ?? style
+            let top = style
+            let bottom = model.phone ? footStyle : style
             if navigation.navigationBar.overrideUserInterfaceStyle != top { navigation.navigationBar.overrideUserInterfaceStyle = top }
             if navigation.toolbar.overrideUserInterfaceStyle != bottom { navigation.toolbar.overrideUserInterfaceStyle = bottom }
         }
@@ -1534,7 +1530,7 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
             let ground = divider.isHidden ? Palette.UI.ground : .clear
             stage.backgroundColor = clear ? (page?.footColor?.uiColor ?? page?.view.underPageBackgroundColor ?? ground) : ground
         }
-        placeStripGround()
+        placeUnderStrip()
         layoutMeasureCard()
         picture.frame = main
         // The start page runs on under the bar too, its own ground behind
@@ -1693,47 +1689,66 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         return view.safeAreaInsets.right >= view.safeAreaInsets.left ? .maxXEdge : .minXEdge
     }
 
-    /// Behind the iPhone Duo's strip, beside the page, the page's edge on
-    /// that side drawn on across it (Page.stripColumn): a header's colour
-    /// beside the header, a gradient going on, the page's ground beside the
-    /// ground, as if the page reached the window's edge. Only where the page
-    /// is edge to edge and meets the strip: on a card, beside a split or a
-    /// sidebar, in the desktop view and on the start page the window's own
-    /// colour stands behind the strip.
-    private func placeStripGround() {
-        // From the safe area's edge to the window's. Measured by the stack,
-        // which never moves: a sideways swipe moves the stage.
-        let safe = view.bounds.inset(by: view.safeAreaInsets)
-        let meets: (CGRectEdge) -> Bool = { [stack] side in
-            side == .maxXEdge ? abs(stack.frame.maxX - safe.maxX) < 1 : abs(stack.frame.minX - safe.minX) < 1
+    /// The page on under the iPhone Duo's strip to the window's edge: its
+    /// pictures, colours and text seen through the strip's glass, and what
+    /// can be pressed on it moved out from under the strip's items by
+    /// strip.js, told where they are (stripCover; Docs/iPhoneDuoDesign.md §9).
+    /// Only where the page is edge to edge beside the strip: on a card,
+    /// beside a split, in the desktop view, on the start page, and on a
+    /// hands-off page, which gets no scripts, it stops at the strip, the
+    /// window's own colour behind it.
+    private func placeUnderStrip() {
+        let edgeToEdge = model.url != nil && !carded && divider.isHidden
+            && page.map { desktopPad?.page !== $0 && !$0.isHandsOff } == true
+        let side = edgeToEdge ? stripSide : nil
+        let width = side == .maxXEdge ? view.safeAreaInsets.right : side == .minXEdge ? view.safeAreaInsets.left : 0
+        let reach = width > 0 ? side : nil
+        if laidUnderStrip != reach || laidStripWidth != width {
+            laidUnderStrip = reach
+            laidStripWidth = width
+            chromeConstraints.reachUnderStrip(reach, width: width,
+                                              rightToLeft: view.effectiveUserInterfaceLayoutDirection == .rightToLeft)
+            view.setNeedsLayout()
         }
-        let edgeToEdge = model.url != nil && !carded && divider.isHidden && page.map { desktopPad?.page !== $0 } == true
-        let side = edgeToEdge ? stripSide.flatMap { meets($0) ? $0 : nil } : nil
-        // Looked at only while it is drawn on.
-        page?.stripEdge = side
-        guard let side, let page, let column = page.stripColumn else {
-            stripGround.isHidden = true
-            return
-        }
-        let start = side == .maxXEdge ? safe.maxX : view.bounds.minX
-        let end = side == .maxXEdge ? view.bounds.maxX : safe.minX
-        // As high as the page's edge it was drawn from (to the phone bar, whose
-        // blur goes on under the strip), in the stage, which the swipe moves only sideways.
-        let shown = stack.convert(stage.frame, to: view)
-        let frame = CGRect(x: start, y: shown.minY + page.view.frame.minY, width: max(0, end - start), height: column.height)
-        if stripGround.frame != frame { stripGround.frame = frame }
-        if stripGround.image !== column.picture {
-            if stripGround.isHidden || stripGround.image == nil {
-                stripGround.image = column.picture
-            } else {
-                // The page scrolled or changed under it: eased, as the bar's ground is.
-                UIView.transition(with: stripGround, duration: 0.2, options: [.transitionCrossDissolve, .allowUserInteraction]) {
-                    self.stripGround.image = column.picture
-                }
-            }
-        }
-        stripGround.isHidden = frame.width < 1 || frame.height < 1
+        // Once the page reaches the window's edge: told meanwhile, it would move what is still clear of the strip.
+        let under = reach.map { reach in abs(reach == .maxXEdge ? stack.frame.maxX - view.bounds.maxX : stack.frame.minX) < 1 } ?? false
+        page?.strip = under ? reach.flatMap(stripCover) : nil
     }
+
+    /// The side the page runs on under the strip, and how far, as last laid out (placeUnderStrip).
+    private var laidUnderStrip: CGRectEdge?
+    private var laidStripWidth: CGFloat = 0
+
+    /// What the strip on `side` takes of the page (DuoLayout.Strip), in the
+    /// page view's points: its width, and the bands down it where something
+    /// stands: the status bar's and the cameras' regions, and the system's
+    /// bar's items with its overflow (…), from the items themselves
+    /// (StripItems.frames). The system draws the strip outside the app's
+    /// windows, so nothing of it is found among their views.
+    private func stripCover(on side: CGRectEdge) -> DuoLayout.Strip? {
+        guard let page, let window = view.window else { return nil }
+        let width = side == .maxXEdge ? view.safeAreaInsets.right : view.safeAreaInsets.left
+        guard width > 0 else { return nil }
+        let bounds = window.bounds
+        let column = CGRect(x: side == .maxXEdge ? bounds.maxX - width : bounds.minX, y: bounds.minY,
+                            width: width, height: bounds.height)
+        var frames: [CGRect] = []
+        if #available(iOS 27.1, *) {
+            frames += view.reservedRegions(kind: .occlusion)
+                .map { view.convert($0.frame, to: window) }
+                .filter { $0.intersects(column) }
+        }
+        frames += (stripItems?.frames(in: window) ?? []).filter { $0.intersects(column) }
+        let shown = page.view.convert(page.view.bounds, to: window)
+        let bands = DuoLayout.stripBands(of: frames, pageTop: shown.minY, pageHeight: shown.height, margin: Self.stripMargin)
+        return DuoLayout.Strip(side: side == .maxXEdge ? .right : .left, width: width, bands: bands, ramp: Self.stripRamp)
+    }
+
+    /// Room kept above and below what stands in the strip (the items'
+    /// frames are their symbols', inside their glass), and the height of the
+    /// slant from beside it to clear of it: a finger's width.
+    private static let stripMargin: CGFloat = 8
+    private static let stripRamp: CGFloat = 44
 
     /// The strip's tools stay in reach where the phone bar's go (an address
     /// typed, the tabs out), so what one does first puts those away: the
@@ -1951,8 +1966,8 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         if clear != laidClear { layoutPanes() }
         if laidClear { stage.backgroundColor = page.footColor?.uiColor ?? view.underPageBackgroundColor }
         model.set(\.url, to: page.displayURL ?? Session.shared.workspace.tab(page.tab)?.url)
-        // The page's edge beside the strip, as it loads and scrolls.
-        placeStripGround()
+        // Whether the page runs on under the strip: not the start page, nor a hands-off page.
+        placeUnderStrip()
         model.set(\.title, to: view.title ?? "")
         model.set(\.loading, to: view.isLoading)
         if model.load.fraction != view.estimatedProgress { model.load.fraction = view.estimatedProgress }

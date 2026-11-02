@@ -33,4 +33,55 @@ public enum DuoLayout {
         guard width >= minimum else { return usual }
         return Sidebar(width: width, gap: fold.width)
     }
+
+    /// What the strip takes of a page that runs on under it, in the page
+    /// view's points, as strip.js is told it (Docs/iPhoneDuoDesign.md §9).
+    /// The strip is taken only in bands: the status bar and the system's
+    /// items at its top, New Tab and Tabs at its foot. Between the bands it
+    /// is empty, and what can be pressed on the page may stand under it.
+    public struct Strip: Equatable, Sendable, Encodable {
+        public enum Side: String, Equatable, Sendable, Encodable {
+            case left
+            case right
+        }
+
+        public let side: Side
+        /// From the window's edge to the safe area's.
+        public let width: CGFloat
+        /// Top and bottom of each band, top first, none touching another.
+        public let bands: [[CGFloat]]
+        /// How far below and above a band the room for what can be pressed
+        /// takes to widen back to the window's edge: a slant rather than a step.
+        public let ramp: CGFloat
+
+        public init(side: Side, width: CGFloat, bands: [[CGFloat]], ramp: CGFloat) {
+            self.side = side
+            self.width = width
+            self.bands = bands
+            self.ramp = ramp
+        }
+    }
+
+    /// The strip's bands from what stands in it, as frames in the window's
+    /// points: each frame's top and bottom, `margin` further out at both, in
+    /// the page's points (its top at `pageTop`), in whole points, top first,
+    /// those that overlap or touch made one. Those wholly above the page or
+    /// below its foot (`pageHeight`) are left out.
+    public static func stripBands(of frames: [CGRect], pageTop: CGFloat, pageHeight: CGFloat,
+                                  margin: CGFloat) -> [[CGFloat]] {
+        let spans = frames
+            .filter { $0.width > 0 && $0.height > 0 }
+            .map { (top: ($0.minY - pageTop - margin).rounded(.down), bottom: ($0.maxY - pageTop + margin).rounded(.up)) }
+            .filter { $0.bottom > 0 && $0.top < pageHeight }
+            .sorted { $0.top < $1.top }
+        var bands: [[CGFloat]] = []
+        for span in spans {
+            if let last = bands.last, span.top <= last[1] {
+                bands[bands.count - 1][1] = max(last[1], span.bottom)
+            } else {
+                bands.append([span.top, span.bottom])
+            }
+        }
+        return bands
+    }
 }

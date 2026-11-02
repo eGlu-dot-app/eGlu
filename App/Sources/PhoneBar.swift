@@ -543,6 +543,22 @@ final class StripItems {
         tabs.accessibilityLabel = String(localized: "Tabs, \(count)")
     }
 
+    /// Where the items the system shows stand, in `view`'s points: the
+    /// strip's bands come from them (Browser.stripCover). The system draws
+    /// the strip outside the app's windows, and no API places its overflow
+    /// (…) under Back and Forward: it is taken as one more item, its own
+    /// capsule's gap under Forward, as measured on the iOS 27.2 simulator.
+    func frames(in view: UIView) -> [CGRect] {
+        var frames = [back, forward, foot.newTab, tabs].compactMap { $0.frame(in: view) }.filter { !$0.isEmpty }
+        if let last = forward.frame(in: view), !last.isEmpty {
+            frames.append(last.offsetBy(dx: 0, dy: last.height + Self.overflowGap))
+        }
+        return frames
+    }
+
+    /// From Forward's foot to the overflow's top, between the two capsules.
+    private static let overflowGap: CGFloat = 23
+
     /// The tabs' item, only where the tabs aren't on screen already: none
     /// beside a sidebar of tabs (Settings › Tabs › Vertical).
     func showsTabs(_ shown: Bool) {
