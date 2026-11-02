@@ -33,7 +33,7 @@
       ],
       "lighting" : "individual",
       "name" : "Cursor",
-      "position" : { "scale" : 1.15, "translation-in-points" : [ 0, 0 ] },
+      "position" : { "scale" : 1.219, "translation-in-points" : [ 4.3, -49.7 ] },
       "shadow" : { "kind" : "neutral", "opacity" : 0.45 },
       "specular" : true,
       "translucency" : { "enabled" : true, "value" : 0.15 }
@@ -56,7 +56,7 @@
       ],
       "lighting" : "individual",
       "name" : "Globe e",
-      "position" : { "scale" : 1.15, "translation-in-points" : [ 0, 0 ] },
+      "position" : { "scale" : 1.219, "translation-in-points" : [ 4.3, -49.7 ] },
       "shadow" : { "kind" : "neutral", "opacity" : 0.25 },
       "specular" : true,
       "translucency" : { "enabled" : true, "value" : 0.3 }
