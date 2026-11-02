@@ -18,7 +18,7 @@ settings:
     SWIFT_VERSION: "5.0"
     SWIFT_EMIT_LOC_STRINGS: YES
     MARKETING_VERSION: "1.1.0"
-    CURRENT_PROJECT_VERSION: "45"
+    CURRENT_PROJECT_VERSION: "46"
 packages:
   PadCore:
     path: PadCore
