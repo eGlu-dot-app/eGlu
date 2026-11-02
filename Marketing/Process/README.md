@@ -25,16 +25,16 @@ How eGlu's App Store pictures and videos are made, from an empty simulator to Ap
 
 ## 1. Demo pages
 
-`site/*.src.html` are the sources; `python3 site/build.py` writes the `*.html` the app opens. Serve the folder on port 8765 (`python3 -m http.server 8765` in `site/`). The demo workspace opens them under different host names (`mail.localhost`, `week.localhost`, `127.0.0.1` and so on) so each site keeps its own icon. Lanes' host `192.168.0.85` only answers where that address is this Mac's.
+`site/*.src.html` are the sources; `python3 site/build.py` writes the `*.html` the app opens. Serve the folder on port 8765 (`python3 -m http.server 8765` in `site/`). The demo workspace opens them under different loopback host names (`mail.localhost`, `week.localhost`, `board.localhost`, `127.0.0.1` and so on) so each site keeps its own icon without a machine-specific LAN address.
 
 ## 2. Demo workspace
 
 ```sh
-C=$(xcrun simctl get_app_container <device> net.taehee.safience data)
+C=$(xcrun simctl get_app_container <device> net.taehee.safience.MarketingQA data)
 python3 Marketing/AppStore/source/demo.py "$C" iphone   # or ipad
 ```
 
-Run it before the app's first launch on that simulator, so no welcome shows. The first launch then makes the ad-blocking lists and shows a blank page; capture from the second launch.
+Use a separate Debug simulator app with bundle `net.taehee.safience.MarketingQA`, never the production app container. Launch with `EGLU_ISOLATED_QA=1` and `EGLU_DATA_ROOT` pointing to the QA container's `Library/Application Support/Safience` directory. `cap.sh` sets these through `SIMCTL_CHILD_` variables. Seed before capturing, mark onboarding answered in the QA defaults, and disable sync, intelligence, content blocking and the local developer bar. The latest capture provenance and build constraints are in the source folder's README.
 
 - **Studio** (teal): Post and Week pinned, Forma and Margin open, on iPad also Lanes; 21 bookmarks for the start page's grid.
 - **Client** (orange): Post pinned; Lanes (dark), Margin and Forma open.
@@ -45,7 +45,7 @@ History is keyed by space id, and the app deletes a missing space's history at l
 Settings the shots need, written before launching:
 
 ```sh
-xcrun simctl spawn <device> defaults write net.taehee.safience preferences -data <hex of {"address":"automatic","searchSuggestions":false}>
+xcrun simctl spawn <device> defaults write net.taehee.safience.MarketingQA preferences -data <hex of {"address":"automatic","searchSuggestions":false,"intelligence":false,"iCloudSync":false,"blocksContent":false,"developerLocal":false}>
 ```
 
 Without them the address shows `localhost/...` with a not-secure sign, and search suggestions fill the command bar. Set `AppleLanguages` to `en-US` and `AppleKeyboards` to `en_US` and emoji, so no other language's key shows on the keyboard. On iPhone, override the status bar with `xcrun simctl status_bar <device> override --time 9:41 --cellularMode active --cellularBars 4 --operatorName ''`, so every shot matches.

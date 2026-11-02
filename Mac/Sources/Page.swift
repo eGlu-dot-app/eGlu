@@ -278,10 +278,9 @@ final class Page: NSObject {
     private(set) var picture: PictureWindow?
     /// The app is calling the site's handler for leaving the tab, so a window opened now is the app's doing.
     private var enteringPicture = false
-    /// A video of the page is in macOS's picture in picture, put there as eGlu went behind another app.
+    /// A video the app put in macOS's picture in picture.
     private var videoFloated = false
-    /// eGlu is behind another app, as far as this page was told: a video
-    /// that goes into picture in picture after it came back goes back at once.
+    /// The page is out of sight: a late picture request goes back if it returned meanwhile.
     private var videoWanted = false
     /// The call that floats a video is on its way.
     private var floatingVideo = false
@@ -688,7 +687,7 @@ final class Page: NSObject {
     var mustStay: Bool {
         hasPendingDialog || isHandsOff || view.cameraCaptureState != .none || view.microphoneCaptureState != .none
             || (isExtensionPage && ExtensionCapture.screen(view))
-            || Downloads.shared.isDownloading(for: self) || picture != nil || videoFloated || peek != nil
+            || Downloads.shared.isDownloading(for: self) || picture != nil || videoFloated || floatingVideo || enteringPicture || peek != nil
     }
 
     /// Puts in what the page about to load at `url` gets: the content
@@ -1346,15 +1345,10 @@ final class Page: NSObject {
         Task { @MainActor in Session.shared.pages.enforce() }
     }
 
-    /// The tab is no longer on screen. Mid-call, a site that asked to be
-    /// told (MediaSession's "enterpictureinpicture", Google Meet's way) is,
-    /// and may open its window: Chrome does so on a tab switch for a page
-    /// using the camera or microphone. The app's call counts as a click in
-    /// WebKit while it runs, so the window the site opens in it is let open.
+    /// A tab or space switch left the page out of sight.
     func leftScreen() {
         ApplePasswordsCard.shared.left(self)
-        guard view.cameraCaptureState != .none || view.microphoneCaptureState != .none else { return }
-        enterPicture()
+        appWentBehind()
     }
 
     /// The site's handler for leaving the tab, called, if it has one.
@@ -1366,7 +1360,12 @@ final class Page: NSObject {
         enteringPicture = true
         view.callAsyncJavaScript("return typeof __egluEnterPicture === 'function' ? __egluEnterPicture() : false",
                                  arguments: [:], in: nil, in: .page) { [weak self] result in
-            self?.enteringPicture = false
+            guard let self else { return }
+            self.enteringPicture = false
+            guard self.videoWanted, Session.shared.preferences.automaticPictureInPicture else {
+                self.cameOnScreen()
+                return
+            }
             if case .success(let called) = result, called as? Bool == true { return }
             otherwise?()
         }
@@ -1374,22 +1373,21 @@ final class Page: NSObject {
 
     /// The tab is on screen again: a window the app opened for it goes, as Chrome's does.
     func cameOnScreen() {
+        sinkVideo()
         if picture?.automatic == true { picture?.close() }
     }
 
-    /// eGlu went behind another app, with this page on screen
-    /// (Session.appWentBehind). A call on a site given Document
-    /// Picture-in-Picture is told, as on a tab switch, and floats its own
-    /// window; otherwise a video playing with sound, or in a call any
-    /// playing video, goes into macOS's own picture in picture (VideoPicture).
+    /// The page left the screen, or eGlu went behind another app. Prefer
+    /// the site's own picture window, then a playing video with sound
+    /// (any playing video in a call, whose sound may come separately).
     func appWentBehind() {
-        guard picture == nil, !videoFloated, !floatingVideo, !enteringPicture,
+        guard Session.shared.preferences.automaticPictureInPicture,
               !HandsOff.covers(view.url), !HandsOff.covers(committed) else { return }
         videoWanted = true
+        guard picture == nil, !videoFloated, !floatingVideo, !enteringPicture else { return }
         let inCall = view.cameraCaptureState != .none || view.microphoneCaptureState != .none
-        // A site with no handler for it (Meet with its own setting off) gets its video floated instead.
-        if inCall, Self.offersPicture(committed ?? view.url) {
-            return enterPicture { [weak self] in self?.floatVideo(anyPlaying: true) }
+        if Self.offersPicture(committed ?? view.url) {
+            return enterPicture { [weak self] in self?.floatVideo(anyPlaying: inCall) }
         }
         floatVideo(anyPlaying: inCall)
     }
@@ -1410,11 +1408,9 @@ final class Page: NSObject {
     /// eGlu is in front again, with this page on screen: what floated as it went behind comes back.
     func appCameBack() {
         cameOnScreen()
-        sinkVideo()
     }
 
-    /// The video that floated as eGlu went behind, back in its page:
-    /// for every live page as eGlu comes back, on screen or not.
+    /// Restore only the video this app floated, leaving manual PiP alone.
     func sinkVideo() {
         videoWanted = false
         guard videoFloated else { return }
@@ -1429,6 +1425,7 @@ final class Page: NSObject {
     /// when it waits for Reload.
     fileprivate func processEnded() {
         picture?.close()
+        videoWanted = false
         videoFloated = false
         if crashes.shouldReload(at: Date()) {
             reload(byHand: false)
@@ -1628,6 +1625,7 @@ extension Page: WKNavigationDelegate, WKUIDelegate {
         // A new document: the old one's picture-in-picture window goes with it,
         // as in Chrome, and WebKit takes the old document's video out of its own.
         picture?.close()
+        videoWanted = false
         videoFloated = false
         committed = webView.url
         status.committed(webView.backForwardList.currentItem)
@@ -1712,7 +1710,7 @@ extension Page: WKNavigationDelegate, WKUIDelegate {
         if let request = DocumentPicture.Request(url: navigationAction.request.url), navigationAction.sourceFrame.isMainFrame,
            Self.offersPicture(committed ?? view.url) {
             // Asked for on leaving the tab, but the tab is back on screen, with eGlu in front, by now: no window.
-            if enteringPicture, host?.isShowing(self) == true, NSApp.isActive { return nil }
+            if enteringPicture, !videoWanted || !Session.shared.preferences.automaticPictureInPicture { return nil }
             return openPicture(configuration, features: windowFeatures, request: request)
         }
         // While the app calls the site's handler for leaving the tab, the

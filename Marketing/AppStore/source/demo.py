@@ -18,7 +18,7 @@ studio_tabs = [tab('http://mail.localhost' + P + 'mail.html', pinned=True),
                tab('http://localhost' + P + 'canvas.html'),
                tab('http://127.0.0.1' + P + 'notes.html')]
 if kind == 'ipad':
-    studio_tabs.append(tab('http://192.168.0.85' + P + 'board.html'))
+    studio_tabs.append(tab('http://board.localhost' + P + 'board.html'))
 client_tabs = [tab('http://mail.localhost' + P + 'mail.html', pinned=True),
                tab('http://board.localhost' + P + 'board.html?dark'),
                tab('http://notes.localhost' + P + 'notes.html'),
@@ -26,7 +26,7 @@ client_tabs = [tab('http://mail.localhost' + P + 'mail.html', pinned=True),
 home_tabs = [{'id': str(uuid.uuid4()).upper(), 'title': '', 'shown': base}]
 # The grid the start page shows: the demo pages, then sites that are only their icons (site/icons.mjs).
 bookmarks = [mark('Forma', 'http://localhost' + P + 'canvas.html'), mark('Margin', 'http://127.0.0.1' + P + 'notes.html'),
-             mark('Lanes', 'http://192.168.0.85' + P + 'board.html'), mark('Post', 'http://mail.localhost' + P + 'mail.html'),
+             mark('Lanes', 'http://board.localhost' + P + 'board.html'), mark('Post', 'http://mail.localhost' + P + 'mail.html'),
              mark('Week', 'http://week.localhost' + P + 'week.html')]
 bookmarks += [mark(name, 'http://' + name.lower() + '.localhost' + P) for name in
               ('Palette', 'Type', 'Atlas', 'Sound', 'Kiln', 'Pixel', 'North', 'Loop', 'Ledger', 'Orbit', 'Grain', 'Tide', 'Prism', 'Fold', 'Spark', 'Chord')]
