@@ -4,6 +4,8 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+- On the Mac, adding an extension or opening one for the first time no longer holds the whole browser still while eGlu reads its code: for a password manager's megabytes of scripts that took many seconds, once for each space it was on.
+- On the Mac, an extension whose scripts connect to its background, as NordPass's do, is no longer marked “Some Features Don't Work”: eGlu's own check runs them on a page in no tab, which can't connect, and now leaves that out.
 - On the Mac, an extension's own page in a tab hears the messages its background sends to that tab, as in Chrome. NordPass's sign-in stopped at Continue, its email field greyed out, and now goes on to NordAccount.
 - On the Mac, dragging the sidebar's edge resizes it smoothly instead of making the sidebar jump back and forth.
 - On the Mac, playing videos and supported calls open Picture in Picture when you switch tabs or spaces, as they do when you switch apps, and return when you come back to the page. Settings › General › Automatic Picture in Picture turns this off without changing manually opened PiP.
