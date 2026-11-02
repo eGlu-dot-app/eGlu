@@ -39,7 +39,8 @@
 #     Config/eGluMacReleasePasskeys.entitlements (the Release ones and Apple's
 #     passkey entitlement for browsers) and the Developer ID profile for
 #     passkeys, which Release/profile.py makes with PASSKEYS=1 once Apple has
-#     granted the entitlement (PROFILE names another). The profile is checked
+#     granted the entitlement (PASSKEYS_PROFILE names another; PROFILE, which
+#     Release/setup.py sets to the iCloud profile, is not read then). The profile is checked
 #     before anything is built: an app signed with a restricted entitlement its
 #     profile doesn't grant is one macOS refuses to open. Off unless set; a
 #     build without it leaves passkeys to WebKit, as before
@@ -106,7 +107,7 @@ PASSKEY_KEY="com.apple.developer.web-browser.public-key-credential"
 if [[ -n "${PASSKEYS:-}" ]]; then
   ICLOUD=1
   ENTITLEMENTS="Config/eGluMacReleasePasskeys.entitlements"
-  PROFILE="${PROFILE:-Safience Developer ID Passkeys}"
+  PROFILE="${PASSKEYS_PROFILE:-Safience Developer ID Passkeys}"
   # The newest profile installed by that name, unexpired, must grant the
   # passkey entitlement; one made before Apple granted it doesn't.
   GRANTS="$(python3 - "$PROFILE" "$PASSKEY_KEY" <<'PY'
