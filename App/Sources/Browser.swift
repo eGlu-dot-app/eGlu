@@ -485,6 +485,9 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         resumeWelcomeIfNeeded()
         askAboutWritingIfNeeded()
         if let pendingBookmarkImport { showBookmarkImport(pendingBookmarkImport) }
+        #if DEBUG
+        StripTour.start(in: self)
+        #endif
     }
 
     /// Only one window welcomes, however many open at a first launch.

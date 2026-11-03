@@ -535,6 +535,82 @@
     return !!band && band[0] <= m.top + 1 && row.getBoundingClientRect().top + window.scrollY < band[1];
   }
 
+  // How far what a row lays out reaches past the safe area's edge: its
+  // farthest box or line (GitHub's avatar, beyond its inbox).
+  function rowReach(row) {
+    let reach = 0;
+    for (const child of laidOut(row)) {
+      const r = extent(child);
+      if (r) reach = Math.max(reach, into(r));
+    }
+    return reach;
+  }
+
+  // A header's row given room at the strip's side for all it lays out
+  // there, its farthest button the gap from the safe area's edge, whichever
+  // button was looked at first; more where it has some and something still
+  // reaches under the strip (a button come late). Never more than the
+  // strip is wide. Whether it was given room.
+  function padRow(row, reach) {
+    const needed = Math.max(reach, rowReach(row));
+    if (needed < 1) return false;
+    const had = given.get(row);
+    const most = Math.ceil((m.right ? m.left + m.width - m.edge : m.edge - m.left) + GAP);
+    const extra = Math.min(most, Math.ceil(needed + GAP) + (had ? had.extra : 0));
+    if (had && extra <= had.extra + 0.5) return false;
+    const width = row.getBoundingClientRect().width;
+    const style = getComputedStyle(row);
+    const room = had || { kind: 'row', pad: parseFloat(m.right ? style.paddingRight : style.paddingLeft) || 0, extra, width };
+    const was = room.extra;
+    return inPlace(row, () => {
+      if (had) {
+        had.extra = extra;
+        had.fresh = true;
+        row.style.setProperty(had.property, `${(had.pad + extra).toFixed(1)}px`, 'important');
+      } else {
+        give(row, room);
+      }
+      // A row whose width is set outside its padding holds it inside instead.
+      if (row.getBoundingClientRect().width > width + 0.5) {
+        room.sized = true;
+        row.style.setProperty('box-sizing', 'border-box', 'important');
+      }
+    }, () => {
+      if (had) {
+        had.extra = was;
+        row.style.setProperty(had.property, `${(had.pad + was).toFixed(1)}px`, 'important');
+        if (!had.sized) row.style.removeProperty('box-sizing');
+      } else {
+        restore(row, room);
+        given.delete(row);
+      }
+      refused.add(row);
+    });
+  }
+
+  // A write that lays out what is inside `node`, made at once where the
+  // page may be laid out anew (layable). Once it has settled, in the
+  // window, it stands only where `node` keeps its place and its height:
+  // what is in it moves along it, and nothing round it moves. One that
+  // doesn't is taken back before it is drawn. Whether it stands.
+  function inPlace(node, write, undo) {
+    const before = node.getBoundingClientRect();
+    if (layable(before.top)) {
+      write();
+      return true;
+    }
+    const holder = node.parentElement;
+    const held = holder ? holder.getBoundingClientRect().height : 0;
+    write();
+    const after = node.getBoundingClientRect();
+    if (Math.abs(after.top - before.top) < 0.5 && Math.abs(after.height - before.height) < 0.5 &&
+        (!holder || Math.abs(holder.getBoundingClientRect().height - held) < 0.5)) {
+      return true;
+    }
+    undo();
+    return false;
+  }
+
   // What is beside the group, on the side away from the strip, level with
   // it in its row: the boxes and text beside it, and beside each box round
   // it up to its row's height. Its own neighbours in the box it is in join
@@ -660,25 +736,18 @@
     if (around.reach < 1) return;
     // The page's header at its top, beside the status bar, laid out by flex
     // or grid, makes the room itself, its buttons flexing together inside
-    // the safe area, the gaps between them its own (GitHub's). Only while
-    // the page is still coming in, and only for a group the row lays out:
-    // one placed absolutely in it doesn't move with the row's padding.
+    // the safe area, the gaps between them its own (GitHub's). Only for a
+    // group the row lays out: one placed absolutely in it doesn't move
+    // with the row's padding.
     const row = g.row;
-    if (!settled && !layer && how === 'page' && row && !given.has(row) && !refused.has(row) && !inGiven(row) &&
+    if (!layer && how === 'page' && row && !refused.has(row) && !inGiven(row) &&
+        (!given.has(row) || given.get(row).kind === 'row') &&
         laidIn(pick.mover, row) && /flex|grid/.test(getComputedStyle(row).display) &&
-        row.getBoundingClientRect().height <= ROW(pick.box.height) && atTop(row)) {
-      const needed = around.reach;
-      if (needed >= 1) {
-        const style = getComputedStyle(row);
-        give(row, {
-          kind: 'row', pad: parseFloat(m.right ? style.paddingRight : style.paddingLeft) || 0,
-          extra: Math.ceil(needed + GAP), width: row.getBoundingClientRect().width,
-        });
-        // The row laid out anew may have made room for what was left.
-        generation++;
-        for (const one of near) pending.add(one);
-        return;
-      }
+        row.getBoundingClientRect().height <= ROW(pick.box.height) && atTop(row) && padRow(row, around.reach)) {
+      // The row laid out anew may have made room for what was left.
+      generation++;
+      for (const one of near) pending.add(one);
+      return;
     }
     if (!timelines || (how === 'sticky' && !layer)) return;
     // In a list or a table: its rows' controls move as one column (asked
@@ -745,29 +814,38 @@
   // edges (a card) by a margin on the strip's side, kept from growing past
   // its row by a greatest width as well; one as wide as the window (a
   // header's ground) by padding instead, its ground still under the glass.
-  // Whatever was given room or moved inside it before gives it back. Only
-  // where it may be laid out anew; whether it was.
+  // Whatever was given room or moved inside it before gives it back. Where
+  // it may be laid out anew, or where it keeps its height (inPlace);
+  // whether it was.
   function narrow(box) {
     const r = box.getBoundingClientRect();
-    if (!layable(r.top)) return false;
     const style = getComputedStyle(box);
     const reach = Math.ceil(m.right ? r.right - m.edge : m.edge - r.left);
     if (reach < 1) return false;
     const bleeds = r.left <= m.left + 1 && r.right >= m.left + m.width - 1;
-    if (bleeds) {
-      const pad = parseFloat(m.right ? style.paddingRight : style.paddingLeft) || 0;
-      give(box, { kind: 'box', pad, extra: reach, width: r.width, top: r.top });
-      given.get(box).sized = true;
-      box.style.setProperty('box-sizing', 'border-box', 'important');
-    } else {
-      const property = m.right ? 'margin-right' : 'margin-left';
-      const margin = (parseFloat(m.right ? style.marginRight : style.marginLeft) || 0) + reach;
-      const room = { kind: 'box', property, saved: keep(box, [property, 'max-width']), fresh: false, sized: true };
-      if (busy()) unsteady++;
-      box.style.setProperty(property, `${margin}px`, 'important');
-      box.style.setProperty('max-width', `calc(100% - ${margin}px)`, 'important');
-      given.set(box, room);
-    }
+    let room;
+    const done = inPlace(box, () => {
+      if (bleeds) {
+        const pad = parseFloat(m.right ? style.paddingRight : style.paddingLeft) || 0;
+        room = { kind: 'box', pad, extra: reach, width: r.width, top: r.top };
+        give(box, room);
+        room.sized = true;
+        box.style.setProperty('box-sizing', 'border-box', 'important');
+      } else {
+        const property = m.right ? 'margin-right' : 'margin-left';
+        const margin = (parseFloat(m.right ? style.marginRight : style.marginLeft) || 0) + reach;
+        room = { kind: 'box', property, saved: keep(box, [property, 'max-width']), fresh: false, sized: true };
+        if (busy()) unsteady++;
+        box.style.setProperty(property, `${margin}px`, 'important');
+        box.style.setProperty('max-width', `calc(100% - ${margin}px)`, 'important');
+        given.set(box, room);
+      }
+    }, () => {
+      restore(box, room);
+      given.delete(box);
+      refused.add(box);
+    });
+    if (!done) return false;
     // What was done inside it for the old width goes: it is all inside the safe area now.
     for (const [node, room] of [...given]) {
       if (node !== box && box.contains(node)) {
@@ -983,13 +1061,23 @@
     }
     const width = m.right ? m.left + m.width - m.edge : m.edge - m.left;
     if (r.width > WIDE * m.width) {
-      if (how === 'sticky' && settled) return;
       const pad = parseFloat(m.right ? own.paddingRight : own.paddingLeft) || 0;
       const extra = Math.ceil((m.right ? r.right - m.edge : m.edge - r.left) - pad);
       if (extra < 1) return;
-      give(root, { kind: 'layer', pad, extra, width: r.width, top: r.top });
-      given.get(root).sized = true;
-      root.style.setProperty('box-sizing', 'border-box', 'important');
+      const room = { kind: 'layer', pad, extra, width: r.width, top: r.top };
+      const write = () => {
+        give(root, room);
+        room.sized = true;
+        root.style.setProperty('box-sizing', 'border-box', 'important');
+      };
+      // A bar stuck in the flow of the page, once it has settled, only
+      // where its height stays: the page's rows under it would move.
+      if (how !== 'sticky') write();
+      else inPlace(root, write, () => {
+        restore(root, room);
+        given.delete(root);
+        refused.add(root);
+      });
       return;
     }
     const push = Math.min(width, m.right ? r.left - m.left - GAP : m.left + m.width - GAP - r.right);
@@ -1468,5 +1556,38 @@
     strip: !!strip, settled, generation, near: near.size, pending: pending.size, groups: groups.size,
     given: given.size, deferred: deferred.size, slices, longest: Math.round(longest * 10) / 10, calm: Math.round(calm * 10) / 10, unsteady, failures, failed,
   });
-  Object.defineProperty(window, '__egluStrip', { value: Object.freeze({ set, state }), configurable: false });
+
+  // What can be pressed and still shows under one of the strip's items,
+  // in the window, for tests (StripTour): each one's tag, name, the test
+  // page's pattern round it (data-pattern) and its box, as drawn.
+  function leftovers() {
+    if (!strip) return [];
+    const now = measured();
+    const found = [];
+    const roots = [document];
+    for (let i = 0; i < roots.length; i++) {
+      for (const node of roots[i].querySelectorAll('*')) {
+        if (node.shadowRoot) roots.push(node.shadowRoot);
+        if (!node.matches(PRESSABLE)) continue;
+        const r = node.getBoundingClientRect();
+        // A link as wide as a card, its picture under the glass, stays (WIDE).
+        if (r.width < 1 || r.height < 1 || r.bottom <= 0 || r.top >= now.height || r.width > WIDE * now.width) continue;
+        const reach = now.right ? r.right - now.edge : now.edge - r.left;
+        if (reach < 1 || !now.bands.some(([a, b]) => r.top < b && r.bottom > a)) continue;
+        // Shown there, not behind something else nor cut off.
+        const x = now.right ? Math.min(r.right - 1, now.edge + reach / 2) : Math.max(r.left + 1, now.edge - reach / 2);
+        const y = Math.min(Math.max(r.top + r.height / 2, 1), now.height - 1);
+        const hit = roots[i].elementFromPoint ? roots[i].elementFromPoint(x, y) : document.elementFromPoint(x, y);
+        if (!hit || (hit !== node && !node.contains(hit))) continue;
+        const pattern = node.closest('[data-pattern]');
+        const name = (node.getAttribute('aria-label') || node.textContent || node.getAttribute('title') || '').trim().replace(/\s+/g, ' ');
+        found.push({
+          tag: node.tagName.toLowerCase(), name: name.slice(0, 24), pattern: pattern ? pattern.dataset.pattern : '',
+          box: [r.left, r.top, r.right, r.bottom].map(Math.round), reach: Math.round(reach),
+        });
+      }
+    }
+    return found;
+  }
+  Object.defineProperty(window, '__egluStrip', { value: Object.freeze({ set, state, leftovers }), configurable: false });
 })();
