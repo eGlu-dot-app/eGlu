@@ -201,6 +201,8 @@ final class Page: NSObject {
     private var sampling: Task<Void, Never>?
     /// The looks after a touch on the page (touched).
     private var touchSampling: Task<Void, Never>?
+    /// The look put off while a finger is on the page or it glides (sampleColor).
+    private var heldLook: Task<Void, Never>?
     /// The colour of the page under the phone bar, which the bar's ground
     /// takes on (sampleFoot); nil until it has been looked at.
     private(set) var footColor: SiteColor?
@@ -512,6 +514,12 @@ final class Page: NSObject {
         if let strip {
             controller.addUserScript(WKUserScript(source: Scripts.strip + "\n" + Scripts.strip(set: strip),
                                                   injectionTime: .atDocumentStart, forMainFrameOnly: true, in: Page.world))
+            #if DEBUG
+            if let touch = StripTour.earlyTouch {
+                controller.addUserScript(WKUserScript(source: touch, injectionTime: .atDocumentStart, forMainFrameOnly: true,
+                                                      in: Page.world))
+            }
+            #endif
         }
         // The JSON view, while Settings formats JSON and the response's type
         // says the document is (the stamp's |json re-prepares where the
@@ -634,9 +642,13 @@ final class Page: NSObject {
         }
     }
 
-    /// WebKit's own scrolling, off unless no bridge can run (Scrolling.swift).
-    /// On a phone, and for a mobile site, a finger is what there is: the page
-    /// scrolls and pinches as in Safari, its zoom free.
+    /// WebKit's own scrolling, for a finger on the glass only unless no
+    /// bridge can run (Scrolling.swift): on a desktop page the trackpad's
+    /// and the mouse's scrolling stay bridged (Pointer), so a canvas still
+    /// gets its wheel events, and a finger scrolls the page as in Safari
+    /// (asked for on 3 November 2026). On a phone, and for a mobile site, a
+    /// finger is what there is: the page scrolls and pinches as in Safari,
+    /// its zoom free.
     private func applyScrolling() {
         // WebKit's own swipe back and forward goes with WebKit's own
         // scrolling: only then can it tell a swipe the page has no use for
@@ -648,15 +660,23 @@ final class Page: NSObject {
         // A pull down to load the page again, where a finger is the way in.
         let pull = touchFirst ? refresher : nil
         if view.scrollView.refreshControl !== pull { view.scrollView.refreshControl = pull }
+        let pan = view.scrollView.panGestureRecognizer
+        if allTouchTypes == nil { allTouchTypes = pan.allowedTouchTypes }
+        let fingersOnly = !touchFirst && !native
+        pan.allowedScrollTypesMask = fingersOnly ? [] : .all
+        pan.allowedTouchTypes = fingersOnly ? [NSNumber(value: UITouch.TouchType.direct.rawValue)] : allTouchTypes ?? pan.allowedTouchTypes
+        // The iPhone's desktop view is a trackpad over the page, which scrolls it itself (DesktopPad).
+        view.scrollView.isScrollEnabled = native || !desktopView
         if touchFirst {
-            view.scrollView.isScrollEnabled = true
             zoom?.release()
             return
         }
-        view.scrollView.isScrollEnabled = native
         view.scrollView.pinchGestureRecognizer?.isEnabled = false
         zoom?.hold()
     }
+
+    /// What the scroll view's own pan takes as WebKit made it: every kind of touch.
+    private var allTouchTypes: [NSNumber]?
 
     // MARK: A pull down to load again
 
@@ -1247,18 +1267,38 @@ final class Page: NSObject {
     /// The colour the page's top edge shows, so the bars run on into it;
     /// the page's theme-color when there is nothing to see yet, or the page
     /// is off screen. A theme-color can differ from what is drawn (GitHub's
-    /// is grey over a navy top), which is why the picture comes first. A
-    /// picture, not a script, so it is the same on a hands-off page.
+    /// is grey over a navy top), so what is drawn comes first: the page's
+    /// own style where it says for sure (askGround), and otherwise a
+    /// picture, as on a hands-off page.
     private func sampleColor() {
-        // The exact look under the phone bar draws the view on the main
-        // thread, so not while the page scrolls: the looks a scroll is
-        // getting end with an exact one of their own (sampleFootSoon).
+        // A picture holds the main thread: not while a finger is on the page
+        // or it glides on (held), but once it is still.
+        guard !held else {
+            lookWhenStill()
+            return
+        }
+        // The looks a scroll is getting end with an exact one of their own (sampleFootSoon).
         if footSampling == nil { sampleFoot(exact: true) }
         let theme = view.themeColor.flatMap { SiteColor($0) }
         guard view.bounds.width > 0, view.window != nil else {
             if let theme { setSiteColor(theme) }
             return
         }
+        askGround(top: true, from: 0.1, to: 0.9) { [weak self] color, sure in
+            guard let self else { return }
+            if sure, let color {
+                self.setSiteColor(color)
+            } else if self.held {
+                self.lookWhenStill()
+            } else {
+                self.pictureTop(theme: theme)
+            }
+        }
+    }
+
+    /// The page's top edge as a picture: its first two points, across.
+    private func pictureTop(theme: SiteColor?) {
+        guard view.bounds.width > 0, view.window != nil else { return }
         let configuration = WKSnapshotConfiguration()
         configuration.rect = CGRect(x: 0, y: 0, width: view.bounds.width, height: 2)
         configuration.snapshotWidth = 64
@@ -1267,6 +1307,16 @@ final class Page: NSObject {
             if let color = image.flatMap({ SiteColor(picture: $0) }) ?? theme {
                 self?.setSiteColor(color)
             }
+        }
+    }
+
+    /// The colours looked at again once no finger is on the page and it has stopped (held).
+    private func lookWhenStill() {
+        heldLook?.cancel()
+        heldLook = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            self?.sampleColor()
         }
     }
 
@@ -1299,19 +1349,33 @@ final class Page: NSObject {
     /// The colour of what the page shows under the phone bar, so the bar's
     /// ground is the page's own, light on a light page and dark on a dark
     /// one whatever the system's appearance, and what the bar draws reads
-    /// on it. A picture, as for the top, and so the same on a hands-off page.
+    /// on it.
     ///
-    /// WebKit's own snapshot leaves out what the bar covers (it comes back
-    /// see-through there), so there are two looks. The exact one draws the
-    /// view as it is on screen, under the bar and all: a few milliseconds of
-    /// the main thread, so only when the page is still. The quick one is
-    /// WebKit's snapshot of the strip that meets the bar's top, which costs
-    /// the main thread nothing and is what was under the bar a moment
-    /// before: for while the page scrolls.
+    /// The page's own style says first (askGround), just above the bar:
+    /// asked in the page's process, nothing here waits for it, and it is
+    /// all a scroll gets. Where it can't say for sure (a photo, a canvas,
+    /// a gradient there) the exact look, once the page is still and no
+    /// finger is on it (held), draws the view as it is on screen, under the
+    /// bar and all; WebKit's own snapshot leaves out what the bar covers.
+    /// Both pictures hold the main thread: four snapshots a second while a
+    /// page scrolled, and three looks after every touch, held up the
+    /// scroll and the finger put down to stop it.
     private func sampleFoot(exact: Bool) {
-        guard footBand > 0, view.bounds.width > 0, view.window != nil, let stage = view.superview else { return }
-        // The part of the view under the bar, in the view's own points: the
-        // desktop view lays the page out larger and moves it about.
+        guard let band = coveredBand() else { return }
+        let width = max(view.bounds.width, 1)
+        askGround(top: false, from: (band.minX + band.width * 0.1) / width,
+                  to: (band.maxX - band.width * 0.1) / width) { [weak self] color, sure in
+            guard let self else { return }
+            if let color { self.setFootColor(color) }
+            if exact, !sure, !self.held, let band = self.coveredBand() { self.pictureFoot(band) }
+        }
+    }
+
+    /// The part of the view under the bar, in the view's own points: the
+    /// desktop view lays the page out larger and moves it about. Nil where
+    /// there is none to look at.
+    private func coveredBand() -> CGRect? {
+        guard footBand > 0, view.bounds.width > 0, view.window != nil, let stage = view.superview else { return nil }
         let covered = CGRect(x: 0, y: stage.bounds.height - footBand, width: stage.bounds.width, height: footBand)
         var band = view.convert(covered, from: stage).intersection(view.bounds)
         // A page that stands clear of the bar has nothing under it: the bar goes on from the page's last points.
@@ -1321,24 +1385,28 @@ final class Page: NSObject {
         guard !band.isNull, band.width >= 1, band.height >= 1 else {
             // Past the page's edge there, in the desktop view: the page's own colour shows.
             if let color = view.underPageBackgroundColor.flatMap({ SiteColor($0) }) { setFootColor(color) }
-            return
+            return nil
         }
-        if exact {
-            // Drawn small from the start: the view at a thirty-second of its
-            // width, placed so the band is what lands on the picture.
-            let scale = 32 / band.width
-            let size = CGSize(width: 32, height: max(1, (band.height * scale).rounded()))
-            let whole = CGRect(x: -band.minX * scale, y: -band.minY * scale,
-                               width: view.bounds.width * scale, height: view.bounds.height * scale)
-            let format = UIGraphicsImageRendererFormat()
-            format.scale = 1
-            let picture = UIGraphicsImageRenderer(size: size, format: format).image { _ in
-                view.drawHierarchy(in: whole, afterScreenUpdates: false)
-            }
-            if let color = SiteColor(picture: picture) {
-                setFootColor(color)
-                return
-            }
+        return band
+    }
+
+    /// What is under the bar as a picture: drawn small from the start, the
+    /// view at a thirty-second of its width, placed so the band is what
+    /// lands on the picture; WebKit's snapshot of the strip just above the
+    /// bar where that comes out empty.
+    private func pictureFoot(_ band: CGRect) {
+        let scale = 32 / band.width
+        let size = CGSize(width: 32, height: max(1, (band.height * scale).rounded()))
+        let whole = CGRect(x: -band.minX * scale, y: -band.minY * scale,
+                           width: view.bounds.width * scale, height: view.bounds.height * scale)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let picture = UIGraphicsImageRenderer(size: size, format: format).image { _ in
+            view.drawHierarchy(in: whole, afterScreenUpdates: false)
+        }
+        if let color = SiteColor(picture: picture) {
+            setFootColor(color)
+            return
         }
         let strip = min(band.minY, 16 * band.height / footBand)
         guard strip >= 1 else { return }
@@ -1350,6 +1418,56 @@ final class Page: NSObject {
             if let color = image.flatMap({ SiteColor(picture: $0) }) { self?.setFootColor(color) }
         }
     }
+
+    /// The colour the page paints along its top edge (`top`) or just above
+    /// the phone bar, by its own style, at three places across, from `from`
+    /// to `to` of its width: the ground of what is there, or of the nearest
+    /// box round it that has one. `sure` where that is what shows at all
+    /// three: one colour, of boxes with no picture in them or over them (a
+    /// photo, a canvas, a gradient) and nothing half see-through. Nil and
+    /// not sure on a hands-off page, which is never asked.
+    private func askGround(top: Bool, from: CGFloat, to: CGFloat, done: @escaping (SiteColor?, Bool) -> Void) {
+        guard !isHandsOff else {
+            done(nil, false)
+            return
+        }
+        view.callAsyncJavaScript(Self.ground, arguments: ["atTop": top, "from": Double(from), "to": Double(to)],
+                                 in: nil, in: Page.world) { result in
+            guard case .success(let value) = result, let found = value as? [Double], found.count == 4 else {
+                done(nil, false)
+                return
+            }
+            done(SiteColor(red: found[0] / 255, green: found[1] / 255, blue: found[2] / 255), found[3] == 1)
+        }
+    }
+
+    private static let ground = """
+        const view = window.visualViewport;
+        const y = atTop ? 1 : (view ? view.offsetTop + view.height : innerHeight) - 2;
+        const drawn = /^(img|video|canvas|iframe|embed|object|picture|svg)$/i;
+        const at = (x) => {
+            let sure = true;
+            for (let node = document.elementFromPoint(x, y), first = true; node; node = node.parentElement, first = false) {
+                if (first && drawn.test(node.tagName)) sure = false;
+                const style = getComputedStyle(node);
+                if (style.backgroundImage !== 'none') sure = false;
+                const parts = /^rgba?\\(([^)]*)\\)$/.exec(style.backgroundColor);
+                if (!parts) {
+                    if (style.backgroundColor !== 'transparent') sure = false;
+                    continue;
+                }
+                const [r, g, b, a = 1] = parts[1].split(/[\\s,\\/]+/).filter(Boolean).map(Number);
+                if (a >= 0.99) return { rgb: [r, g, b], sure };
+                if (a > 0.01) sure = false;
+            }
+            return null;
+        };
+        const across = [from, (from + to) / 2, to].map((f) => at(Math.min(innerWidth - 1, Math.max(0, innerWidth * f))));
+        if (across.some((one) => !one)) return null;
+        const same = across.every((one) => one.rgb.every((v, i) => Math.abs(v - across[0].rgb[i]) < 3));
+        const rgb = [0, 1, 2].map((i) => across.reduce((sum, one) => sum + one.rgb[i], 0) / across.length);
+        return [...rgb, same && across.every((one) => one.sure) ? 1 : 0];
+        """
 
     private func setFootColor(_ color: SiteColor) {
         // A shade's difference draws nothing again: this comes several times a second while the page scrolls.
@@ -1377,7 +1495,7 @@ final class Page: NSObject {
     /// After what is under the bar may have changed.
     /// A scroll says so at every frame: while it goes on the page gets the
     /// quick look four times a second, and the exact one once it has been
-    /// still a moment.
+    /// still a moment and no finger is on it.
     private func sampleFootSoon() {
         guard footBand > 0 else { return }
         footMoved = true
@@ -1386,15 +1504,26 @@ final class Page: NSObject {
             while true {
                 try? await Task.sleep(for: .milliseconds(250))
                 guard let self, !Task.isCancelled else { return }
-                guard self.footMoved else {
+                if self.footMoved {
+                    self.footMoved = false
+                    self.sampleFoot(exact: false)
+                } else if !self.held {
                     self.footSampling = nil
                     self.sampleFoot(exact: true)
                     return
                 }
-                self.footMoved = false
-                self.sampleFoot(exact: false)
             }
         }
+    }
+
+    /// A finger on the page, or the page still gliding after one. No
+    /// picture of the page is taken then: WebKit's snapshot and the drawn
+    /// look both hold the main thread for milliseconds each (2 to 12 for a
+    /// snapshot on a Mac's simulator, more on a phone), and the main thread
+    /// is what moves the page and hears a finger put down to stop it.
+    private var held: Bool {
+        let scroll = view.scrollView
+        return scroll.isTracking || scroll.isDecelerating
     }
 
     /// A touch on the page, which may open or close something the page draws
