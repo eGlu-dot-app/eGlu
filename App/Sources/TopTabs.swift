@@ -336,7 +336,9 @@ private struct TopPinnedTab: View {
             ZStack {
                 let lean = Plate.lean(toward: pointer, in: size, reach: CGSize(width: 6, height: 4))
                 PointerGlow(lean: lean, radius: 28)
-                PinnedIcon(url: url, open: selected, colour: colour, size: 16, lean: lean, plate: (side: 18, corner: 6, blur: 6))
+                // Lit on screen and under the pointer only, as the Mac's row is; on screen its light fills it (CoreLight).
+                PinnedIcon(url: url, open: selected, colour: colour, size: 16, lean: lean, plate: (side: 18, corner: 6, blur: 6),
+                           lit: selected || hovering, current: selected, fills: true)
             }
             .frame(width: Side.control + 4, height: Side.control)
             .onGeometryChange(for: CGSize.self) { $0.size } action: { size = $0 }

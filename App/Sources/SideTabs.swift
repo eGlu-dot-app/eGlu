@@ -328,10 +328,12 @@ struct SidePageMenu: View {
     }
 }
 
-/// A pinned tab: its icon on a tile of glass, as the Mac's, on a soft light
-/// of its colours leaning toward the pointer, the same whether its tab is on
-/// screen, open or closed (PinnedIcon); the one on screen's glass tinted
-/// with the icon's colour; and a light under the pointer on every tile.
+/// A pinned tab's tile, as the Mac's: the one on screen and the one under
+/// the pointer on glass and lit (PinnedIcon), the one on screen's glass
+/// tinted with its icon's colour and its light filling it, its icon's
+/// colour at the core and the space's at the edge (CoreLight); the others
+/// at rest, a lighter ground with a thin line round it and the icon as it
+/// is (PinnedRest), as the Mac's are (asked for on 3 November 2026).
 private struct SidePinnedTab: View {
     let window: WindowModel
     let tab: TabRecord
@@ -343,9 +345,11 @@ private struct SidePinnedTab: View {
     @State private var size = CGSize.zero
     @State private var hovering = false
     @Environment(\.spaceColor) private var space
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         let selected = tab.id == window.tabID
+        let glassy = selected || hovering
         let shape = RoundedRectangle(cornerRadius: Side.tileCorner, style: .continuous)
         let url = tab.url ?? tab.pinned
         let colour = Session.shared.workspace.space(window.spaceID)?.color ?? .blue
@@ -356,7 +360,8 @@ private struct SidePinnedTab: View {
             ZStack {
                 let lean = Plate.lean(toward: pointer, in: size, reach: CGSize(width: 13, height: 9))
                 PointerGlow(lean: lean)
-                PinnedIcon(url: url, open: selected, colour: colour, size: Side.tileIcon, lean: lean)
+                PinnedIcon(url: url, open: selected, colour: colour, size: Side.tileIcon, lean: lean, lit: glassy,
+                           current: selected, fills: true)
             }
             .frame(maxWidth: .infinity)
             .frame(height: Side.tile)
@@ -365,9 +370,14 @@ private struct SidePinnedTab: View {
             .clipShape(shape)
             .contentShape(shape)
             .background {
-                Color.clear.liquidGlass(.regular, tint: selected ? (ground ?? Palette.ink.opacity(0.12)) : nil,
-                                        reacting: false, in: shape, otherwise: selected ? Palette.card : Palette.wash)
+                if glassy {
+                    Color.clear.liquidGlass(.regular, tint: selected ? (ground ?? Palette.ink.opacity(0.12)) : nil,
+                                            reacting: false, in: shape, otherwise: selected ? Palette.card : Palette.wash)
+                } else {
+                    shape.fill(PinnedRest.ground(scheme))
+                }
             }
+            .overlay { if !glassy { shape.strokeBorder(PinnedRest.line(scheme), lineWidth: 1) } }
         }
         // A press gives a little, as the Mac's tile does.
         .buttonStyle(PressScale())

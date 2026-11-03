@@ -259,7 +259,7 @@ struct PinnedDisc: View {
         let colour = workspace.spaceID(of: tab.id).flatMap { workspace.space($0)?.color } ?? .blue
         // The glow and the icon over it, as the iPad's tile stacks them.
         ZStack {
-            PinnedIcon(url: url, open: true, colour: colour, size: Self.icon, lean: nil, plate: Self.plate)
+            PinnedIcon(url: url, open: true, colour: colour, size: Self.icon, lean: nil, plate: Self.plate, fills: true)
         }
         .frame(width: 44, height: 44)
         .clipShape(shape)

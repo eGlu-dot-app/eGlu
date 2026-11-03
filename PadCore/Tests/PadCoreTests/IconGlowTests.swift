@@ -48,6 +48,15 @@ final class IconGlowTests: XCTestCase {
         XCTAssertGreaterThan(light.tint.red, light.tint.green + 0.3)
     }
 
+    func testTheCoreIsTheStrongestColourNotTheirMean() throws {
+        // Blue over two thirds, yellow over one: the tint goes grey, the core stays blue.
+        let light = try XCTUnwrap(IconGlow.light(of: icon { x, _ in x < 16 ? (30, 90, 240) : (250, 210, 20) }, side: side))
+        XCTAssertGreaterThan(light.core.blue, light.core.red + 0.3)
+        XCTAssertGreaterThan(light.core.blue, light.core.green + 0.1)
+        let lab = IconGlow.oklab(light.core.red, light.core.green, light.core.blue)
+        XCTAssertGreaterThan((lab.a * lab.a + lab.b * lab.b).squareRoot(), 0.1, "a colour, not a grey")
+    }
+
     func testTwoColoursMeetWithoutADullSpot() throws {
         // Blue on the left, yellow on the right: spread as RGB they would meet in grey.
         let light = try XCTUnwrap(IconGlow.light(of: icon { x, _ in x < 12 ? (30, 90, 240) : (250, 210, 20) }, side: side))

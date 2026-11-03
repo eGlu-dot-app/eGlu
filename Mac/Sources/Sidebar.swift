@@ -307,8 +307,8 @@ private struct PinnedGrid: View {
 /// A pinned tab's tile, in the sidebar or in the top row (`look`). In the
 /// sidebar, all tiles one size, as wide as the sidebar's columns let them
 /// be (PinnedRows): the one on screen and the one under the pointer on
-/// glass, the others a brighter tile with a thin line round it (restGround,
-/// restLine). The icon is drawn without
+/// glass, the others a brighter tile with a thin line round it (PinnedRest),
+/// as the iPad's are too. The icon is drawn without
 /// its own ground (IconTint), its mark alone, on a soft light of the
 /// icon's colours: what the site draws stands on its own colour, with no
 /// square of the icon's left to show. Every tile draws it so, its tab on
@@ -354,16 +354,6 @@ struct PinnedTile: View {
                                             glassAtRest: false, openTypesAddress: true)
     }
 
-    /// A tile at rest, off screen and not under the pointer: lighter than the
-    /// sidebar's ground, in white, and edged in the words' colour, faintly.
-    static func restGround(_ scheme: ColorScheme) -> Color {
-        Color.white.opacity(scheme == .dark ? 0.08 : 0.4)
-    }
-
-    static func restLine(_ scheme: ColorScheme) -> Color {
-        Color.primary.opacity(scheme == .dark ? 0.16 : 0.1)
-    }
-
     /// Where the pointer is, or where a debug build was told to put it (`-hoverPinned 0.8,0.3`).
     private var shownPointer: CGPoint? {
         #if DEBUG
@@ -394,7 +384,7 @@ struct PinnedTile: View {
                 PointerGlow(lean: lean, radius: look.glow)
                 // No glow on a tile neither on screen nor under the pointer, as no glass.
                 PinnedIcon(url: url, open: open, colour: colour, size: look.icon, lean: lean, plate: look.plate, lit: glassy,
-                           current: selected)
+                           current: selected, fills: true)
             }
             .frame(maxWidth: look.width ?? .infinity)
             .frame(width: look.width, height: look.height)
@@ -406,8 +396,8 @@ struct PinnedTile: View {
             Group {
                 if look.glassAtRest {
                     tile
-                        .background { if !glassy { shape.fill(PinnedTile.restGround(scheme)) } }
-                        .overlay { if !glassy { shape.strokeBorder(PinnedTile.restLine(scheme), lineWidth: 1) } }
+                        .background { if !glassy { shape.fill(PinnedRest.ground(scheme)) } }
+                        .overlay { if !glassy { shape.strokeBorder(PinnedRest.line(scheme), lineWidth: 1) } }
                         .glassEffect(glassy ? glass : .identity, in: shape)
                 } else {
                     tile.background {

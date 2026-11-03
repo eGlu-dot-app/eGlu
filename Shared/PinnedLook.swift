@@ -56,7 +56,36 @@ extension TintColor {
     }
 }
 
+extension TintColor {
+    /// The colour as it is drawn in the light or the dark (a system colour
+    /// is lighter in the dark), in sRGB.
+    func site(in scheme: ColorScheme) -> SiteColor {
+        #if os(macOS)
+        var rgb = srgbComponents
+        NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)?.performAsCurrentDrawingAppearance { rgb = self.srgbComponents }
+        #else
+        let rgb = resolvedColor(with: UITraitCollection(userInterfaceStyle: scheme == .dark ? .dark : .light)).srgbComponents
+        #endif
+        return SiteColor(red: min(max(rgb.red, 0), 1), green: min(max(rgb.green, 0), 1), blue: min(max(rgb.blue, 0), 1))
+    }
+}
+
+extension SpaceColor {
+    /// The space's colour as each platform has one.
+    var tint: TintColor {
+        #if os(macOS)
+        nsColor
+        #else
+        uiColor
+        #endif
+    }
+}
+
 extension Color {
+    init(site colour: SiteColor) {
+        self.init(.sRGB, red: colour.red, green: colour.green, blue: colour.blue)
+    }
+
     init(tint: TintColor) {
         #if os(macOS)
         self.init(nsColor: tint)
@@ -420,6 +449,8 @@ enum IconTint {
         let span: CGFloat
         /// Its colours as one, for the tile's glass: greyer the further apart their hues are.
         let tint: TintColor
+        /// Its strongest colour, for the core of the tile on screen's light (CoreLight).
+        let core: SiteColor
     }
 
     /// The site's icon's light; nil for an icon with no colour of its own
@@ -432,7 +463,7 @@ enum IconTint {
         if let bytes = fitted(image, side: side), let light = IconGlow.light(of: bytes, side: side),
            let picture = picture(of: light.pixels, side: light.side) {
             made = Glow(picture: picture, span: CGFloat(light.side) / CGFloat(side),
-                        tint: TintColor.srgb(light.tint.red, light.tint.green, light.tint.blue))
+                        tint: TintColor.srgb(light.tint.red, light.tint.green, light.tint.blue), core: light.core)
         }
         lights[key] = Read(picture: image, value: made)
         return made
@@ -590,6 +621,78 @@ struct Plate: View {
     }
 }
 
+/// The light of the tile on screen (PinnedIcon.fills), filling it: its
+/// icon's colour at the core, the space's at the edge, blended between in
+/// OKLCh (PadCore's OKLCh), so the hue turns from one to the other as
+/// strong as both are, with no grey ring where they meet as there is
+/// halfway in red, green and blue (asked for on 3 November 2026). The core
+/// sits round the icon, and while its window is in front drifts on a slow
+/// loop a fifth of the tile across and a sixth down, its two periods apart
+/// so it never quite repeats: enough to be seen to move, as light behind
+/// glass, where the old plate's point and a half went by unseen. Under the
+/// pointer it leans toward it instead, and it holds still where Reduce
+/// Motion is on.
+struct CoreLight: View {
+    let core: SiteColor
+    let edge: SiteColor
+    /// Toward the pointer, in points from the tile's middle; nil while it is elsewhere.
+    let toward: CGSize?
+    var drifts = true
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        GeometryReader { box in
+            TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion || toward != nil || !drifts)) { context in
+                RadialGradient(stops: stops, center: centre(in: box.size, at: context.date), startRadius: 0,
+                               endRadius: (box.size.width * box.size.width + box.size.height * box.size.height).squareRoot() / 2 * 1.1)
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    /// Nine steps of the blend from the core outward, out to a little past
+    /// the tile's corners: the core whole over the first third, well round
+    /// the icon (asked for on 3 November 2026: "make the core bigger"), and
+    /// the space's colour reaching the corners; fuller at the core than at
+    /// the edge, so the glass still shows through there.
+    private var stops: [Gradient.Stop] {
+        let steps = OKLCh.blend(core, edge, count: 9)
+        let (inner, outer) = scheme == .dark ? (0.8, 0.42) : (0.85, 0.5)
+        return steps.enumerated().map { index, colour in
+            let t = Double(index) / Double(steps.count - 1)
+            return Gradient.Stop(color: Color(site: colour).opacity(inner + (outer - inner) * t), location: 0.36 + 0.64 * t)
+        }
+    }
+
+    /// Where the core is, in the tile's fractions.
+    private func centre(in size: CGSize, at date: Date) -> UnitPoint {
+        guard size.width > 0, size.height > 0 else { return .center }
+        if let toward {
+            return UnitPoint(x: 0.5 + toward.width / size.width, y: 0.5 + toward.height / size.height)
+        }
+        guard drifts, !reduceMotion else { return .center }
+        let t = date.timeIntervalSinceReferenceDate
+        return UnitPoint(x: 0.5 + cos(t * 2 * .pi / 6.5) * 0.2, y: 0.5 + sin(t * 2 * .pi / 4.6) * 0.17)
+    }
+}
+
+/// A pinned tile at rest, its tab neither on screen nor under the pointer,
+/// on the Mac and the iPad alike: no glass and no light, its icon as it is
+/// (PinnedIcon `lit` false), on a ground lighter than the sidebar's, in
+/// white, edged faintly in the words' colour, so the one on screen, on
+/// glass and lit, stands out among them.
+enum PinnedRest {
+    static func ground(_ scheme: ColorScheme) -> Color {
+        Color.white.opacity(scheme == .dark ? 0.08 : 0.4)
+    }
+
+    static func line(_ scheme: ColorScheme) -> Color {
+        Color.primary.opacity(scheme == .dark ? 0.16 : 0.1)
+    }
+}
+
 /// A pinned tab's icon, in the sidebar's tile and the row's, the same in
 /// every space and every look of the screen (IconTint.Look), and every icon
 /// as large to the eye as the others: each is cut to what it draws first
@@ -631,6 +734,10 @@ struct PinnedIcon: View {
     /// Its tab is the one on screen, whether or not its window is in front;
     /// as `open` where not given.
     var current: Bool?
+    /// On the tile on screen, the light fills the tile (CoreLight): the
+    /// icon's colour at the core, the space's at the edge. False where the
+    /// icon stands in a row of words (PinnedPanel's), which has its own.
+    var fills = false
     @ObservedObject private var icons = SiteIcons.shared
     @Environment(\.colorScheme) private var scheme
 
@@ -822,7 +929,9 @@ struct PinnedIcon: View {
     /// thins out.
     @ViewBuilder private func light(under look: IconTint.Look, side: CGFloat, white: Bool) -> some View {
         let adds: BlendMode = scheme == .dark ? .plusLighter : .normal
-        if white {
+        if fills, current ?? open {
+            CoreLight(core: core(white: white), edge: colour.tint.site(in: scheme), toward: lean, drifts: open)
+        } else if white {
             Plate(fill: .colour(colour.deep), toward: lean, side: (plate.side * 1.25).rounded(),
                   corner: (plate.corner * 1.3).rounded(), blur: plate.blur - 1, drifts: open)
         } else if case .shape(true) = look {
@@ -839,6 +948,17 @@ struct PinnedIcon: View {
                 .opacity(scheme == .dark ? 0.6 : 0.5)
                 .blendMode(adds)
         }
+    }
+
+    /// The core of the tile on screen's light (CoreLight): the icon's
+    /// strongest colour (IconTint.glow); for an icon of none, drawn in white, the
+    /// space's colour deepened as under it now (SpaceColor.deep), so the
+    /// white stands out on it; otherwise the space's own.
+    private func core(white: Bool) -> SiteColor {
+        if let glow = IconTint.glow(for: url) { return glow.core }
+        let space = colour.tint.site(in: scheme)
+        guard white, scheme == .light, colour != .yellow else { return space }
+        return SiteColor(red: space.red * 0.7, green: space.green * 0.7, blue: space.blue * 0.7)
     }
 
     /// A picture whole, in its own colours, as large as its frame lets it be.

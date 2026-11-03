@@ -25,6 +25,9 @@ public enum IconGlow {
         /// the light is, and greyer the further apart its hues are (Google's
         /// four, all but grey; Instagram's, a muted pink).
         public let tint: SiteColor
+        /// Its strongest colour (core), for the core of the tile on screen's
+        /// light, which stands out as one colour where the tint goes grey.
+        public let core: SiteColor
     }
 
     /// The light of an icon `side` pixels a side (premultiplied RGBA in
@@ -94,7 +97,49 @@ public enum IconGlow {
             pixels[p + 2] = UInt8((blue * alpha * 255).rounded())
             pixels[p + 3] = UInt8((alpha * 255).rounded())
         }
-        return Light(side: out, pixels: pixels, tint: tint(of: icon, side: side))
+        return Light(side: out, pixels: pixels, tint: tint(of: icon, side: side), core: core(of: icon, side: side))
+    }
+
+    /// The icon's strongest colour: its coloured pixels within a twelfth of
+    /// the circle of the hue most of its colour is in, their lightness raised
+    /// as the light's is and their chroma kept. Google's blue, not the grey
+    /// its four colours make as one; Instagram's pink; Hacker News's orange,
+    /// as its tint is.
+    private static func core(of icon: [UInt8], side: Int) -> SiteColor {
+        let count = 24
+        var bins = [Double](repeating: 0, count: count)
+        var pixels: [(w: Double, l: Double, c: Double, a: Double, b: Double, h: Double)] = []
+        for i in stride(from: 0, to: side * side * 4, by: 4) {
+            let alpha = Double(icon[i + 3]) / 255
+            guard alpha > 0.02 else { continue }
+            let lab = oklab(min(Double(icon[i]) / 255 / alpha, 1), min(Double(icon[i + 1]) / 255 / alpha, 1),
+                            min(Double(icon[i + 2]) / 255 / alpha, 1))
+            let c = (lab.a * lab.a + lab.b * lab.b).squareRoot()
+            let w = alpha * smoothstep(0.035, 0.11, c)
+            guard w > 0 else { continue }
+            let h = atan2(lab.b, lab.a)
+            bins[min(count - 1, Int((h + .pi) / (2 * .pi) * Double(count)))] += w
+            pixels.append((w, lab.l, c, lab.a, lab.b, h))
+        }
+        guard !pixels.isEmpty else { return SiteColor(red: 0.5, green: 0.5, blue: 0.5) }
+        // Each bin with its two neighbours, so a hue split across two bins counts whole.
+        let near = (0..<count).map { bins[($0 + count - 1) % count] + bins[$0] + bins[($0 + 1) % count] }
+        let best = near.indices.max { near[$0] < near[$1] } ?? 0
+        let centre = (Double(best) + 0.5) / Double(count) * 2 * .pi - .pi
+        var share = 0.0, light = 0.0, chroma = 0.0, a = 0.0, b = 0.0
+        for pixel in pixels {
+            var apart = abs(pixel.h - centre)
+            if apart > .pi { apart = 2 * .pi - apart }
+            guard apart <= .pi / 6 else { continue }
+            share += pixel.w
+            light += pixel.w * pixel.l
+            chroma += pixel.w * pixel.c
+            a += pixel.w * pixel.a
+            b += pixel.w * pixel.b
+        }
+        guard share > 0 else { return SiteColor(red: 0.5, green: 0.5, blue: 0.5) }
+        let (red, green, blue) = srgb(l: min(max(light / share, 0.6), 0.84), c: chroma / share, hue: atan2(b, a))
+        return SiteColor(red: red, green: green, blue: blue)
     }
 
     /// The icon's colour as one: its coloured pixels' lightness, raised as
