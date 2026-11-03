@@ -1,7 +1,6 @@
 #if DEBUG
 import Foundation
 import os
-import WebKit
 
 /// A test run for the iPhone Duo's strip, in a build from Xcode on the
 /// simulator (Docs/iPhoneDuoDesign.md §9): `-stripTour "<address> …"` opens
@@ -72,17 +71,7 @@ enum StripTour {
         """
 
     private static func run(_ script: String, in browser: Browser) async -> String? {
-        guard let page = browser.page else { return nil }
-        return await withCheckedContinuation { done in
-            page.view.callAsyncJavaScript(script, arguments: [:], in: nil, in: Page.world) { result in
-                switch result {
-                case .success(let value): done.resume(returning: value as? String)
-                case .failure(let error):
-                    let message = (error as NSError).userInfo["WKJavaScriptExceptionMessage"] ?? error.localizedDescription
-                    done.resume(returning: "error \(message)")
-                }
-            }
-        }
+        await browser.page?.tourLook(script)
     }
 }
 #endif

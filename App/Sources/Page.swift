@@ -678,6 +678,24 @@ final class Page: NSObject {
     /// What the scroll view's own pan takes as WebKit made it: every kind of touch.
     private var allTouchTypes: [NSNumber]?
 
+    #if DEBUG
+    /// A test run's look at the page (StripTour): `script` in the app's own
+    /// world, its answer as text or the error's message. Never on a hands-off page.
+    func tourLook(_ script: String) async -> String? {
+        guard !HandsOff.covers(view.url), !HandsOff.covers(committed) else { return "hands-off" }
+        return await withCheckedContinuation { done in
+            view.callAsyncJavaScript(script, arguments: [:], in: nil, in: Page.world) { result in
+                switch result {
+                case .success(let value): done.resume(returning: value as? String)
+                case .failure(let error):
+                    let message = (error as NSError).userInfo["WKJavaScriptExceptionMessage"] ?? error.localizedDescription
+                    done.resume(returning: "error \(message)")
+                }
+            }
+        }
+    }
+    #endif
+
     // MARK: A pull down to load again
 
     private lazy var refresher: UIRefreshControl = {
