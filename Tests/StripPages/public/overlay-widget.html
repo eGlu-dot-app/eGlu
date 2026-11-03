@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Embedded support widget</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 14px/1.55 system-ui, sans-serif; color: #1e3241; background: #f1f7fa; }
+    header { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px; background: #244b65; color: #fff; }
+    header button { margin-left: 6px; color: inherit; border-color: #a5c5da; }
+    h1 { margin: 0; font-size: 15px; }
+    main { padding: 12px; }
+    p { margin: 0 0 12px; }
+    button { padding: 7px 10px; border: 1px solid #7894a8; border-radius: 5px; background: transparent; font: inherit; cursor: pointer; }
+    form { display: flex; gap: 6px; }
+    input { min-width: 0; width: 100%; padding: 8px; border: 1px solid #7894a8; border-radius: 5px; font: inherit; }
+    .widget-background { height: 28px; margin-top: 12px; background: linear-gradient(90deg, #83b6c5, #e6cfa9); }
+  </style>
+</head>
+<body>
+  <header data-pattern="html-widget-toolbar">
+    <h1>Order support</h1>
+    <div><button type="button" id="help">Help</button><button type="button" id="dismiss" aria-label="Clear support message">X</button></div>
+  </header>
+  <main>
+    <p id="reply" aria-live="polite">Track an order or ask about delivery.</p>
+    <form id="lookup" data-pattern="html-widget-lookup"><input id="order" aria-label="Order number" placeholder="Order number" required><button type="submit">Track</button></form>
+    <div class="widget-background" role="img" aria-label="Blue to sand gradient"></div>
+  </main>
+  <script>
+    const reply = document.getElementById('reply');
+    document.getElementById('help').onclick = () => { reply.textContent = 'Support is available Monday to Friday, 9am to 6pm.'; };
+    document.getElementById('dismiss').onclick = () => { reply.textContent = 'Track an order or ask about delivery.'; };
+    document.getElementById('lookup').onsubmit = (event) => { event.preventDefault(); reply.textContent = 'Order ' + document.getElementById('order').value + ' is being prepared.'; };
+  </script>
+</body>
+</html>
