@@ -41,7 +41,13 @@ COUNT=0 NAME=eglu-symbol-compact /tmp/symbol Marketing/Brand
 FRAME=1 NAME=eglu-icon /tmp/symbol Marketing/Brand
 ```
 
-After changing the cursor, copy `eglu-icon-cursor.svg` over `Shared/eGlu.icon/Assets/cursor.svg`.
+After changing the cursor, copy `eglu-icon-cursor.svg` over `Shared/eGlu.icon/Assets/cursor.svg`, then draw the icon's black fill again. The fill is the cursor drawn smaller by the white border's width (`--border`, 12 by default), lying over the white cursor in light and dark:
+
+```bash
+python3 Marketing/Brand/cursor-inset.py
+```
+
+It writes `Shared/eGlu.icon/Assets/cursor-fill.svg`.
 
 ## The fluted glass
 

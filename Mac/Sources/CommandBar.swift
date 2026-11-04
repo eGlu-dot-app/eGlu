@@ -324,7 +324,8 @@ struct CommandBar: View {
             .frame(height: 56)
             if !suggestions.rows.isEmpty {
                 Divider().opacity(0.6)
-                SuggestionRows(suggestions: suggestions, tint: model.space?.color.color ?? .accentColor) { row in
+                SuggestionRows(suggestions: suggestions, tint: model.space?.color.color ?? .accentColor,
+                               ink: model.space?.color.ink ?? .white) { row in
                     model.run(row, purpose: purpose)
                 }
                 .frame(maxHeight: min(440, room))
@@ -375,6 +376,8 @@ struct CommandBar: View {
 struct SuggestionRows: View {
     @ObservedObject var suggestions: Suggestions
     let tint: Color
+    /// The words on the chosen row's fill: dark on yellow (SpaceColor.ink).
+    let ink: Color
     let choose: (Suggestion) -> Void
 
     static func headings(_ rows: [Suggestion]) -> [Int: String] {
@@ -420,7 +423,7 @@ struct SuggestionRows: View {
                                 .accessibilityAddTraits(.isHeader)
                         }
                         Button { choose(row) } label: {
-                            SuggestionRow(row: row, selected: index == suggestions.selection, named: !listing, tint: tint)
+                            SuggestionRow(row: row, selected: index == suggestions.selection, named: !listing, tint: tint, ink: ink)
                         }
                             .buttonStyle(.plain)
                             .id(row.id)
@@ -445,6 +448,7 @@ private struct SuggestionRow: View {
     let selected: Bool
     var named = true
     let tint: Color
+    let ink: Color
     @State private var hovering = false
 
     private var keys: String? {
@@ -471,7 +475,7 @@ private struct SuggestionRow: View {
                 if !row.detail.isEmpty, keys == nil {
                     Text(row.detail)
                         .font(.system(size: 11))
-                        .foregroundStyle(selected ? Color.white.opacity(0.75) : Color.secondary)
+                        .foregroundStyle(selected ? ink.opacity(0.75) : Color.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
@@ -480,18 +484,18 @@ private struct SuggestionRow: View {
             if let keys {
                 Text(keys)
                     .font(.system(size: 12, weight: .medium, design: .rounded))
-                    .foregroundStyle(selected ? Color.white.opacity(0.85) : Color.secondary)
+                    .foregroundStyle(selected ? ink.opacity(0.85) : Color.secondary)
             } else if showsSource {
                 // Found by Apple Intelligence from what the words mean, not by their letters.
                 if row.byMeaning {
                     Image(systemName: "sparkles")
                         .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(selected ? Color.white.opacity(0.8) : Color.secondary)
+                        .foregroundStyle(selected ? ink.opacity(0.8) : Color.secondary)
                         .accessibilityHidden(true)
                 }
                 Text(row.source.label)
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(selected ? Color.white.opacity(0.8) : Color.secondary)
+                    .foregroundStyle(selected ? ink.opacity(0.8) : Color.secondary)
                     .lineLimit(1)
                     .fixedSize()
             }
@@ -531,7 +535,7 @@ private struct SuggestionRow: View {
     private func symbol(_ name: String) -> some View {
         Image(systemName: name)
             .font(.system(size: 13, weight: .medium))
-            .foregroundStyle(selected ? Color.white : Color.secondary)
+            .foregroundStyle(selected ? ink : Color.secondary)
     }
 
     /// The typed letters plain, the rest of the phrase in bold: what the row
@@ -556,7 +560,7 @@ private struct SuggestionRow: View {
     private func part(_ letters: ArraySlice<Character>, typed: Bool) -> Text {
         Text(verbatim: String(letters))
             .fontWeight(typed ? .regular : .semibold)
-            .foregroundStyle(selected ? Color.white.opacity(typed ? 0.85 : 1) : Color.primary.opacity(typed ? 0.7 : 1))
+            .foregroundStyle(selected ? ink.opacity(typed ? 0.85 : 1) : Color.primary.opacity(typed ? 0.7 : 1))
     }
 }
 

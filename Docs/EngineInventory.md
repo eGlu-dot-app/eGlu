@@ -11,11 +11,11 @@
 | b. Reach-ins (tests) | 107 | 13 |
 | b. Reach-ins (Page.swift self-references) | 1 | 1 |
 | c. WebKit types in declarations | 141 | 27 |
-| c. Declarations (Extension* files) | 258 | 16 |
+| c. Declarations (Extension* files) | 259 | 16 |
 | d. Private WebKit API | 36 | 15 |
 | e. Hidden web views | 19 | 11 |
 | f. Script bridges | 7 | 7 |
-| **Total** | **567** | **69** |
+| **Total** | **568** | **69** |
 
 ## Details
 
@@ -138,10 +138,10 @@
   - L358: `if UserDefaults.standard.bool(forKey: "applePasswordsTest"), page.view.url?.host() == "127.0.0.1" { return "127.0.0.1" }`
   - L401: `ApplePasswords.host(of: page.view.url) == resigned.host`
 - `Mac/Sources/BrowserView.swift` (4):
-  - L417: `guard let page, page.view.url != nil || focused && model.url != nil else { return false }`
-  - L432: `if let page, page.view.url != nil || focused && model.url != nil {`
-  - L449: `FailureView(message: failure, url: focused ? model.url : page.view.url) {`
-  - L467: `if paired, !focused, hovering, let host = page?.view.url?.host() {`
+  - L433: `guard let page, page.view.url != nil || focused && model.url != nil else { return false }`
+  - L448: `if let page, page.view.url != nil || focused && model.url != nil {`
+  - L465: `FailureView(message: failure, url: focused ? model.url : page.view.url) {`
+  - L483: `if paired, !focused, hovering, let host = page?.view.url?.host() {`
 - `Mac/Sources/DeveloperBar.swift` (3):
   - L18: `focused ? model.url : (page.displayURL ?? page.view.url)`
   - L29: `return DeveloperMode.isOn(url ?? page?.displayURL ?? page?.view.url,`
@@ -149,7 +149,7 @@
 - `Mac/Sources/ExtensionAnswers.swift` (3):
   - L259: `let url = ExtensionTab.address(of: page, for: context, else: page?.view.url ?? record.url)`
   - L262: `var described: [String: Any] = ["url": url?.absoluteString ?? "", "title": page?.view.title ?? record.title]`
-  - L610: `guard let url = popup.page?.view.url, url.scheme == Self.scheme, url.host() == id else { continue }`
+  - L614: `guard let url = popup.page?.view.url, url.scheme == Self.scheme, url.host() == id else { continue }`
 - `Mac/Sources/ExtensionPopupWindow.swift` (4):
   - L102: `page.view.observe(\.url) { _, _ in told([.URL]) },`
   - L103: `page.view.observe(\.title) { _, _ in told([.title]) },`
@@ -159,7 +159,7 @@
   - L236: `let url = page.view.url, !page.isHandsOff, context.hasAccess(to: url, in: self) else {`
   - L245: `page.view.url == url && !page.isHandsOff && context.hasAccess(to: url, in: self)`
 - `Mac/Sources/Extensions.swift` (1):
-  - L1913: `if let tab, ExtensionPolicy.grantsOnClick(window.page?.view.url) { context.userGesturePerformed(in: tab) }`
+  - L2026: `if let tab, ExtensionPolicy.grantsOnClick(window.page?.view.url) { context.userGesturePerformed(in: tab) }`
 - `Mac/Sources/Menus.swift` (4):
   - L360: `let view = little.page.view`
   - L362: `case .inspector: if !WebInspector.show(.inspector, for: view) { NSSound.beep() }`
@@ -181,13 +181,13 @@
   - L44: `guard isStore(page.view.url) else { return }`
   - L60: `for page in Session.shared.pages.live.values where isStore(page.view.url) { tell(page) }`
 - `Mac/Sources/WindowModel.swift` (7):
-  - L304: `let view = page?.view`
-  - L315: `zoom = Double(view?.pageZoom ?? 1)`
-  - L869: `canHandoffFiles && page?.view.url != nil && page?.isHandsOff == false`
-  - L905: `guard let page, self.page === page, !page.isHandsOff, page.view.url != nil else { return }`
-  - L1003: `guard let view = toolsPage?.view else { return }`
-  - L1004: `if !WebInspector.show(part, for: view) {`
-  - L1225: `startHandoff(source: DocumentSource(link: url, view: page.view))`
+  - L325: `let view = page?.view`
+  - L336: `zoom = Double(view?.pageZoom ?? 1)`
+  - L1019: `canHandoffFiles && page?.view.url != nil && page?.isHandsOff == false`
+  - L1055: `guard let page, self.page === page, !page.isHandsOff, page.view.url != nil else { return }`
+  - L1153: `guard let view = toolsPage?.view else { return }`
+  - L1154: `if !WebInspector.show(part, for: view) {`
+  - L1375: `startHandoff(source: DocumentSource(link: url, view: page.view))`
 - `Shared/HandingOff.swift` (1):
   - L376: `guard let file = try? await HandoffFetch.fetch(picture.address, with: page.view, into: folder),`
 - `Shared/PageShared.swift` (5):
@@ -493,16 +493,16 @@
   - L55: `static func keepingNothing() -> WKWebViewConfiguration {`
   - L56: `let configuration = WKWebViewConfiguration()`
 
-#### Declarations in Extension* files (258 lines in 16 files)
+#### Declarations in Extension* files (259 lines in 16 files)
 - `Mac/Sources/ExtensionAnswers.swift` (8):
   - L45: `func answer(_ api: String, _ args: [Any], context: WKWebExtensionContext, in space: UUID) async throws -> Any? {`
-  - L481: `private func requestAfterClick(_ names: [String], origins: [String], context: WKWebExtensionContext, in space: UUID) async throws -> Bool {`
-  - L488: `let wanted = names.map { WKWebExtension.Permission(rawValue: $0) }`
-  - L489: `let patterns = origins.compactMap { try? WKWebExtension.MatchPattern(string: $0) }`
-  - L501: `let blocked = { (pattern: WKWebExtension.MatchPattern) in`
-  - L530: `static func asks(_ context: WKWebExtensionContext, for permission: String) -> Bool {`
-  - L537: `private func idleOrPower(_ api: String, first: Any?, id: String, context: WKWebExtensionContext, in space: UUID) throws -> Any? {`
-  - L618: `private func describe(_ context: WKWebExtensionContext) -> [String: Any] {`
+  - L482: `private func requestAfterClick(_ names: [String], origins: [String], context: WKWebExtensionContext, in space: UUID) async throws -> Bool {`
+  - L489: `let wanted = names.map { WKWebExtension.Permission(rawValue: $0) }`
+  - L490: `let patterns = origins.compactMap { try? WKWebExtension.MatchPattern(string: $0) }`
+  - L502: `let blocked = { (pattern: WKWebExtension.MatchPattern) in`
+  - L534: `static func asks(_ context: WKWebExtensionContext, for permission: String) -> Bool {`
+  - L541: `private func idleOrPower(_ api: String, first: Any?, id: String, context: WKWebExtensionContext, in space: UUID) throws -> Any? {`
+  - L622: `private func describe(_ context: WKWebExtensionContext) -> [String: Any] {`
 - `Mac/Sources/ExtensionAsk.swift` (1):
   - L45: `func askForMore(title: String, from context: WKWebExtensionContext, in space: UUID, window: WindowModel?,`
 - `Mac/Sources/ExtensionAuth.swift` (21):
@@ -617,9 +617,9 @@
   - L165: `func isSelected(for context: WKWebExtensionContext) -> Bool { false }`
   - L166: `func close(for context: WKWebExtensionContext) async throws { onClose?() }`
   - L209: `func show(_ url: URL, for context: WKWebExtensionContext, in window: WindowModel) {`
-  - L522: `let web: WKWebView`
-  - L524: `func makeNSView(context: Context) -> WKWebView { web }`
-  - L525: `func updateNSView(_ view: WKWebView, context: Context) {}`
+  - L524: `let web: WKWebView`
+  - L526: `func makeNSView(context: Context) -> WKWebView { web }`
+  - L527: `func updateNSView(_ view: WKWebView, context: Context) {}`
 - `Mac/Sources/ExtensionPopupWindow.swift` (33):
   - L16: `final class ExtensionPopupWindow: NSObject, WKWebExtensionWindow {`
   - L24: `private weak var controller: WKWebExtensionController?`
@@ -711,63 +711,64 @@
   - L113: `let context = WKWebExtensionContext(for: package)`
   - L136: `let page = WKWebViewConfiguration()`
   - L139: `let web = WKWebView(frame: NSRect(x: 0, y: 0, width: 800, height: 600), configuration: page)`
-  - L160: `let web = WKWebView(frame: NSRect(x: 0, y: 0, width: 400, height: 600), configuration: configuration)`
-  - L186: `private final class Quiet: NSObject, WKWebExtensionControllerDelegate {`
-  - L195: `func webExtensionController(_ controller: WKWebExtensionController, sendMessage message: Any, toApplicationWithIdentifier applicationIdentifier: String?,`
-  - L206: `func webExtensionController(_ controller: WKWebExtensionController, connectUsing port: WKWebExtension.MessagePort,`
-  - L211: `private func applicationIdentifierIsShims(_ port: WKWebExtension.MessagePort) -> Bool {`
-  - L223: `private final class Loading: NSObject, WKNavigationDelegate {`
-  - L226: `static func page(in web: WKWebView, start: () -> Void) async -> Bool? {`
-  - L243: `func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { finish(true) }`
-  - L244: `func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: any Error) { failed(error) }`
-  - L245: `func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: any Error) { failed(error) }`
-- `Mac/Sources/Extensions.swift` (46):
-  - L98: `private var controllers: [UUID: WKWebExtensionController] = [:]`
-  - L102: `private(set) var contexts: [UUID: [String: WKWebExtensionContext]] = [:]`
-  - L448: `func controller(for space: UUID) -> WKWebExtensionController {`
-  - L450: `let configuration = WKWebExtensionController.Configuration(identifier: space)`
-  - L454: `let pages = configuration.webViewConfiguration ?? WKWebViewConfiguration()`
-  - L460: `let controller = WKWebExtensionController(configuration: configuration)`
-  - L466: `func space(of controller: WKWebExtensionController?) -> UUID? {`
-  - L470: `func context(_ id: String, in space: UUID) -> WKWebExtensionContext? {`
-  - L504: `let package = try await WKWebExtension(resourceBaseURL: folder)`
-  - L513: `let context = WKWebExtensionContext(for: package)`
-  - L617: `private func allow(_ context: WKWebExtensionContext, _ package: WKWebExtension, access: Installed.SiteAccess) {`
-  - L637: `static func letRulesRedirect(_ context: WKWebExtensionContext, _ package: WKWebExtension) {`
-  - L647: `static func sites(of package: WKWebExtension) -> [WKWebExtension.MatchPattern] {`
-  - L666: `nonisolated static func withheld(_ pattern: WKWebExtension.MatchPattern) -> Bool {`
-  - L673: `nonisolated static func othersPage(_ url: URL?, for context: WKWebExtensionContext) -> Bool {`
-  - L689: `static func fence(_ context: WKWebExtensionContext) {`
-  - L701: `let own = try? WKWebExtension.MatchPattern(string: "https://\(context.uniqueIdentifier.lowercased()).chromiumapp.org/*") {`
-  - L711: `private func firstLook(at context: WKWebExtensionContext, _ package: WKWebExtension, archive file: URL, id: String) -> ExtensionEvidence {`
-  - L746: `private func missing(for manifest: ExtensionManifest, _ package: WKWebExtension) -> Set<String> {`
-  - L922: `private func startBackground(of context: WKWebExtensionContext, _ item: Installed, in space: UUID, attempt: UUID? = nil) {`
-  - L943: `private func recover(_ action: ExtensionWorkerRecovery.Action, context: WKWebExtensionContext, item: Installed, in space: UUID) {`
-  - L970: `private func watch(_ context: WKWebExtensionContext, _ item: Installed, in space: UUID) {`
-  - L986: `private func errorsChanged(_ context: WKWebExtensionContext, _ id: String, in space: UUID) {`
-  - L1179: `func commands(in space: UUID) -> [(name: String, id: String, commands: [WKWebExtension.Command])] {`
-  - L1186: `func perform(_ command: WKWebExtension.Command, of id: String, in space: UUID) {`
-  - L1279: `func action(for id: String, in window: WindowModel) -> WKWebExtension.Action? {`
-  - L1361: `func popupURL(for context: WKWebExtensionContext, in space: UUID) -> URL? {`
-  - L1771: `let types = WKWebExtensionController.allExtensionDataTypes`
-  - L1796: `let standIn = WKWebExtensionContext(for: try await WKWebExtension(resourceBaseURL: folder))`
-  - L1841: `func configuration(for url: URL, in space: UUID) -> WKWebViewConfiguration? {`
-  - L1872: `let types = WKWebExtensionController.allExtensionDataTypes`
-  - L2126: `extension Extensions: WKWebExtensionControllerDelegate {`
-  - L2127: `func webExtensionController(_ controller: WKWebExtensionController, openWindowsFor extensionContext: WKWebExtensionContext) -> [any WKWebExtensionWindow] {`
-  - L2132: `func webExtensionController(_ controller: WKWebExtensionController, focusedWindowFor extensionContext: WKWebExtensionContext) -> (any WKWebExtensionWindow)? {`
-  - L2153: `static func refusal(opening url: URL?, by context: WKWebExtensionContext) -> Error? {`
-  - L2159: `func webExtensionController(_ controller: WKWebExtensionController, openNewTabUsing configuration: WKWebExtension.TabConfiguration,`
-  - L2169: `func webExtensionController(_ controller: WKWebExtensionController, openNewWindowUsing configuration: WKWebExtension.WindowConfiguration,`
-  - L2201: `func webExtensionController(_ controller: WKWebExtensionController, openOptionsPageFor extensionContext: WKWebExtensionContext,`
-  - L2208: `private func permissionWindow(in space: UUID, tab: (any WKWebExtensionTab)?) -> WindowModel? {`
-  - L2214: `func webExtensionController(_ controller: WKWebExtensionController, promptForPermissions permissions: Set<WKWebExtension.Permission>,`
-  - L2233: `func webExtensionController(_ controller: WKWebExtensionController, promptForPermissionToAccess urls: Set<URL>,`
-  - L2239: `func webExtensionController(_ controller: WKWebExtensionController, promptForPermissionMatchPatterns matchPatterns: Set<WKWebExtension.MatchPattern>,`
-  - L2264: `func webExtensionController(_ controller: WKWebExtensionController, presentActionPopup action: WKWebExtension.Action,`
-  - L2279: `func webExtensionController(_ controller: WKWebExtensionController, didUpdate action: WKWebExtension.Action,`
-  - L2287: `func webExtensionController(_ controller: WKWebExtensionController, sendMessage message: Any, toApplicationWithIdentifier applicationIdentifier: String?,`
-  - L2321: `func webExtensionController(_ controller: WKWebExtensionController, connectUsing port: WKWebExtension.MessagePort,`
+  - L164: `let web = WKWebView(frame: NSRect(x: 0, y: 0, width: 400, height: 600), configuration: configuration)`
+  - L190: `private final class Quiet: NSObject, WKWebExtensionControllerDelegate {`
+  - L199: `func webExtensionController(_ controller: WKWebExtensionController, sendMessage message: Any, toApplicationWithIdentifier applicationIdentifier: String?,`
+  - L210: `func webExtensionController(_ controller: WKWebExtensionController, connectUsing port: WKWebExtension.MessagePort,`
+  - L215: `private func applicationIdentifierIsShims(_ port: WKWebExtension.MessagePort) -> Bool {`
+  - L227: `private final class Loading: NSObject, WKNavigationDelegate {`
+  - L230: `static func page(in web: WKWebView, start: () -> Void) async -> Bool? {`
+  - L247: `func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { finish(true) }`
+  - L248: `func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: any Error) { failed(error) }`
+  - L249: `func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: any Error) { failed(error) }`
+- `Mac/Sources/Extensions.swift` (47):
+  - L105: `private var controllers: [UUID: WKWebExtensionController] = [:]`
+  - L109: `private(set) var contexts: [UUID: [String: WKWebExtensionContext]] = [:]`
+  - L499: `func controller(for space: UUID) -> WKWebExtensionController {`
+  - L501: `let configuration = WKWebExtensionController.Configuration(identifier: space)`
+  - L505: `let pages = configuration.webViewConfiguration ?? WKWebViewConfiguration()`
+  - L511: `let controller = WKWebExtensionController(configuration: configuration)`
+  - L517: `func space(of controller: WKWebExtensionController?) -> UUID? {`
+  - L521: `func context(_ id: String, in space: UUID) -> WKWebExtensionContext? {`
+  - L555: `let package = try await WKWebExtension(resourceBaseURL: folder)`
+  - L564: `let context = WKWebExtensionContext(for: package)`
+  - L680: `private func allow(_ context: WKWebExtensionContext, _ package: WKWebExtension, access: Installed.SiteAccess, cookies: Bool) {`
+  - L696: `static func holdCookies(_ context: WKWebExtensionContext, letting cookies: Bool) {`
+  - L708: `static func letRulesRedirect(_ context: WKWebExtensionContext, _ package: WKWebExtension) {`
+  - L718: `static func sites(of package: WKWebExtension) -> [WKWebExtension.MatchPattern] {`
+  - L737: `nonisolated static func withheld(_ pattern: WKWebExtension.MatchPattern) -> Bool {`
+  - L744: `nonisolated static func othersPage(_ url: URL?, for context: WKWebExtensionContext) -> Bool {`
+  - L760: `static func fence(_ context: WKWebExtensionContext) {`
+  - L772: `let own = try? WKWebExtension.MatchPattern(string: "https://\(context.uniqueIdentifier.lowercased()).chromiumapp.org/*") {`
+  - L782: `private func firstLook(at context: WKWebExtensionContext, _ package: WKWebExtension, archive file: URL, id: String) -> ExtensionEvidence {`
+  - L822: `private func missing(for manifest: ExtensionManifest, _ package: WKWebExtension) -> Set<String> {`
+  - L1030: `private func startBackground(of context: WKWebExtensionContext, _ item: Installed, in space: UUID, attempt: UUID? = nil) {`
+  - L1051: `private func recover(_ action: ExtensionWorkerRecovery.Action, context: WKWebExtensionContext, item: Installed, in space: UUID) {`
+  - L1078: `private func watch(_ context: WKWebExtensionContext, _ item: Installed, in space: UUID) {`
+  - L1094: `private func errorsChanged(_ context: WKWebExtensionContext, _ id: String, in space: UUID) {`
+  - L1287: `func commands(in space: UUID) -> [(name: String, id: String, commands: [WKWebExtension.Command])] {`
+  - L1294: `func perform(_ command: WKWebExtension.Command, of id: String, in space: UUID) {`
+  - L1387: `func action(for id: String, in window: WindowModel) -> WKWebExtension.Action? {`
+  - L1469: `func popupURL(for context: WKWebExtensionContext, in space: UUID) -> URL? {`
+  - L1884: `let types = WKWebExtensionController.allExtensionDataTypes`
+  - L1909: `let standIn = WKWebExtensionContext(for: try await WKWebExtension(resourceBaseURL: folder))`
+  - L1954: `func configuration(for url: URL, in space: UUID) -> WKWebViewConfiguration? {`
+  - L1985: `let types = WKWebExtensionController.allExtensionDataTypes`
+  - L2249: `extension Extensions: WKWebExtensionControllerDelegate {`
+  - L2250: `func webExtensionController(_ controller: WKWebExtensionController, openWindowsFor extensionContext: WKWebExtensionContext) -> [any WKWebExtensionWindow] {`
+  - L2255: `func webExtensionController(_ controller: WKWebExtensionController, focusedWindowFor extensionContext: WKWebExtensionContext) -> (any WKWebExtensionWindow)? {`
+  - L2276: `static func refusal(opening url: URL?, by context: WKWebExtensionContext) -> Error? {`
+  - L2282: `func webExtensionController(_ controller: WKWebExtensionController, openNewTabUsing configuration: WKWebExtension.TabConfiguration,`
+  - L2292: `func webExtensionController(_ controller: WKWebExtensionController, openNewWindowUsing configuration: WKWebExtension.WindowConfiguration,`
+  - L2324: `func webExtensionController(_ controller: WKWebExtensionController, openOptionsPageFor extensionContext: WKWebExtensionContext,`
+  - L2331: `private func permissionWindow(in space: UUID, tab: (any WKWebExtensionTab)?) -> WindowModel? {`
+  - L2337: `func webExtensionController(_ controller: WKWebExtensionController, promptForPermissions permissions: Set<WKWebExtension.Permission>,`
+  - L2361: `func webExtensionController(_ controller: WKWebExtensionController, promptForPermissionToAccess urls: Set<URL>,`
+  - L2367: `func webExtensionController(_ controller: WKWebExtensionController, promptForPermissionMatchPatterns matchPatterns: Set<WKWebExtension.MatchPattern>,`
+  - L2392: `func webExtensionController(_ controller: WKWebExtensionController, presentActionPopup action: WKWebExtension.Action,`
+  - L2407: `func webExtensionController(_ controller: WKWebExtensionController, didUpdate action: WKWebExtension.Action,`
+  - L2415: `func webExtensionController(_ controller: WKWebExtensionController, sendMessage message: Any, toApplicationWithIdentifier applicationIdentifier: String?,`
+  - L2449: `func webExtensionController(_ controller: WKWebExtensionController, connectUsing port: WKWebExtension.MessagePort,`
 
 ### d. Private WebKit API (36 lines in 15 files)
 - `Mac/Sources/ExtensionAnswers.swift` (4):
@@ -795,7 +796,7 @@
 - `Mac/Sources/ExtensionPopup.swift` (1):
   - L151: `@objc(_webView:requestDisplayCapturePermissionForOrigin:initiatedByFrame:withSystemAudio:decisionHandler:)`
 - `Mac/Sources/Extensions.swift` (1):
-  - L1568: `let kept = ["\(version).zip", version, "_eglu"]`
+  - L1681: `let kept = ["\(version).zip", version, "_eglu"]`
 - `Mac/Sources/Page.swift` (3):
   - L54: `NSStringFromClass(type(of: item)) == "_WKWebExtensionMenuItem"`
   - L1439: `@objc func _webView(_ webView: WKWebView, getContextMenuFromProposedMenu menu: NSMenu,`
@@ -835,9 +836,9 @@
   - L59: `let pages = configuration.webViewConfiguration ?? WKWebViewConfiguration()`
   - L136: `let page = WKWebViewConfiguration()`
   - L139: `let web = WKWebView(frame: NSRect(x: 0, y: 0, width: 800, height: 600), configuration: page)`
-  - L160: `let web = WKWebView(frame: NSRect(x: 0, y: 0, width: 400, height: 600), configuration: configuration)`
+  - L164: `let web = WKWebView(frame: NSRect(x: 0, y: 0, width: 400, height: 600), configuration: configuration)`
 - `Mac/Sources/Extensions.swift` (1):
-  - L454: `let pages = configuration.webViewConfiguration ?? WKWebViewConfiguration()`
+  - L505: `let pages = configuration.webViewConfiguration ?? WKWebViewConfiguration()`
 - `Shared/DownloadActivity.swift` (2):
   - L144: `let configuration = WKWebViewConfiguration()`
   - L146: `let view = WKWebView(frame: .zero, configuration: configuration)`
@@ -862,7 +863,7 @@
 - `PadCore/Sources/PadCore/Scripts/bridge.js` (1):
   - L31: `try { window.webkit.messageHandlers.eglu.postMessage(message); } catch (_) {}`
 - `PadCore/Sources/PadCore/Scripts/extension-shim.js` (1):
-  - L2807: `try { return recorder && !embedded && window.top === window ? root.webkit.messageHandlers.egluCapture : null; } catch (e) { return null; }`
+  - L2849: `try { return recorder && !embedded && window.top === window ? root.webkit.messageHandlers.egluCapture : null; } catch (e) { return null; }`
 - `PadCore/Sources/PadCore/Scripts/extension-store.js` (1):
   - L22: `try { window.webkit.messageHandlers.egluStore.postMessage(message); } catch (e) {}`
 - `PadCore/Sources/PadCore/Scripts/measure.js` (1):
