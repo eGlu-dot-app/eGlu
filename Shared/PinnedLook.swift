@@ -727,9 +727,10 @@ struct PinnedIcon: View {
     let size: CGFloat
     let lean: CGSize?
     var plate = PinnedIcon.tilePlate
-    /// On its light, the mark alone where its ground goes; false for a Mac
-    /// tile neither on screen nor under the pointer, which has no glow, and
-    /// so shows the icon as it is (unlit).
+    /// On its light, the mark alone where its ground goes; false for a tile
+    /// neither on screen nor under the pointer (Mac and iPad), or a row of
+    /// the Duo's pinned list neither on screen nor under the finger, which
+    /// has no glow, and so shows the icon as it is (unlit).
     var lit = true
     /// Its tab is the one on screen, whether or not its window is in front;
     /// as `open` where not given.

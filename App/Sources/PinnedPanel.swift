@@ -977,13 +977,14 @@ final class PinnedPanel: UIView, UIScrollViewDelegate {
 
 /// One row of the panel: a pinned tab's icon and name, a check by the one on
 /// screen and a dot by one that is open. Large, as the Messages menu's are.
-/// The icon is drawn as the pinned button draws it, in every row, whether
-/// its tab is on screen, open or closed (PinnedIcon): its mark on a soft
-/// light of its own colours. Drawn whole here, the tab on screen's icon
-/// changed as the button became its row. Lit (PinnedPanel.shine), the row
-/// glows as its pinned tile on screen does: its icon's own colours spread
-/// soft and further, or the space's for an icon of none, and the row's
-/// block tinted as the tile's glass is.
+/// The tab on screen's icon is drawn as the pinned button draws it
+/// (PinnedIcon): its mark on a soft light of its own colours; drawn whole
+/// here, it changed as the button became its row. The others are as the
+/// Mac's tiles at rest, the icon as it is with no light, until the finger
+/// is on their row. Lit (PinnedPanel.shine), the row glows as its pinned
+/// tile on screen does: its icon's own colours spread soft and further, or
+/// the space's for an icon of none, and the row's block tinted as the
+/// tile's glass is.
 private final class PinnedRowView: UIControl {
     let row: PinnedPanel.Row
     private let colour: SpaceColor
@@ -997,7 +998,8 @@ private final class PinnedRowView: UIControl {
     private var isLit = false
     /// The icon and its light, which a row cuts off at its rounded edge as a tile does.
     private let iconRoom = UIView()
-    private let iconHost: UIHostingController<ZStack<PinnedIcon>>
+    private let iconLit: IconLit
+    private let iconHost: UIHostingController<RowIcon>
     private let title = UILabel()
     private let mark = UIImageView()
     private let dot = UIView()
@@ -1013,11 +1015,12 @@ private final class PinnedRowView: UIControl {
         // The button's plate is for its smaller icon: as much larger here, so the mark stands on as much of it.
         let scale = Self.icon / Side.tileIcon
         let plate = PinnedIcon.tilePlate
-        iconHost = UIHostingController(rootView: ZStack {
-            PinnedIcon(url: row.site, open: row.current, colour: colour, size: Self.icon, lean: nil,
-                       plate: (side: (plate.side * scale).rounded(), corner: (plate.corner * scale).rounded(),
-                               blur: (plate.blur * scale).rounded()))
-        })
+        iconLit = IconLit(on: row.current)
+        iconHost = UIHostingController(rootView: RowIcon(
+            row: row, colour: colour,
+            plate: (side: (plate.side * scale).rounded(), corner: (plate.corner * scale).rounded(),
+                    blur: (plate.blur * scale).rounded()),
+            lit: iconLit))
         super.init(frame: .zero)
         lit.isUserInteractionEnabled = false
         lit.alpha = 0
@@ -1096,6 +1099,7 @@ private final class PinnedRowView: UIControl {
         UIView.animate(withDuration: on ? 0.15 : 0.1, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseOut]) {
             self.lit.alpha = on ? 1 : 0
         }
+        withAnimation(.easeOut(duration: on ? 0.15 : 0.1)) { iconLit.on = row.current || on }
     }
 
     /// The icon's light and the tile's tint, read as the row is lit: its icon has come by then.
@@ -1118,5 +1122,29 @@ private final class PinnedRowView: UIControl {
         // rather than mixing with its grey into brown where it thins out.
         lit.layer.compositingFilter = traitCollection.userInterfaceStyle == .dark ? "plusL" : nil
         setNeedsLayout()
+    }
+}
+
+/// Whether a row's icon is lit: the tab on screen's always, another's while the finger is on its row.
+private final class IconLit: ObservableObject {
+    @Published var on: Bool
+
+    init(on: Bool) {
+        self.on = on
+    }
+}
+
+/// A row's icon, lit or as it is (PinnedIcon `lit`).
+private struct RowIcon: View {
+    let row: PinnedPanel.Row
+    let colour: SpaceColor
+    let plate: (side: CGFloat, corner: CGFloat, blur: CGFloat)
+    @ObservedObject var lit: IconLit
+
+    var body: some View {
+        ZStack {
+            PinnedIcon(url: row.site, open: row.current, colour: colour, size: PinnedRowView.icon, lean: nil,
+                       plate: plate, lit: lit.on)
+        }
     }
 }
