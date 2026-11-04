@@ -5,31 +5,29 @@
 
 | Section | Count | Files |
 |:---|---:|---:|
-| a. Imports (Mac/) | 37 | 37 |
+| a. Imports (Mac/) | 35 | 35 |
 | a. Imports (Shared/) | 11 | 10 |
-| b. Reach-ins into page view (app) | 55 | 14 |
-| b. Reach-ins (tests) | 110 | 14 |
+| b. Reach-ins into page view (app) | 43 | 12 |
+| b. Reach-ins (tests) | 127 | 15 |
 | b. Reach-ins (Page.swift self-references) | 1 | 1 |
-| c. WebKit types in declarations | 130 | 23 |
+| c. WebKit types in declarations | 127 | 21 |
 | c. Declarations (Extension* files) | 259 | 16 |
-| d. Private WebKit API | 36 | 15 |
+| d. Private WebKit API | 34 | 14 |
 | e. Hidden web views | 19 | 11 |
 | f. Script bridges (app) | 2 | 2 |
 | f. Script bridges (WebKit plugin) | 1 | 1 |
 | f. Script bridges (tests) | 3 | 1 |
-| **Total** | **549** | **64** |
+| **Total** | **530** | **61** |
 
 ## Details
 
 ### a. Imports
 
-#### Mac/ (37 lines in 37 files)
+#### Mac/ (35 lines in 35 files)
 - `Mac/Sources/About.swift` (1):
   - L2: `import Engines`
 - `Mac/Sources/ApplePasswords.swift` (1):
   - L5: `import WebKit`
-- `Mac/Sources/DeveloperBar.swift` (1):
-  - L3: `import WebKit`
 - `Mac/Sources/EgluApp.swift` (1):
   - L2: `import Engines`
 - `Mac/Sources/ExtensionAnswers.swift` (1):
@@ -84,8 +82,6 @@
   - L3: `import WebKit`
 - `Mac/Sources/SettingsView.swift` (1):
   - L2: `import Engines`
-- `Mac/Sources/WebInspector.swift` (1):
-  - L1: `import WebKit`
 - `Mac/Sources/Window.swift` (1):
   - L3: `import WebKit`
 - `Mac/Sources/WindowModel.swift` (1):
@@ -122,13 +118,12 @@
 - `Shared/Writing/WritingLists.swift` (1):
   - L3: `import Engines`
 
-### b. Reach-ins into a page's web view (55 lines in 14 files)
-- `Mac/Sources/ApplePasswords.swift` (9):
+### b. Reach-ins into a page's web view (43 lines in 12 files)
+- `Mac/Sources/ApplePasswords.swift` (8):
   - L238: `ApplePasswords.serves(page.view.url), case let .tuple(scheme, host, _) = message.origin,`
   - L239: `host.lowercased() == page.view.url?.host()?.lowercased(),`
   - L240: `scheme.lowercased() == page.view.url?.scheme?.lowercased(),`
   - L301: `guard page.host?.isShowing(page) == true, let host = ApplePasswords.host(of: page.view.url),`
-  - L302: `let screen = Self.screenRect(of: field, in: page.view)`
   - L335: `ApplePasswords.host(of: page.view.url) == host`
   - L345: `let field = ApplePasswordsOffer.Field(page: page.view.url)`
   - L357: `if UserDefaults.standard.bool(forKey: "applePasswordsTest"), page.view.url?.host() == "127.0.0.1" { return "127.0.0.1" }`
@@ -138,10 +133,6 @@
   - L448: `if let page, page.view.url != nil || focused && model.url != nil {`
   - L465: `FailureView(message: failure, url: focused ? model.url : page.view.url) {`
   - L483: `if paired, !focused, hovering, let host = page?.view.url?.host() {`
-- `Mac/Sources/DeveloperBar.swift` (3):
-  - L18: `focused ? model.url : (page.displayURL ?? page.view.url)`
-  - L29: `return DeveloperMode.isOn(url ?? page?.displayURL ?? page?.view.url,`
-  - L234: `if !WebInspector.show(part, for: page.view) {`
 - `Mac/Sources/ExtensionAnswers.swift` (3):
   - L259: `let url = ExtensionTab.address(of: page, for: context, else: page?.view.url ?? record.url)`
   - L262: `var described: [String: Any] = ["url": url?.absoluteString ?? "", "title": page?.view.title ?? record.title]`
@@ -156,11 +147,6 @@
   - L245: `page.view.url == url && !page.isHandsOff && context.hasAccess(to: url, in: self)`
 - `Mac/Sources/Extensions.swift` (1):
   - L2026: `if let tab, ExtensionPolicy.grantsOnClick(window.page?.view.url) { context.userGesturePerformed(in: tab) }`
-- `Mac/Sources/Menus.swift` (4):
-  - L360: `let view = little.page.view`
-  - L362: `case .inspector: if !WebInspector.show(.inspector, for: view) { NSSound.beep() }`
-  - L363: `case .console: if !WebInspector.show(.console, for: view) { NSSound.beep() }`
-  - L364: `case .selectElement: if !WebInspector.show(.elements, for: view) { NSSound.beep() }`
 - `Mac/Sources/Pages.swift` (8):
   - L52: `page.view.interactionState = state`
   - L55: `if page.view.url == nil, let url = tab.url {`
@@ -176,14 +162,10 @@
   - L27: `let url = page.view.url, Self.isStore(url), let body = message.body.foundation as? [String: Any] else { return }`
   - L42: `guard isStore(page.view.url) else { return }`
   - L58: `for page in Session.shared.pages.live.values where isStore(page.view.url) { tell(page) }`
-- `Mac/Sources/WindowModel.swift` (7):
-  - L325: `let view = page?.view`
-  - L336: `zoom = Double(view?.pageZoom ?? 1)`
-  - L1019: `canHandoffFiles && page?.view.url != nil && page?.isHandsOff == false`
-  - L1055: `guard let page, self.page === page, !page.isHandsOff, page.view.url != nil else { return }`
-  - L1153: `guard let view = toolsPage?.view else { return }`
-  - L1154: `if !WebInspector.show(part, for: view) {`
-  - L1375: `startHandoff(source: DocumentSource(link: url, view: page.view))`
+- `Mac/Sources/WindowModel.swift` (3):
+  - L1018: `canHandoffFiles && page?.view.url != nil && page?.isHandsOff == false`
+  - L1054: `guard let page, self.page === page, !page.isHandsOff, page.view.url != nil else { return }`
+  - L1374: `startHandoff(source: DocumentSource(link: url, view: page.view))`
 - `Shared/HandingOff.swift` (1):
   - L376: `guard let file = try? await HandoffFetch.fetch(picture.address, with: page.view, into: folder),`
 - `Shared/PageShared.swift` (5):
@@ -193,7 +175,7 @@
   - L70: `page.view.superview?.addSubview(view, positioned: .below, relativeTo: page.view)`
   - L77: `page.view.superview?.insertSubview(view, belowSubview: page.view)`
 
-#### Tests (110 lines in 14 files)
+#### Tests (127 lines in 15 files)
 - `Tests/Crashes/CrashRegressionTests.swift` (5):
   - L94: `page.view.frame = CGRect(x: 0, y: 0, width: 320, height: 480)`
   - L95: `container.view.addSubview(page.view)`
@@ -282,6 +264,24 @@
   - L244: `XCTAssertNil(page.view.url, "the page was loaded again")`
   - L245: `XCTAssertFalse(page.view.isLoading, "the page was loaded again")`
   - L330: `page.navigationCommitted(url: page.view.url)`
+- `Tests/MacPage/PageServicesTests.swift` (17):
+  - L82: `XCTAssertEqual(page.pageZoom, Double(page.view.pageZoom))`
+  - L146: `page.view.setMagnification(2, centeredAt: .zero)`
+  - L147: `XCTAssertEqual(page.magnification, Double(page.view.magnification))`
+  - L149: `page.view.setMagnification(1.5, centeredAt: .zero)`
+  - L150: `XCTAssertEqual(page.magnification, Double(page.view.magnification))`
+  - L152: `page.view.setMagnification(1, centeredAt: .zero)`
+  - L153: `XCTAssertEqual(page.magnification, Double(page.view.magnification))`
+  - L166: `XCTAssertEqual(page.view.cameraCaptureState, .none)`
+  - L167: `XCTAssertEqual(page.view.microphoneCaptureState, .none)`
+  - L195: `XCTAssertEqual(page.view.customUserAgent, mobile)`
+  - L205: `XCTAssertEqual(page.view.customUserAgent ?? "", "", "Full left an agent of eGlu's")`
+  - L257: `XCTAssertEqual(page.pageZoom, Double(page.view.pageZoom), "the page's zoom isn't its view's \(what)",`
+  - L267: `let agent = try await page.view.evaluateJavaScript("navigator.userAgent")`
+  - L273: `_ = try await page.view.evaluateJavaScript("window.__egluTestsBefore = true; 1")`
+  - L282: `if !page.view.isLoading, page.view.title == title {`
+  - L283: `let fresh = try? await page.view.evaluateJavaScript(`
+  - L285: `if fresh as? Bool == true, !page.view.isLoading { return }`
 - `Tests/MacPage/PageSmokeTests.swift` (5):
   - L11: `XCTAssertEqual(page.view.title, "One")`
   - L12: `XCTAssertFalse(page.view.canGoBack)`
@@ -321,36 +321,33 @@
 
 #### Page.swift (self-references, excluded from count: 1 lines)
 - `Mac/Sources/Page.swift` (1):
-  - L1508: `return openPeek(navigation.request.url, child: request).page.view`
+  - L1510: `return openPeek(navigation.request.url, child: request).page.view`
 
-### c. WebKit types in declarations (130 lines in 23 files)
-- `Mac/Sources/ApplePasswords.swift` (1):
-  - L550: `private static func screenRect(of rect: CGRect, in view: WKWebView) -> CGRect? {`
+### c. WebKit types in declarations (127 lines in 21 files)
 - `Mac/Sources/MacPageEngine.swift` (3):
   - L16: `case supplied(WKWebViewConfiguration, extensionPage: Bool)`
   - L25: `func configuration(space: UUID) -> WKWebViewConfiguration`
   - L58: `func configuration(space: UUID) -> WKWebViewConfiguration {`
-- `Mac/Sources/Page.swift` (20):
+- `Mac/Sources/Page.swift` (19):
   - L41: `final class PageView: WKWebView {`
   - L65: `let newTab = menu.items.first(where: { $0.identifier?.rawValue == "WKMenuItemIdentifierOpenLinkInNewWindow" }) {`
   - L143: `static let world = WKContentWorld.world(name: "eGlu")`
-  - L152: `private let controller: WKUserContentController`
-  - L318: `init(tab: UUID, space: UUID, configuration: WKWebViewConfiguration, extensionPage: Bool = false) {`
-  - L324: `let controller = extensionPage ? config.userContentController : WKUserContentController()`
-  - L546: `static func extensionPageVisible(_ web: WKWebView) async -> Bool {`
-  - L554: `static func startExtensionRecording(in web: WKWebView, token: String, video: Any) async throws -> Any? {`
-  - L853: `let configuration = WKFindConfiguration()`
-  - L927: `let configuration = WKSnapshotConfiguration()`
-  - L954: `let configuration = WKSnapshotConfiguration()`
-  - L1442: `extension Page: WKUIDelegate {`
-  - L1446: `@objc func _webView(_ webView: WKWebView, getContextMenuFromProposedMenu menu: NSMenu,`
-  - L1466: `@objc func _webView(_ webView: WKWebView, didNotHandleWheelEvent event: NSEvent) {`
-  - L1474: `func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,`
-  - L1518: `func webViewDidClose(_ webView: WKWebView) {`
-  - L1522: `func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String,`
-  - L1531: `func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String,`
-  - L1541: `func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String, defaultText: String?,`
-  - L1568: `func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters,`
+  - L153: `private let controller: WKUserContentController`
+  - L324: `init(tab: UUID, space: UUID, configuration: WKWebViewConfiguration, extensionPage: Bool = false) {`
+  - L330: `let controller = extensionPage ? config.userContentController : WKUserContentController()`
+  - L554: `static func extensionPageVisible(_ web: WKWebView) async -> Bool {`
+  - L562: `static func startExtensionRecording(in web: WKWebView, token: String, video: Any) async throws -> Any? {`
+  - L929: `let configuration = WKSnapshotConfiguration()`
+  - L956: `let configuration = WKSnapshotConfiguration()`
+  - L1444: `extension Page: WKUIDelegate {`
+  - L1448: `@objc func _webView(_ webView: WKWebView, getContextMenuFromProposedMenu menu: NSMenu,`
+  - L1468: `@objc func _webView(_ webView: WKWebView, didNotHandleWheelEvent event: NSEvent) {`
+  - L1476: `func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,`
+  - L1520: `func webViewDidClose(_ webView: WKWebView) {`
+  - L1524: `func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String,`
+  - L1533: `func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String,`
+  - L1543: `func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String, defaultText: String?,`
+  - L1570: `func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters,`
 - `Mac/Sources/PageSwipe.swift` (2):
   - L49: `private var from: WKBackForwardListItem?`
   - L59: `static func works(on view: WKWebView) -> Bool {`
@@ -372,8 +369,6 @@
   - L64: `func release(_ web: WKWebView) {`
   - L122: `func lend(_ web: WKWebView) {`
   - L127: `func holds(_ web: WKWebView) -> Bool {`
-- `Mac/Sources/WebInspector.swift` (1):
-  - L19: `static func show(_ part: Part, for view: WKWebView) -> Bool {`
 - `Mac/Sources/Writing/WritingSpelling.swift` (1):
   - L21: `static func follow(writing: Bool, views: [WKWebView]) {`
 - `PadCore/Tests/PadCoreTests/ContentBlockingTests.swift` (1):
@@ -755,7 +750,7 @@
   - L2415: `func webExtensionController(_ controller: WKWebExtensionController, sendMessage message: Any, toApplicationWithIdentifier applicationIdentifier: String?,`
   - L2449: `func webExtensionController(_ controller: WKWebExtensionController, connectUsing port: WKWebExtension.MessagePort,`
 
-### d. Private WebKit API (36 lines in 15 files)
+### d. Private WebKit API (34 lines in 14 files)
 - `Mac/Sources/ExtensionAnswers.swift` (4):
   - L32: `let folder = folder.appendingPathComponent("_eglu", isDirectory: true)`
   - L340: `folder.appendingPathComponent(id, isDirectory: true).appendingPathComponent("_eglu", isDirectory: true)`
@@ -784,13 +779,10 @@
   - L1681: `let kept = ["\(version).zip", version, "_eglu"]`
 - `Mac/Sources/Page.swift` (3):
   - L54: `NSStringFromClass(type(of: item)) == "_WKWebExtensionMenuItem"`
-  - L1446: `@objc func _webView(_ webView: WKWebView, getContextMenuFromProposedMenu menu: NSMenu,`
-  - L1466: `@objc func _webView(_ webView: WKWebView, didNotHandleWheelEvent event: NSEvent) {`
+  - L1448: `@objc func _webView(_ webView: WKWebView, getContextMenuFromProposedMenu menu: NSMenu,`
+  - L1468: `@objc func _webView(_ webView: WKWebView, didNotHandleWheelEvent event: NSEvent) {`
 - `Mac/Sources/PageSwipe.swift` (1):
   - L60: `["_pinnedState", "_setRubberBandingEnabled:"].allSatisfy { view.responds(to: Selector($0)) }`
-- `Mac/Sources/WebInspector.swift` (2):
-  - L20: `guard view.responds(to: Selector(("_inspector"))),`
-  - L21: `let inspector = view.value(forKey: "_inspector") as? NSObject`
 - `Mac/Sources/Window.swift` (1):
   - L185: `@objc(_mouseInGroup:)`
 - `PadCore/Sources/PadCore/Commands.swift` (1):

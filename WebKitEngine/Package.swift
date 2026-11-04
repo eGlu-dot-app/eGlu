@@ -15,7 +15,8 @@ let package = Package(
         .target(name: "WebKitSupport", resources: [.copy("Scripts")]),
         .target(name: "WebKitMacPlugin", dependencies: [
             "WebKitSupport",
-            .product(name: "WebEngineCore", package: "WebEngineKit")
+            .product(name: "WebEngineCore", package: "WebEngineKit"),
+            .product(name: "WebEngineAppKit", package: "WebEngineKit")
         ]),
         .testTarget(name: "WebKitMacPluginTests", dependencies: [
             "WebKitMacPlugin", "WebKitSupport", .product(name: "WebEngineCore", package: "WebEngineKit")

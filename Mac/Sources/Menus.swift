@@ -357,11 +357,10 @@ struct BrowserCommands: Commands {
             window?.perform(command)
             return
         }
-        let view = little.page.view
         switch command {
-        case .inspector: if !WebInspector.show(.inspector, for: view) { NSSound.beep() }
-        case .console: if !WebInspector.show(.console, for: view) { NSSound.beep() }
-        case .selectElement: if !WebInspector.show(.elements, for: view) { NSSound.beep() }
+        case .inspector: if !little.page.showDeveloperTool(.inspector) { NSSound.beep() }
+        case .console: if !little.page.showDeveloperTool(.console) { NSSound.beep() }
+        case .selectElement: if !little.page.showDeveloperTool(.elementSelection) { NSSound.beep() }
         case .reloadOrigin: little.page.reloadFromOrigin()
         // On the clipboard, with no toast to offer Save in a little window.
         case .elementPicture: Task { _ = await WindowModel.copyElementPicture(of: little.page) }

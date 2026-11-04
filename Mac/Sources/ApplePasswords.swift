@@ -299,7 +299,7 @@ final class ApplePasswordsCard: ObservableObject {
     /// A sign-in box has the caret: what to show under it.
     func focused(_ page: Page, field: CGRect, password: Bool) {
         guard page.host?.isShowing(page) == true, let host = ApplePasswords.host(of: page.view.url),
-              let screen = Self.screenRect(of: field, in: page.view)
+              let screen = Self.screenRect(of: field, in: page.surface.view, zoom: CGFloat(page.pageZoom * page.magnification))
         else { return }
         if showing == .pairing { return }
         let same = self.page === page && self.host == host
@@ -547,9 +547,8 @@ final class ApplePasswordsCard: ObservableObject {
     }
 
     /// A rect of the page's (CSS pixels from its top left), on screen.
-    private static func screenRect(of rect: CGRect, in view: WKWebView) -> CGRect? {
+    private static func screenRect(of rect: CGRect, in view: NSView, zoom: CGFloat) -> CGRect? {
         guard let window = view.window else { return nil }
-        let zoom = view.pageZoom * view.magnification
         let scaled = CGRect(x: rect.minX * zoom, y: rect.minY * zoom, width: rect.width * zoom, height: rect.height * zoom)
         let local = view.isFlipped ? scaled : CGRect(x: scaled.minX, y: view.bounds.height - scaled.maxY, width: scaled.width, height: scaled.height)
         return window.convertToScreen(view.convert(local, to: nil))

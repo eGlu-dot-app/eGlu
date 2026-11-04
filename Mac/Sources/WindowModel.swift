@@ -322,7 +322,6 @@ final class WindowModel: ObservableObject, PageHost {
     /// The page's state, read again for the sidebar and the card.
     func refresh() {
         let record = tab
-        let view = page?.view
         let state = page?.state
         url = page?.displayURL ?? record?.url
         title = state?.title.flatMap { $0.isEmpty ? nil : $0 } ?? record?.label ?? ""
@@ -333,7 +332,7 @@ final class WindowModel: ObservableObject, PageHost {
         secure = page?.failure == nil && url?.scheme == "https" && (state?.hasOnlySecureContent ?? true)
         failure = page?.failure
         statusCode = page?.statusCode
-        zoom = Double(view?.pageZoom ?? 1)
+        zoom = page?.pageZoom ?? 1
         window?.title = record == nil ? (space?.name ?? "eGlu") : title
         syncPeek()
     }
@@ -1149,9 +1148,9 @@ final class WindowModel: ObservableObject, PageHost {
     /// A developer tool's button or key. WebKit opens the inspector itself
     /// where it answers the private calls; where it doesn't, the way is
     /// Safari's Develop menu, said once in a toast.
-    func showInspector(_ part: WebInspector.Part) {
-        guard let view = toolsPage?.view else { return }
-        if !WebInspector.show(part, for: view) {
+    func showInspector(_ part: WebDeveloperTool) {
+        guard let page = toolsPage else { return }
+        if !page.showDeveloperTool(part) {
             show(ActionToast(symbol: "hammer", text: WebInspector.unavailable))
         }
     }
@@ -1293,7 +1292,7 @@ final class WindowModel: ObservableObject, PageHost {
             if let window { Session.shared.chooseBookmarksFile(into: spaceID, in: window) }
         case .inspector: showInspector(.inspector)
         case .console: showInspector(.console)
-        case .selectElement: showInspector(.elements)
+        case .selectElement: showInspector(.elementSelection)
         case .elementPicture: elementPicture()
         case .reloadOrigin: toolsPage?.reloadFromOrigin()
         case .measure: page?.toggleMeasuring()

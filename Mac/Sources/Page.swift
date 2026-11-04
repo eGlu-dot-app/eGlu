@@ -149,6 +149,7 @@ final class Page: NSObject {
     private(set) lazy var surface: any WebEngineSurface = PageWebKitSurface(view: view)
     private var navigationAdapter: WebKitNavigationAdapter!
     private let channels: any WebMessageChannels
+    private let services: any WebFind & WebZoom & WebMediaCapture & WebUserAgent & WebPrinting & WebDeveloperTools
     private let controller: WKUserContentController
     weak var host: PageHost?
 
@@ -158,6 +159,11 @@ final class Page: NSObject {
                   estimatedProgress: view.estimatedProgress, canGoBack: view.canGoBack,
                   canGoForward: view.canGoForward, hasOnlySecureContent: view.hasOnlySecureContent)
     }
+
+    var pageZoom: Double { services.pageZoom }
+    var magnification: Double { services.magnification }
+
+    func showDeveloperTool(_ tool: WebDeveloperTool) -> Bool { services.show(tool) }
 
     /// Whether Back can use the page's history or the page it replaced.
     var canGoBack: Bool {
@@ -325,7 +331,9 @@ final class Page: NSObject {
         config.userContentController = controller
         self.controller = controller
         channels = WebKitMessageChannels(controller: controller, appWorld: Page.world)
-        view = PageView(frame: .zero, configuration: config)
+        let view = PageView(frame: .zero, configuration: config)
+        self.view = view
+        services = WebKitPageServices(view: view)
         super.init()
         view.page = self
         navigationAdapter = WebKitNavigationAdapter(view: view, policy: self, events: self)
@@ -669,7 +677,7 @@ final class Page: NSObject {
     /// Only a live page can keep these going: a call, a recording, a download,
     /// a picture-in-picture window, whose page is this one's.
     var mustStay: Bool {
-        hasPendingDialog || isHandsOff || view.cameraCaptureState != .none || view.microphoneCaptureState != .none
+        hasPendingDialog || isHandsOff || services.isCapturing
             || (isExtensionPage && ExtensionCapture.screen(view))
             || Downloads.shared.isDownloading(for: self) || picture != nil || videoFloated || floatingVideo || enteringPicture || peek != nil
     }
@@ -848,13 +856,9 @@ final class Page: NSObject {
 
     /// The next place the words are on the page, after the selection or
     /// before it; `found` hears whether there is one.
-    func find(_ text: String, backwards: Bool = false, found: @escaping (Bool) -> Void) {
+    func find(_ text: String, backwards: Bool = false, found: @escaping @MainActor @Sendable (Bool) -> Void) {
         guard !text.isEmpty else { return found(false) }
-        let configuration = WKFindConfiguration()
-        configuration.backwards = backwards
-        configuration.caseSensitive = false
-        configuration.wraps = true
-        view.find(text, configuration: configuration) { result in found(result.matchFound) }
+        services.find(text, backwards: backwards, caseSensitive: false, wraps: true, found: found)
     }
 
     /// Safari's steps of zoom, from half to three times.
@@ -872,7 +876,7 @@ final class Page: NSObject {
         }
         // Sizes are whole percents (setZoom), so a margin well under one
         // takes a typed 99% up to 100% and 299% up to 300%.
-        let now = view.pageZoom
+        let now = CGFloat(services.pageZoom)
         let next = step > 0 ? Self.zooms.first { $0 > now + 0.001 } : Self.zooms.last { $0 < now - 0.001 }
         guard let next else { return false }
         setZoom(Double(next))
@@ -882,15 +886,13 @@ final class Page: NSObject {
     /// Any zoom within Safari's, as a size typed in asks, to the whole percent the field shows.
     func setZoom(_ zoom: Double) {
         let zoom = min(max((zoom * 100).rounded() / 100, Self.zoomRange.lowerBound), Self.zoomRange.upperBound)
-        view.pageZoom = CGFloat(zoom)
+        services.pageZoom = zoom
         host?.pageDidChange(self)
     }
 
     func print() {
         guard let window = host?.hostWindow else { return }
-        let operation = view.printOperation(with: NSPrintInfo.shared)
-        operation.view?.frame = view.bounds
-        operation.runModal(for: window, delegate: nil, didRun: nil, contextInfo: nil)
+        services.printOperation(with: NSPrintInfo.shared).runModal(for: window, delegate: nil, didRun: nil, contextInfo: nil)
     }
 
     // MARK: Calls into the page
@@ -982,9 +984,9 @@ final class Page: NSObject {
         let model = MeasureModel(guides: MeasureGuides(preferences: Session.shared.preferences), run: measureRuns)
         model.pageURL = view.url?.absoluteString ?? ""
         model.window = { [weak self] in
-            guard let view = self?.view else { return "" }
+            guard let view = self?.view, let services = self?.services else { return "" }
             return MeasureNotes.window(width: Double(view.frame.width), height: Double(view.frame.height),
-                                       zoom: Double(view.pageZoom))
+                                       zoom: services.pageZoom)
         }
         // The tab's notes, from an earlier run on this page too.
         model.notes = measureNotes
@@ -1119,7 +1121,7 @@ final class Page: NSObject {
     /// Full puts both back: WebKit's own agent, the card's whole room.
     func size(_ size: CGSize?, pad: Bool) {
         deviceSize = size
-        view.customUserAgent = size == nil ? nil
+        services.customUserAgent = size == nil ? nil
             : Identity.mobileUserAgent(for: ProcessInfo.processInfo.operatingSystemVersion, pad: pad)
         changed()
         view.reload()
@@ -1383,7 +1385,7 @@ final class Page: NSObject {
               !HandsOff.covers(view.url), !HandsOff.covers(committed) else { return }
         videoWanted = true
         guard picture == nil, !videoFloated, !floatingVideo, !enteringPicture else { return }
-        let inCall = view.cameraCaptureState != .none || view.microphoneCaptureState != .none
+        let inCall = services.isCapturing
         if Self.offersPicture(committed ?? view.url) {
             return enterPicture { [weak self] in self?.floatVideo(anyPlaying: inCall) }
         }

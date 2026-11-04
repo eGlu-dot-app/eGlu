@@ -249,6 +249,7 @@
 		A7EFC55AE19326E3943FF21A /* PictureTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = E97A901FDB05011ABE3AD64C /* PictureTest.swift */; };
 		A8C8AEBFED3F631CEEE3F12E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2E395EB3FD425859B64EB5CD /* Assets.xcassets */; };
 		A922AFB2FCAFA29EBFC6CF7B /* SuggestionSources.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD6F465D4F18EB80D6332AD3 /* SuggestionSources.swift */; };
+		A9770DF60841CE416A79F8FC /* PageServicesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E2AAC6B32943657BCA88179 /* PageServicesTests.swift */; };
 		A9B5DD50915B43F4AF79693C /* Welcome.swift in Sources */ = {isa = PBXBuildFile; fileRef = D090D72F0C6C3A560B1A11B3 /* Welcome.swift */; };
 		AA8B2179A97F0C370ECEFBF5 /* Sync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F8E7D1B1FAF141A29D2AA29 /* Sync.swift */; };
 		AB0DAD3462B121755EA70668 /* HandingOff.swift in Sources */ = {isa = PBXBuildFile; fileRef = 485265A2B3E02CF1C3205560 /* HandingOff.swift */; };
@@ -514,6 +515,7 @@
 		4B592DC91C456C1B951C4C1E /* StartTiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartTiles.swift; sourceTree = "<group>"; };
 		4B6C088BE0C2B3DA07EC8FB2 /* DockIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockIcon.swift; sourceTree = "<group>"; };
 		4CDDC66B26273317242CE51E /* TabOverview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabOverview.swift; sourceTree = "<group>"; };
+		4E2AAC6B32943657BCA88179 /* PageServicesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageServicesTests.swift; sourceTree = "<group>"; };
 		506E09CE31A0F0FFCB4A0E57 /* PopupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PopupView.swift; sourceTree = "<group>"; };
 		515EF4127C0536A696EBA73E /* Spaces.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Spaces.swift; sourceTree = "<group>"; };
 		52D6871440408A9DB0BC3492 /* PopupPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PopupPanel.swift; sourceTree = "<group>"; };
@@ -1044,6 +1046,7 @@
 				9F9CEFFA794663339F1F6E5D /* PageLifecycleTests.swift */,
 				363CCE6E471185496431C4D5 /* PageNavigationPolicyTests.swift */,
 				9ECD234B9C8069BE12CA9A8C /* PageResponsePolicyTests.swift */,
+				4E2AAC6B32943657BCA88179 /* PageServicesTests.swift */,
 				E30CB251854948770DEA0AB5 /* PageSmokeTests.swift */,
 				CDA75ABB2561F1385185244F /* PageStateTests.swift */,
 				AABF017230ADCFB4CF4F1928 /* PageSurfaceTests.swift */,
@@ -1458,6 +1461,7 @@
 				C44FF14A1BFC5361791F29B0 /* PageLifecycleTests.swift in Sources */,
 				06DDF515B807A3D09E47430E /* PageNavigationPolicyTests.swift in Sources */,
 				F54CDCA09B5788AC0B178059 /* PageResponsePolicyTests.swift in Sources */,
+				A9770DF60841CE416A79F8FC /* PageServicesTests.swift in Sources */,
 				08F3C6AA45A087FF1759282B /* PageSmokeTests.swift in Sources */,
 				DFB4C56BE491CAEFD634AF2E /* PageStateTests.swift in Sources */,
 				C749FF9965680903796AA5E3 /* PageSurfaceTests.swift in Sources */,
