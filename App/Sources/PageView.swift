@@ -26,6 +26,28 @@ final class PageView: WKWebView {
         didSet { if stripSide != oldValue { safeAreaInsetsDidChange() } }
     }
 
+    /// The page is laid out above a docked keyboard by the window
+    /// (Browser.pageRoom), its view cut short to the keyboard's top. WebKit
+    /// would make room for the keyboard a second time: as the keyboard
+    /// starts to come it measures how much of the view it will cover, while
+    /// the view is still whole, and keeps that much clear inside the view
+    /// once it has been cut short, never measuring again. A page's foot sat
+    /// a keyboard's height above the keyboard, the band between blank. So
+    /// the view doesn't hear the keyboard move: only its frame
+    /// changes. It still hears that the keyboard is up, and shows the field
+    /// being typed in, in the view as it then is.
+    override init(frame: CGRect, configuration: WKWebViewConfiguration) {
+        super.init(frame: frame, configuration: configuration)
+        for name in [UIResponder.keyboardWillShowNotification, UIResponder.keyboardWillHideNotification,
+                     UIResponder.keyboardWillChangeFrameNotification, UIResponder.keyboardDidChangeFrameNotification] {
+            NotificationCenter.default.removeObserver(self, name: name, object: nil)
+        }
+    }
+
+    required init?(coder: NSCoder) {
+        nil
+    }
+
     override var safeAreaInsets: UIEdgeInsets {
         var insets = super.safeAreaInsets
         switch stripSide {

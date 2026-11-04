@@ -615,6 +615,43 @@ final class Page: NSObject {
         if writing, !wasWriting { writingStart() }
     }
 
+    /// The field being typed in, brought into the view once the view has
+    /// been cut short above the keyboard (Browser.pageRoom): WebKit doesn't
+    /// hear the keyboard (PageView), so it doesn't move the page for it,
+    /// and a field below where the keyboard's top came to stayed under it.
+    /// Looked for now, and again when the page has its new height (it gets
+    /// it a moment after its view does); moved only if it doesn't show, and
+    /// by its caret where it is taller than half the view (an editor).
+    func revealFocus() {
+        guard editing, !isHandsOff, !HandsOff.covers(view.url) else { return }
+        view.callAsyncJavaScript(Self.revealScript, arguments: [:], in: nil, in: Page.world) { _ in }
+    }
+
+    private static let revealScript = """
+        const reveal = () => {
+            const field = document.activeElement;
+            if (!field || field === document.body || field === document.documentElement) return;
+            const height = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+            const margin = 16;
+            let rect = field.getBoundingClientRect();
+            if (rect.height > height / 2) {
+                const selection = getSelection();
+                const caret = selection && selection.rangeCount ? selection.getRangeAt(0).getBoundingClientRect() : null;
+                if (!caret || !caret.height) return;
+                if (caret.bottom > height - margin) window.scrollBy(0, caret.bottom - height + margin * 3);
+                else if (caret.top < margin) window.scrollBy(0, caret.top - margin * 3);
+                return;
+            }
+            if (rect.bottom > height - margin || rect.top < margin) field.scrollIntoView({ block: 'center', inline: 'nearest' });
+        };
+        reveal();
+        const viewport = window.visualViewport;
+        if (!viewport) return;
+        const again = () => { viewport.removeEventListener('resize', again); reveal(); };
+        viewport.addEventListener('resize', again);
+        setTimeout(() => viewport.removeEventListener('resize', again), 800);
+        """
+
     /// Writing's script put into the document that is up, for checking
     /// turned on while it was open: user scripts reach only the next one,
     /// and a reload would lose what is typed. One already there, stopped,

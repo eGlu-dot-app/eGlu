@@ -4,6 +4,8 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+- On iPhone and iPad, the keyboard is made room for once. The page was laid out above it and WebKit kept the keyboard's height clear inside the page as well, so a page's foot and its field sat a keyboard's height above the keyboard with an empty band between. A field typed in that ends up under the keyboard is brought into view above it.
+
 ## 1.1.1
 
 - On the iPhone Duo closed, the page runs on under the strip beside the screen to its edge, its pictures, colours and backgrounds seen through the strip's glass, where a stretched picture of its edge used to be. Text wraps at the strip's edge. Buttons, links and fields slide out from under the strip's status bar and buttons as the page scrolls towards them, and back where the strip is empty; icons side by side move together, keeping their gaps. What a page floats or keeps in place over itself (a chat button, a floating button, a sticky bar, a menu, a sheet) stays inside the screen beside the strip, and so do boxes that hold buttons and fields (a card, a tab list, a search box). Rows of one list keep their buttons in one column. A page's header keeps all its buttons clear of the strip, its last one too (GitHub's avatar), even when you touch the page as it comes in. Where the system doesn't say where the strip's buttons stand, everything that can be pressed keeps clear of the whole strip. Nothing on the page is laid out again while it scrolls or a finger is on it.

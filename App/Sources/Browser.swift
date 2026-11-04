@@ -440,6 +440,11 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
                 .sink { [weak self] _ in self?.view.setNeedsLayout() }
                 .store(in: &subscriptions)
         }
+        // WebKit hears none of it (PageView): the field being typed in is
+        // brought above the keyboard here, once the page is cut short to it.
+        NotificationCenter.default.publisher(for: UIResponder.keyboardDidChangeFrameNotification)
+            .sink { [weak self] _ in self?.revealFocusAboveKeyboard() }
+            .store(in: &subscriptions)
         for notification in [UIAccessibility.voiceOverStatusDidChangeNotification, UIAccessibility.switchControlStatusDidChangeNotification] {
             NotificationCenter.default.publisher(for: notification)
                 .receive(on: DispatchQueue.main)
@@ -1668,6 +1673,15 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
 
     /// Whether the page on screen was last laid out clear of the phone bar (Page.standsClear).
     private var laidClear = false
+
+    /// The keyboard has come to rest: if it cut the page short, the field
+    /// typed in is brought into what is left (Page.revealFocus).
+    private func revealFocusAboveKeyboard() {
+        view.layoutIfNeeded()
+        guard pageRoom != stage.bounds else { return }
+        page?.revealFocus()
+        partner?.revealFocus()
+    }
 
     private var pageRoom: CGRect {
         FootRoom.aboveKeyboard(stage.bounds,
