@@ -122,7 +122,7 @@ final class Extensions: NSObject, ObservableObject {
     /// on the main thread, once a space, they held the browser for
     /// seconds as it loaded.
     private var scanned: [String: (key: String, notes: [String])] = [:]
-    private var scanning: [String: String] = [:]
+    private var scanning: [String: (key: String, attempt: UUID)] = [:]
     /// The errors already put in the records, by "space/id": a short
     /// fingerprint of each, never its words, until the context unloads.
     private var recorded: [String: Set<String>] = [:]
@@ -834,15 +834,16 @@ final class Extensions: NSObject, ObservableObject {
             }
         }
         if let done = scanned[item.id], done.key == key { return found(done.notes) }
-        guard scanning[item.id] != key else { return }
-        scanning[item.id] = key
+        guard scanning[item.id]?.key != key else { return }
+        let attempt = UUID()
+        scanning[item.id] = (key, attempt)
         let file = Self.package(item.id, item.version)
         Task {
             let notes = await Task.detached(priority: .utility) {
                 (try? Data(contentsOf: file)).map { Self.notes(in: $0, manifest, missing: missing) } ?? []
             }.value
             // Updated, or read against a newer table, meanwhile: that reading wins.
-            guard scanning[item.id] == key else { return }
+            guard scanning[item.id]?.attempt == attempt else { return }
             scanning[item.id] = nil
             scanned[item.id] = (key, notes)
             found(notes)
@@ -1595,9 +1596,11 @@ final class Extensions: NSObject, ObservableObject {
     @discardableResult
     func keep(_ archive: Data, id: String, name: String, version: String, source: Installed.Source,
                       access: Installed.SiteAccess, spaces: [UUID], granted: [String]?, folder: String? = nil) throws -> Task<Bool, Never> {
-        // A new package, even at the same version (Reload): its pages tried
-        // afresh, and its worker too at the next launch.
+        // A new package, even at the same version (Reload): its code read
+        // and pages tried afresh, and its worker too at the next launch.
         forgetCheck(id)
+        scanned[id] = nil
+        scanning[id] = nil
         // And its icon read again, which a new version may have changed.
         icons[id] = nil
         iconless.remove(id)

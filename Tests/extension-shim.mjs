@@ -343,6 +343,33 @@ function world({ protocol = 'chrome-extension:', apis = true, times = 1, reply, 
   check('a page\'s answer comes back to the worker', answered === 'from the page' && answering.some((m) => m && m.type === 'ASK'), String(answered));
 }
 
+// A frame in a website has no pages' channel. Its native answer still
+// counts while pages on that channel say they have nothing to answer.
+{
+  const id = 'abcdefghijklmnopabcdefghijklmnop';
+  const app = 'chrome-extension://' + id + '/embedded.html';
+  const frame = world({ channel: true, prototype: true, page: '/embedded.html',
+    extra: { window: { top: { location: { origin: 'https://example.com' } } } },
+    reply: (m) => m && m.__egluCall && m.__egluCall.method === 'getCurrent' ? { value: { id: 8 } } : undefined });
+  frame.run('chrome.runtime.onMessage').addListener((m, sender, respond) => {
+    setTimeout(() => respond(m.empty ? undefined : 'from the frame'), 600);
+    return true;
+  });
+  const worker = world({ background: true, channel: true, prototype: true, page: '/bg.js',
+    namespaces: {
+      tabs: { sendMessage: async () => undefined, get: async (tabId) => ({ id: tabId, url: 'https://example.com' }) },
+      webNavigation: { getAllFrames: async () => [{ frameId: 0, url: 'https://example.com' }, { frameId: 1, url: app }] },
+    },
+    reply: (m) => m && m.__egluToFrame
+      ? frame.chrome.runtime.onMessage.deliver(m, { id, url: 'chrome-extension://' + id + '/bg.js' }) : undefined });
+  const answer = await worker.run('chrome.tabs').sendMessage(8, { ask: true });
+  check('a framed page\'s native answer is waited for beyond the channel\'s first moment', answer === 'from the frame', String(answer));
+  const started = Date.now();
+  const empty = await worker.run('chrome.tabs').sendMessage(8, { empty: true });
+  check('a framed page\'s empty native answer is waited for too', empty === null && Date.now() - started >= 600,
+    String(empty) + ' in ' + (Date.now() - started) + ' ms');
+}
+
 // What WebKit lacks, filled in.
 {
   const w = world();

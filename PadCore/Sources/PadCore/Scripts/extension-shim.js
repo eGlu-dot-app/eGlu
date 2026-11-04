@@ -1155,13 +1155,15 @@
             // answer, if only with nothing (one in another tab, at once).
             // The first real answer wins; nothing once every page that
             // spoke has answered and the moment to speak has passed.
-            let claims = 0, open = true, done = false;
+            // Embedded pages have no channel, so wait for the native reply too.
+            let claims = 1, open = true, done = false;
             const finish = (value) => { if (!done) { done = true; relays.delete(relayed); resolve(value); } };
+            const answered = (value) => { if (value !== undefined) finish(value); else if (--claims <= 0 && !open) finish(undefined); };
             relays.set(relayed, {
               answering: () => { claims++; },
-              answer: (value) => { if (value !== undefined) finish(value); else if (--claims <= 0 && !open) finish(undefined); },
+              answer: answered,
             });
-            natively.then((value) => { if (value !== undefined) finish(value); });
+            natively.then(answered);
             setTimeout(() => { open = false; if (claims <= 0) finish(undefined); }, 300);
             setTimeout(() => finish(undefined), 30000);
           });
