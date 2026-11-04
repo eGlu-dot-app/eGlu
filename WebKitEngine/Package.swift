@@ -7,9 +7,16 @@ let package = Package(
     products: [
         .library(name: "WebKitMacPlugin", targets: ["WebKitMacPlugin"])
     ],
+    dependencies: [
+        .package(path: "../WebEngineKit")
+    ],
     targets: [
-        .target(name: "WebKitMacPlugin"),
-        .testTarget(name: "WebKitMacPluginTests", dependencies: ["WebKitMacPlugin"])
+        .target(name: "WebKitMacPlugin", dependencies: [
+            .product(name: "WebEngineCore", package: "WebEngineKit")
+        ]),
+        .testTarget(name: "WebKitMacPluginTests", dependencies: [
+            "WebKitMacPlugin", .product(name: "WebEngineCore", package: "WebEngineKit")
+        ])
     ],
     swiftLanguageModes: [.v6]
 )

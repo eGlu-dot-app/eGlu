@@ -12,6 +12,7 @@
 		019BFF0D346FD80F3FA57C85 /* WritingWords.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24CDBEE80BDA2AE578AE9116 /* WritingWords.swift */; };
 		02C718B0FEB409CDA590385B /* PopupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 506E09CE31A0F0FFCB4A0E57 /* PopupView.swift */; };
 		052D1AC87CFB437D0CF65AB3 /* DockTile.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE90A53C4F0EA2D2E3804F74 /* DockTile.swift */; };
+		06DDF515B807A3D09E47430E /* PageNavigationPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 363CCE6E471185496431C4D5 /* PageNavigationPolicyTests.swift */; };
 		08622254D17B7A8A3CCC72E6 /* TypingField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88B3B42DB60A79A268968DBC /* TypingField.swift */; };
 		08F3C6AA45A087FF1759282B /* PageSmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E30CB251854948770DEA0AB5 /* PageSmokeTests.swift */; };
 		0A50200A4E6B22B0E6F47D92 /* WritingHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70C038D7C9366DD4C79FBAC9 /* WritingHandler.swift */; };
@@ -486,6 +487,7 @@
 		31726A2872E8F3D96FA9616C /* eGlu Mac Page Tests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "eGlu Mac Page Tests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		347EDC395F093B60F66EE23C /* EgluApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EgluApp.swift; sourceTree = "<group>"; };
 		350EB51F36EDA73FD343F885 /* ExtensionAuth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionAuth.swift; sourceTree = "<group>"; };
+		363CCE6E471185496431C4D5 /* PageNavigationPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageNavigationPolicyTests.swift; sourceTree = "<group>"; };
 		38319A4244550866F7A02039 /* AddressText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddressText.swift; sourceTree = "<group>"; };
 		3952C9D2525F5A5A03FE520D /* PageMind.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageMind.swift; sourceTree = "<group>"; };
 		399707CDDDB91841856589D7 /* eGlu.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = eGlu.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -1019,6 +1021,7 @@
 				E9478617D34AE80447D8EEA7 /* PageBackTests.swift */,
 				1D36C6CE512B1C7506C63C09 /* PageCommandTests.swift */,
 				0EC5B76D8B45ABDBB17A59B3 /* PageEngineTests.swift */,
+				363CCE6E471185496431C4D5 /* PageNavigationPolicyTests.swift */,
 				E30CB251854948770DEA0AB5 /* PageSmokeTests.swift */,
 				CDA75ABB2561F1385185244F /* PageStateTests.swift */,
 				AABF017230ADCFB4CF4F1928 /* PageSurfaceTests.swift */,
@@ -1426,6 +1429,7 @@
 				880065BDAAACC4524DA8A57F /* PageBackTests.swift in Sources */,
 				F89C24434B16340F6AD92122 /* PageCommandTests.swift in Sources */,
 				B17B4E6C0800D80806AE320F /* PageEngineTests.swift in Sources */,
+				06DDF515B807A3D09E47430E /* PageNavigationPolicyTests.swift in Sources */,
 				08F3C6AA45A087FF1759282B /* PageSmokeTests.swift in Sources */,
 				DFB4C56BE491CAEFD634AF2E /* PageStateTests.swift in Sources */,
 				C749FF9965680903796AA5E3 /* PageSurfaceTests.swift in Sources */,
