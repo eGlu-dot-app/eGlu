@@ -230,6 +230,8 @@ final class WindowModel: ObservableObject, PageHost {
     func disappear() {
         // Its watch on clicks goes with it: AppKit keeps a monitor for the app's life.
         bookmarksOpen = false
+        barPanelButton = nil
+        putCardAway()
         attach(nil)
         setPartner(nil)
         // At once: the window is going, and won't be here to look later.
@@ -812,8 +814,8 @@ final class WindowModel: ObservableObject, PageHost {
             return
         }
         guard let tab = session.change({ $0.openFromBar(bookmark, in: spaceID) }) else { return }
-        withAnimation(.bar) { show(tab: tab, inSpace: spaceID) }
-        focusPage()
+        // As a tab chosen in the sidebar: the window that shows it already comes forward.
+        withAnimation(.bar) { select(tab) }
     }
 
     /// A tab into the bar, at the end of `folder` (nil: the bar itself) or before `before` there.

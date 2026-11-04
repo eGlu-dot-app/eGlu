@@ -26,6 +26,8 @@ struct TopTabBar: View {
         let pinned = space?.tabs.filter { $0.isPinned && session.preferences.shows($0) } ?? []
         let others = space?.otherTabs ?? []
         let bar = space?.bar.flatMap { ($0.children ?? []).isEmpty ? nil : $0 }
+        // A bar tab on screen is the address too, first in the row, as any tab on screen is.
+        let barOnScreen = space?.barTabs.values.first { $0.id == model.tabID }
         HStack(spacing: Metrics.gap) {
             WindowButtons()
                 .frame(width: WindowButtons.width, height: WindowButtons.side)
@@ -62,18 +64,23 @@ struct TopTabBar: View {
                     }
                 }
                 .animation(.bar, value: split.shown.map(\.id))
-                if !others.isEmpty {
+                if !others.isEmpty || barOnScreen != nil {
                     Rectangle()
                         .fill(Palette.faint)
                         .frame(width: 1, height: 16)
                 }
             }
             GeometryReader { box in
-                let widths = TabWidths.widths(count: others.count, room: box.size.width, gap: 4,
-                                              address: others.contains { $0.id == model.tabID })
+                let widths = TabWidths.widths(count: others.count + (barOnScreen == nil ? 0 : 1), room: box.size.width, gap: 4,
+                                              address: barOnScreen != nil || others.contains { $0.id == model.tabID })
                 ScrollViewReader { reader in
                     ScrollView(.horizontal) {
                         HStack(spacing: 4) {
+                            if let barOnScreen {
+                                TopTab(model: model, tab: barOnScreen, width: widths.current)
+                                    .id(barOnScreen.id)
+                                    .transition(.opacity)
+                            }
                             ForEach(space.map(TabList.items(of:)) ?? [], id: \.first?.id) { item in
                                 // A split's two side by side on a ground of their own, as one place in the row.
                                 HStack(spacing: 0) {
@@ -92,6 +99,7 @@ struct TopTabBar: View {
                         // Room for the glass's rim inside the scroll view, all round.
                         .padding(Self.rim)
                         .animation(.bar, value: others.map(\.id))
+                        .animation(.bar, value: barOnScreen?.id)
                     }
                     .scrollIndicators(.never)
                     // Feathered before it is let out, as the sidebar's list is: on the

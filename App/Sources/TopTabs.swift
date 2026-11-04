@@ -68,9 +68,10 @@ struct TopTabs: View {
                     .frame(width: 1, height: 16)
             }
             GeometryReader { box in
-                // A pinned tab on screen has the address too, first in the row: where the page
-                // is, and its …, whichever kind of tab it is.
+                // A pinned or bookmarks bar tab on screen has the address too, first in the
+                // row: where the page is, and its …, whichever kind of tab it is.
                 let pinnedOnScreen = row.pinned.first { $0.id == window.tabID }
+                    ?? space?.barTabs.values.first { $0.id == window.tabID }
                 let address = pinnedOnScreen != nil || row.others.contains { $0.id == window.tabID }
                 let widths = TabWidths.widths(count: row.others.count + (pinnedOnScreen == nil ? 0 : 1), room: box.size.width,
                                               gap: 4, address: address)

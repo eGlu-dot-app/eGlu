@@ -651,6 +651,8 @@ public enum SyncPlan {
             workspace.spaces[s].symbol = record.symbol
             workspace.spaces[s].color = SpaceColor(rawValue: record.color) ?? workspace.spaces[s].color
             workspace.spaces[s].bookmarks = tree(of: cloud, in: mirror)
+            // A bookmark gone from the bar elsewhere leaves its tab here among the others.
+            workspace.spaces[s].tidyBar()
             applied.unpinnedTabs += applyPinned(mirror, to: &workspace.spaces[s], cloud: cloud, now: now)
         }
         let known = Set(workspace.spaces.compactMap { $0.cloudID?.uuidString })
@@ -710,6 +712,7 @@ public enum SyncPlan {
     public static func keepAsNew(_ space: inout Space) {
         space.cloudID = nil
         space.bookmarks = []
+        space.tidyBar()
         for t in space.tabs.indices where space.tabs[t].isPinned {
             space.tabs[t].pinned = nil
             space.tabs[t].cloudID = nil
@@ -757,6 +760,7 @@ public enum SyncPlan {
             var bookmarks = tree(of: match, in: remote)
             _ = Bookmarks.merge(workspace.spaces[s].bookmarks, into: &bookmarks)
             workspace.spaces[s].bookmarks = bookmarks
+            workspace.spaces[s].tidyBar()
             // A pinned tab here at an address pinned there is that one.
             let theirs = remote.pinned.values.filter { $0.space == match }
             for t in workspace.spaces[s].tabs.indices where workspace.spaces[s].tabs[t].isPinned {

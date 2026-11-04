@@ -174,6 +174,21 @@ final class BookmarksBarTests: XCTestCase {
         XCTAssertEqual(Bookmarks.rows(of: items, opening: [folder], keeping: []).map(\.item.id), [slackMark, folder, notionMark])
     }
 
+    func testABarTabKeepsItsBookmarkThroughICloudUnlessItLeavesTheBarThere() throws {
+        var (w, space, slackMark, _, _) = try spaceWithBar()
+        w.spaces[0].cloudID = UUID()
+        let tab = try XCTUnwrap(w.openFromBar(slackMark, in: space))
+        var mirror = SyncPlan.records(of: w, keeping: SyncMirror())
+        // The same tree back: the tab is still the bar's.
+        SyncPlan.apply(mirror, to: &w)
+        XCTAssertEqual(w.tab(tab)?.bookmark, slackMark)
+        // Removed on another device: the tab here is one of the others at once, not only after a relaunch.
+        mirror.bookmarks[slackMark.uuidString] = nil
+        SyncPlan.apply(mirror, to: &w)
+        XCTAssertNil(w.tab(tab)?.bookmark)
+        XCTAssertTrue(w.spaces[0].otherTabs.contains { $0.id == tab })
+    }
+
     func testRepairLetsGoOfABookmarkNoLongerInTheBar() throws {
         var (w, space, slackMark, _, _) = try spaceWithBar()
         let tab = try XCTUnwrap(w.openFromBar(slackMark, in: space))

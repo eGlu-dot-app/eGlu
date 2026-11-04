@@ -209,6 +209,16 @@ public struct Space: Codable, Identifiable, Equatable, Sendable {
         return Bookmarks.find(bookmark, in: bookmarks)?.url
     }
 
+    /// Tabs whose bookmark has left the bar are its others again; of two
+    /// open for one bookmark, the first keeps it. Wherever its bookmarks
+    /// change: here (Workspace), from iCloud (SyncPlan), on loading (repair).
+    public mutating func tidyBar() {
+        let kept = Set(barTabs.values.map(\.id))
+        for t in tabs.indices where tabs[t].bookmark != nil && !kept.contains(tabs[t].id) {
+            tabs[t].bookmark = nil
+        }
+    }
+
     /// A pinned or bar tab gone on from its home to another page: another
     /// site or another path. What a site adds as it loads, a query or a
     /// fragment (YouTube's ?themeRefresh=1), or https and www., is the same
@@ -904,13 +914,8 @@ public struct Workspace: Codable, Equatable, Sendable {
         return false
     }
 
-    /// Tabs whose bookmark has left the bar are the space's others again;
-    /// of two open for one bookmark, the first keeps it.
     mutating func tidyBar(_ s: Int) {
-        let kept = Set(spaces[s].barTabs.values.map(\.id))
-        for t in spaces[s].tabs.indices where spaces[s].tabs[t].bookmark != nil && !kept.contains(spaces[s].tabs[t].id) {
-            spaces[s].tabs[t].bookmark = nil
-        }
+        spaces[s].tidyBar()
     }
 
     /// Revalidates destination identity after file reading. A missing space
