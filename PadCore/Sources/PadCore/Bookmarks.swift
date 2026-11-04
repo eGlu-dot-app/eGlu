@@ -29,8 +29,10 @@ public struct Bookmark: Codable, Identifiable, Equatable, Sendable {
         url == nil
     }
 
-    /// The name a tile shows: the title, else the address.
+    /// The name a tile shows: the title, else the address. The bookmarks
+    /// bar in the reader's own words: its title stays Chromium's.
     public var label: String {
+        if Bookmarks.isBar(self) { return BrowserText.localized("Bookmarks bar") }
         let named = title.trimmingCharacters(in: .whitespacesAndNewlines)
         if !named.isEmpty { return named }
         return url.map(Address.pretty) ?? BrowserText.localized("Folder")
@@ -67,6 +69,53 @@ public enum Bookmarks {
             let own = [(item: item, depth: depth)]
             guard item.isFolder, open.contains(item.id) else { return own }
             return own + rows(of: item.children ?? [], opening: open, depth: depth + 1)
+        }
+    }
+
+    // MARK: The bookmarks bar
+
+    /// The folder whose bookmarks stand under a space's pinned tiles, each
+    /// opening in a tab of its own (Workspace.openFromBar), named as
+    /// Chromium names its own, so a bar imported from Chrome is this one.
+    /// It is known by its name, at the top: iCloud keeps a folder's name and
+    /// place already, so other devices know it with nothing more kept.
+    public static let barName = "Bookmarks bar"
+
+    public static func isBar(_ item: Bookmark) -> Bool {
+        item.isFolder && item.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == barName.lowercased()
+    }
+
+    /// The bar: the first folder at the top so named; nil before there is one.
+    public static func bar(in items: [Bookmark]) -> Bookmark? {
+        items.first(where: isBar)
+    }
+
+    /// Everything but the bar: Other Bookmarks, as Chromium calls the rest.
+    public static func others(in items: [Bookmark]) -> [Bookmark] {
+        guard let bar = bar(in: items) else { return items }
+        return items.filter { $0.id != bar.id }
+    }
+
+    /// Every bookmark and folder inside the bar, at any depth.
+    public static func barIDs(in items: [Bookmark]) -> Set<UUID> {
+        func ids(_ items: [Bookmark]) -> [UUID] {
+            items.flatMap { [$0.id] + ids($0.children ?? []) }
+        }
+        return Set(ids(bar(in: items)?.children ?? []))
+    }
+
+    /// The bar's rows, as `rows`, and in a folder that is shut the bookmarks
+    /// of it in `kept` (those open in a tab), a step in from the folder: an
+    /// open one stays in sight in a folder that is shut, as Arc keeps it.
+    public static func rows(of bookmarks: [Bookmark], opening open: Set<UUID>, keeping kept: Set<UUID>,
+                            depth: Int = 0) -> [(item: Bookmark, depth: Int)] {
+        bookmarks.flatMap { item -> [(item: Bookmark, depth: Int)] in
+            let own = [(item: item, depth: depth)]
+            guard item.isFolder else { return own }
+            if open.contains(item.id) {
+                return own + rows(of: item.children ?? [], opening: open, keeping: kept, depth: depth + 1)
+            }
+            return own + item.links.filter { kept.contains($0.id) }.map { (item: $0, depth: depth + 1) }
         }
     }
 
@@ -125,14 +174,30 @@ public enum Bookmarks {
     }
 
     /// Puts `item` at the end of the folder `folder`, or of the top level
-    /// for nil. False when there is no such folder.
+    /// for nil; before `before` when that is in the same folder. False when
+    /// there is no such folder.
     @discardableResult
-    public static func insert(_ item: Bookmark, into folder: UUID?, of items: inout [Bookmark]) -> Bool {
+    public static func insert(_ item: Bookmark, into folder: UUID?, before: UUID? = nil, of items: inout [Bookmark]) -> Bool {
+        func placed(in level: [Bookmark]) -> [Bookmark] {
+            var level = level
+            level.insert(item, at: before.flatMap { b in level.firstIndex { $0.id == b } } ?? level.endIndex)
+            return level
+        }
         guard let folder else {
-            items.append(item)
+            items = placed(in: items)
             return true
         }
-        return update(folder, in: &items) { $0.children = ($0.children ?? []) + [item] } && find(folder, in: items)?.isFolder == true
+        return update(folder, in: &items) { $0.children = placed(in: $0.children ?? []) } && find(folder, in: items)?.isFolder == true
+    }
+
+    /// The folder `id` is in: nil for the top level, and for none.
+    public static func parent(of id: UUID, in items: [Bookmark]) -> UUID? {
+        for item in items {
+            guard let children = item.children else { continue }
+            if children.contains(where: { $0.id == id }) { return item.id }
+            if let found = parent(of: id, in: children) { return found }
+        }
+        return nil
     }
 
     /// Takes a bookmark or a folder away, at any depth. False when there was none.
@@ -161,9 +226,11 @@ public enum Bookmarks {
         // and its folders by name. Looking through the level for each link
         // coming in made a folder of a thousand links a million comparisons.
         var links = Set(existing.compactMap { $0.url.map(key) })
+        // The bar by any spelling of its name is the one bar.
+        func name(_ folder: Bookmark) -> String { isBar(folder) ? barName : folder.title }
         var folders: [String: Int] = [:]
-        for (index, item) in existing.enumerated() where item.isFolder && folders[item.title] == nil {
-            folders[item.title] = index
+        for (index, item) in existing.enumerated() where item.isFolder && folders[name(item)] == nil {
+            folders[name(item)] = index
         }
         for item in imported {
             if let link = item.url {
@@ -173,7 +240,7 @@ public enum Bookmarks {
                 continue
             }
             let children = item.children ?? []
-            if let index = folders[item.title] {
+            if let index = folders[name(item)] {
                 var inside = existing[index].children ?? []
                 added += merge(children, into: &inside)
                 existing[index].children = inside
@@ -182,7 +249,7 @@ public enum Bookmarks {
                 added += merge(children, into: &inside)
                 if !inside.isEmpty {
                     existing.append(Bookmark(folder: item.title, children: inside))
-                    folders[item.title] = existing.count - 1
+                    folders[name(item)] = existing.count - 1
                 }
             }
         }
@@ -202,7 +269,8 @@ public enum IconKey {
 /// What a bookmarks file holds, ready to go into a space.
 public struct BookmarkImport: Equatable, Sendable {
     /// For the top of a space's bookmarks: the file's favourites first (its
-    /// bookmarks bar, Safari's Favorites), then its other links and folders.
+    /// bookmarks bar, Safari's Favorites), as the space's own bookmarks bar
+    /// (Bookmarks.barName), then its other links and folders.
     public var items: [Bookmark]
     /// The icons the file carries, by IconKey (Chrome's export has them).
     public var icons: [String: Data]
@@ -347,6 +415,9 @@ public enum BookmarkFile {
         "favorites bar", "favourites bar", "toolbar",
     ]
 
+    /// Chrome's and Firefox's folder for what is not in the bar.
+    static let othersName = "Other bookmarks"
+
     private struct Frame {
         var title: String
         var favourites: Bool
@@ -409,11 +480,23 @@ public enum BookmarkFile {
             while frames.count > 1, let folder = frames.popLast() {
                 frames[frames.count - 1].items.append(Bookmark(folder: folder.title, children: folder.items))
             }
-            var items = Reader.pruned(frames[0].items)
+            // Chrome's and Firefox's Other Bookmarks are the top's own rest:
+            // what they hold goes there, not into a folder of that name.
+            var top: [Bookmark] = []
+            for (offset, item) in frames[0].items.enumerated() {
+                if offset != favouritesIndex, item.isFolder,
+                   item.title.lowercased() == BookmarkFile.othersName.lowercased() {
+                    top += item.children ?? []
+                } else {
+                    top.append(item)
+                }
+            }
+            var items = Reader.pruned(top)
             if let index = favouritesIndex, index < frames[0].items.count {
+                // The file's favourites are the space's bookmarks bar, first.
                 let favourites = frames[0].items[index]
-                let rest = frames[0].items.enumerated().filter { $0.offset != index }.map(\.element)
-                items = Reader.pruned((favourites.children ?? []) + rest)
+                let bar = Bookmark(folder: Bookmarks.barName, children: favourites.children ?? [])
+                items = Reader.pruned([bar] + items.filter { $0.id != favourites.id })
             }
             return BookmarkImport(items: items, icons: icons)
         }
