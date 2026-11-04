@@ -4,6 +4,7 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+- On the iPhone Duo, a tab split with the one on screen no longer keeps making room for the strip once the Duo opens and shows both side by side.
 - On the iPhone Duo closed, a paragraph inside a block of text that wraps beside the strip no longer ends a strip's width short of it twice; a card the page keeps to a width of its own is no longer widened to clear the strip; and once the page has been touched, a header's buttons no longer push the box beside them sideways.
 - On iPhone and iPad, the keyboard is made room for once. The page was laid out above it and WebKit kept the keyboard's height clear inside the page as well, so a page's foot and its field sat a keyboard's height above the keyboard with an empty band between. A field typed in that ends up under the keyboard is brought into view above it.
 

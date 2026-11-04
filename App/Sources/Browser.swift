@@ -1711,7 +1711,8 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
     /// pictures, colours and text seen through the strip's glass, and what
     /// can be pressed on it moved out from under the strip's items by
     /// strip.js, told where they are (stripCover; Docs/iPhoneDuoDesign.md §9).
-    /// Only where the page is edge to edge beside the strip: on a card,
+    /// Only where the page is edge to edge beside the strip, so only in a
+    /// phone-width window: on a card (every wider window is one, show),
     /// beside a split, in the desktop view, on the start page, and on a
     /// hands-off page, which gets no scripts, it stops at the strip, the
     /// window's own colour behind it.
@@ -1719,6 +1720,10 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
     /// again; otherwise (a page's change, several times a second while it
     /// scrolls) the strip as last measured, asking the system nothing.
     private func placeUnderStrip(measuring: Bool = true) {
+        // The pane beside never runs under the strip: hidden in a phone-width
+        // window, beside a split in a wider one. One that ran under it before
+        // (the panes swapped) lets it go, or it would keep making room for it.
+        partner?.strip = nil
         let edgeToEdge = model.url != nil && !carded && divider.isHidden
             && page.map { desktopPad?.page !== $0 && !$0.isHandsOff } == true
         let side = edgeToEdge ? stripSide : nil
