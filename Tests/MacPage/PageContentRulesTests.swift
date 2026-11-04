@@ -55,7 +55,8 @@ final class PageContentRulesTests: PageTestCase {
 
         let page = makePage()
         let target = try kept("ruleListTarget", of: page, as: WebKitRuleListTarget.self)
-        let controller = try kept("controller", of: page, as: WKUserContentController.self)
+        // The page's own controller, kept by its engine page (WebKitMacPage).
+        let controller = try kept("controller", of: page.enginePage, as: WKUserContentController.self)
         XCTAssertTrue(try kept("controller", of: target, as: WKUserContentController.self) === controller,
                       "the page's target is over another controller than the page's")
         XCTAssertTrue(page.view.configuration.userContentController === controller,

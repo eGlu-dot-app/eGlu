@@ -256,10 +256,10 @@ final class SpyEngine: MacPageEngine {
         switch source {
         case .space:
             kind = .space
-            page = Page(tab: tab, space: space, configuration: PageTestCase.keepingNothing())
+            page = Page(tab: tab, space: space, enginePage: AppWebKitEngine.page(configuration: PageTestCase.keepingNothing()))
         case .tab(let url):
             kind = .tab(url)
-            page = Page(tab: tab, space: space, configuration: PageTestCase.keepingNothing())
+            page = Page(tab: tab, space: space, enginePage: AppWebKitEngine.page(configuration: PageTestCase.keepingNothing()))
         case .child(let request):
             kind = .child
             child = request
@@ -267,14 +267,14 @@ final class SpyEngine: MacPageEngine {
             // child with; a test's has none and gets a blank one.
             if let request = request as? WebKitChildRequest {
                 supplied = request.configuration
-                page = Page(tab: tab, space: space, configuration: request.configuration)
+                page = Page(tab: tab, space: space, enginePage: AppWebKitEngine.page(configuration: request.configuration, extensionPage: false))
             } else {
-                page = Page(tab: tab, space: space, configuration: PageTestCase.keepingNothing())
+                page = Page(tab: tab, space: space, enginePage: AppWebKitEngine.page(configuration: PageTestCase.keepingNothing()))
             }
         case .supplied(let configuration, let extensionPage):
             kind = .supplied(extensionPage: extensionPage)
             supplied = configuration
-            page = Page(tab: tab, space: space, configuration: configuration, extensionPage: extensionPage)
+            page = Page(tab: tab, space: space, enginePage: AppWebKitEngine.page(configuration: configuration, extensionPage: extensionPage))
         }
         calls.append(Call(source: kind, tab: tab, space: space, configuration: supplied, child: child, page: page))
         return page

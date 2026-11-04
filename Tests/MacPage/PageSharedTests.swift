@@ -195,7 +195,7 @@ final class PageSharedTests: PageTestCase {
     func testTheFilterScriptsGoIntoTheirWorldsInTheMainFrameOnly() async throws {
         let page = makePage()
         let controller = page.view.configuration.userContentController
-        XCTAssertTrue(try kept("controller", of: page, as: WKUserContentController.self) === controller,
+        XCTAssertTrue(try kept("controller", of: page.enginePage, as: WKUserContentController.self) === controller,
                       "the page's controller isn't its view's")
         page.view.loadHTMLString(Self.html("Before Filters"), baseURL: nil)
         await waitForPage(page, titled: "Before Filters")

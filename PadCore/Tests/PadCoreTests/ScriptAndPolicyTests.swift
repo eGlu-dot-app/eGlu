@@ -261,8 +261,11 @@ final class PolicyTests: XCTestCase {
     /// PageShared.swift's Unseen, in the app's world only, on a site page
     /// Unseen has asked HandsOff about and whose steps it decides.
     /// WebKitFilterScripts.swift adds only the two scripts its owner gives
-    /// it, in their own worlds, at document start in the main frame.
-    /// So may the Mac's
+    /// it, in their own worlds, at document start in the main frame; and
+    /// WebKitPageScripts.swift is the Mac Page's own way into its page,
+    /// passing on only the scripts and calls Page.swift gives it. On the
+    /// Mac, PageWebKit.swift, the bridge for the files still on WebKit,
+    /// calls only an extension's own page, for its recording. So may the Mac's
     /// ExtensionBlankPage.swift, an empty page of the app's own at a removed
     /// extension's address, where what it kept is cleared; and its
     /// ExtensionPopup.swift, whose views (an extension's popup and side
@@ -271,6 +274,7 @@ final class PolicyTests: XCTestCase {
         let sharedPage = "PageShared.swift"
         let blank = "ExtensionBlankPage.swift"
         let surface = "ExtensionPopup.swift"
+        let bridge = "PageWebKit.swift"
         for folder in ["App", "Mac", "Shared"] {
             let swift = try sources(in: folder, ending: ".swift")
             if let page = swift.first(where: { $0.0 == blank })?.1 {
@@ -298,8 +302,17 @@ final class PolicyTests: XCTestCase {
                               "ExtensionTrial.swift must load only the extension's own pages")
                 XCTAssertFalse(trial.contains("loadFileURL"), "ExtensionTrial.swift must never load a file")
             }
+            if folder == "Mac", let page = swift.first(where: { $0.0 == bridge })?.1 {
+                XCTAssertEqual(page.components(separatedBy: "guard web.url?.scheme?.lowercased() == Extensions.scheme").count - 1, 2,
+                               "\(bridge)'s two calls must each be into an extension's own page")
+                XCTAssertEqual(page.components(separatedBy: "JavaScript(").count - 1, 2,
+                               "\(bridge) must call into pages only in its two extension helpers")
+                for load in ["addUserScript", "loadHTMLString", "loadFileURL", ".load("] {
+                    XCTAssertFalse(page.contains(load), "\(bridge) must never load a page or add a script to one")
+                }
+            }
             let pageFile = folder == "Shared" ? sharedPage : "Page.swift"
-            for (name, text) in swift where name != pageFile && name != blank && name != surface {
+            for (name, text) in swift where name != pageFile && name != blank && name != surface && !(folder == "Mac" && name == bridge) {
                 for call in ["evaluateJavaScript", "callAsyncJavaScript", "addUserScript"] {
                     XCTAssertFalse(text.contains(call), "\(folder)/\(name) calls \(call); calls into pages go through Page.swift")
                 }
@@ -310,8 +323,9 @@ final class PolicyTests: XCTestCase {
         let ownPage = "WebKitSVGRaster.swift"
         let hiddenPage = "WebKitHiddenPage.swift"
         let filterScripts = "WebKitFilterScripts.swift"
+        let pageScripts = "WebKitPageScripts.swift"
         let support = try sources(in: "WebKitEngine/Sources", ending: ".swift")
-        for (name, text) in support where name != ownPage && name != hiddenPage && name != filterScripts {
+        for (name, text) in support where name != ownPage && name != hiddenPage && name != filterScripts && name != pageScripts {
             for call in ["evaluateJavaScript", "callAsyncJavaScript", "addUserScript"] {
                 XCTAssertFalse(text.contains(call), "WebKitEngine's \(name) calls \(call)")
             }
@@ -328,6 +342,18 @@ final class PolicyTests: XCTestCase {
         for call in ["evaluateJavaScript", "addUserScript", "loadFileURL", "loadHTMLString"] {
             XCTAssertFalse(hidden.contains(call), "\(hiddenPage) must not \(call)")
         }
+        // The Mac Page's own scripting passes on what Page.swift gives it:
+        // no script of its own (no string literal but the import lines'),
+        // no load, and the main frame only (WebKit's nil frame).
+        let scripting = try XCTUnwrap(support.first { $0.0 == pageScripts }?.1, "WebKitEngine has no \(pageScripts)")
+        XCTAssertFalse(scripting.contains("\""), "\(pageScripts) must add or call only the scripts it is given")
+        for load in ["loadHTMLString", "loadFileURL", ".load("] {
+            XCTAssertFalse(scripting.contains(load), "\(pageScripts) must never load a page")
+        }
+        XCTAssertEqual(scripting.components(separatedBy: ".evaluateJavaScript(").count
+                       + scripting.components(separatedBy: ".callAsyncJavaScript(").count - 2,
+                       scripting.components(separatedBy: "in: nil").count - 1,
+                       "\(pageScripts) must call into the main frame only")
         let filters = try XCTUnwrap(support.first { $0.0 == filterScripts }?.1, "WebKitEngine has no \(filterScripts)")
         // Check the whole helper, apart from comments and whitespace: no
         // other script, world, frame, injection time or page call is allowed.

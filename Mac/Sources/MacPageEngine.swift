@@ -41,7 +41,7 @@ protocol MacPageEngine: AnyObject {
     func spellingFollows(writing: Bool, pages: [Page])
 }
 
-/// The app's WebKit page factory until Page moves into the plugin.
+/// The app's WebKit page factory.
 @MainActor
 final class AppWebKitEngine: MacPageEngine {
     var svgRasterizer: any WebSVGRasterizer { WebKitSVGRaster.shared }
@@ -58,20 +58,25 @@ final class AppWebKitEngine: MacPageEngine {
     func makePage(tab: UUID, space: UUID, source: MacPageSource) -> Page {
         switch source {
         case .space:
-            return Page(tab: tab, space: space, configuration: configuration(space: space))
+            return Page(tab: tab, space: space, enginePage: AppWebKitEngine.page(configuration: configuration(space: space)))
         case .tab(let url):
             if let configuration = url.flatMap({ Extensions.shared.configuration(for: $0, in: space) }) {
-                return Page(tab: tab, space: space, configuration: configuration, extensionPage: true)
+                return Page(tab: tab, space: space, enginePage: AppWebKitEngine.page(configuration: configuration, extensionPage: true))
             }
-            return Page(tab: tab, space: space, configuration: configuration(space: space))
+            return Page(tab: tab, space: space, enginePage: AppWebKitEngine.page(configuration: configuration(space: space)))
         case .child(let request):
             guard let request = request as? WebKitChildRequest else {
                 preconditionFailure("AppWebKitEngine requires a WebKitChildRequest")
             }
-            return Page(tab: tab, space: space, configuration: request.configuration, extensionPage: false)
+            return Page(tab: tab, space: space, enginePage: AppWebKitEngine.page(configuration: request.configuration, extensionPage: false))
         case .supplied(let configuration, let extensionPage):
-            return Page(tab: tab, space: space, configuration: configuration, extensionPage: extensionPage)
+            return Page(tab: tab, space: space, enginePage: AppWebKitEngine.page(configuration: configuration, extensionPage: extensionPage))
         }
+    }
+
+    static func page(configuration: WKWebViewConfiguration, extensionPage: Bool = false) -> WebKitMacPage {
+        WebKitMacPage(configuration: configuration, extensionPage: extensionPage,
+                      extensionUIDelegate: { ExtensionPageDelegate(next: $0) })
     }
 
     /// The space's store and extension controller, with the app's user agent.

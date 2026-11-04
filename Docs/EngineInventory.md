@@ -7,17 +7,17 @@
 |:---|---:|---:|
 | a. Imports (Mac/) | 25 | 25 |
 | a. Imports (Shared/) | 0 | 0 |
-| b. Reach-ins into page view (app) | 33 | 9 |
+| b. Reach-ins into page view (app) | 34 | 10 |
 | b. Reach-ins (tests) | 191 | 20 |
 | b. Reach-ins (Page.swift self-references) | 0 | 0 |
-| c. WebKit types in declarations | 61 | 16 |
+| c. WebKit types in declarations | 55 | 16 |
 | c. Declarations (Extension* files) | 259 | 16 |
-| d. Private WebKit API | 37 | 15 |
+| d. Private WebKit API | 36 | 14 |
 | e. Hidden web views | 13 | 8 |
 | f. Script bridges (app) | 2 | 2 |
 | f. Script bridges (WebKit plugin) | 7 | 3 |
 | f. Script bridges (tests) | 4 | 2 |
-| **Total** | **430** | **46** |
+| **Total** | **424** | **46** |
 
 ## Details
 
@@ -64,10 +64,10 @@
   - L6: `import WebKit`
 - `Mac/Sources/MacPageEngine.swift` (1):
   - L4: `import WebKit`
-- `Mac/Sources/Page.swift` (1):
-  - L6: `import WebKit`
 - `Mac/Sources/PageSwipe.swift` (1):
   - L4: `import WebKit`
+- `Mac/Sources/PageWebKit.swift` (1):
+  - L1: `import WebKit`
 - `Mac/Sources/Pages.swift` (1):
   - L4: `import WebKit`
 - `Mac/Sources/PictureTest.swift` (1):
@@ -78,7 +78,7 @@
 #### Shared/ (0 lines in 0 files)
 _None._
 
-### b. Reach-ins into a page's web view (33 lines in 9 files)
+### b. Reach-ins into a page's web view (34 lines in 10 files)
 - `Mac/Sources/ApplePasswords.swift` (8):
   - L238: `ApplePasswords.serves(page.view.url), case let .tuple(scheme, host, _) = message.origin,`
   - L239: `host.lowercased() == page.view.url?.host()?.lowercased(),`
@@ -107,6 +107,8 @@ _None._
   - L245: `page.view.url == url && !page.isHandsOff && context.hasAccess(to: url, in: self)`
 - `Mac/Sources/Extensions.swift` (1):
   - L2027: `if let tab, ExtensionPolicy.grantsOnClick(window.page?.view.url) { context.userGesturePerformed(in: tab) }`
+- `Mac/Sources/PageWebKit.swift` (1):
+  - L20: `preconditionFailure("Page.view requires a WebKitMacPage")`
 - `Mac/Sources/Pages.swift` (6):
   - L55: `if page.view.url == nil, let url = tab.url {`
   - L87: `addresses[page.tab] = page.view.url`
@@ -165,13 +167,13 @@ _None._
 - `Tests/MacPage/PageCommandTests.swift` (1):
   - L37: `_ = try await page.view.evaluateJavaScript("document.title = 'Changed'; 1")`
 - `Tests/MacPage/PageContentRulesTests.swift` (7):
-  - L61: `XCTAssertTrue(page.view.configuration.userContentController === controller,`
-  - L122: `page.view.frame = parent.bounds`
-  - L123: `parent.addSubview(page.view)`
-  - L127: `let hiding = WebKitHiddenPage(beside: page.view, ruleLists: [list], appWorld: Page.world,`
-  - L133: `let plain = WebKitHiddenPage(beside: page.view, ruleLists: [], appWorld: Page.world,`
-  - L180: `page.view.loadHTMLString(Self.adHTML(title), baseURL: nil)`
-  - L186: `try await page.view.callAsyncJavaScript(Self.displayCall, arguments: [:], in: nil, contentWorld: .page) as? String`
+  - L62: `XCTAssertTrue(page.view.configuration.userContentController === controller,`
+  - L123: `page.view.frame = parent.bounds`
+  - L124: `parent.addSubview(page.view)`
+  - L128: `let hiding = WebKitHiddenPage(beside: page.view, ruleLists: [list], appWorld: Page.world,`
+  - L134: `let plain = WebKitHiddenPage(beside: page.view, ruleLists: [], appWorld: Page.world,`
+  - L181: `page.view.loadHTMLString(Self.adHTML(title), baseURL: nil)`
+  - L187: `try await page.view.callAsyncJavaScript(Self.displayCall, arguments: [:], in: nil, contentWorld: .page) as? String`
 - `Tests/MacPage/PageDownloadAndFileTests.swift` (6):
   - L62: `XCTAssertEqual(page.view.url?.resolvingSymlinksInPath(), file.resolvingSymlinksInPath())`
   - L66: `let text = try await page.view.evaluateJavaScript("document.querySelector('p').textContent") as? String`
@@ -317,17 +319,17 @@ _None._
   - L58: `XCTAssertTrue(window.firstResponder === page.view)`
   - L67: `XCTAssertNil(page.view.window)`
 - `Tests/MacPage/PageTestSupport.swift` (11):
-  - L113: `let view = page.view`
-  - L114: `guard !condition(view) else { return }`
-  - L118: `guard !fulfilled, condition(view) else { return }`
-  - L123: `view.observe(\.isLoading) { _, _ in MainActor.assumeIsolated(check) },`
-  - L124: `view.observe(\.url) { _, _ in MainActor.assumeIsolated(check) },`
-  - L125: `view.observe(\.title) { _, _ in MainActor.assumeIsolated(check) },`
-  - L126: `view.observe(\.estimatedProgress) { _, _ in MainActor.assumeIsolated(check) },`
-  - L127: `view.observe(\.canGoBack) { _, _ in MainActor.assumeIsolated(check) },`
-  - L128: `view.observe(\.canGoForward) { _, _ in MainActor.assumeIsolated(check) },`
-  - L133: `XCTFail("\(what): not by \(timeout) s; the view is at \(view.url?.absoluteString ?? "nothing"), "`
-  - L134: `+ "titled \(view.title ?? "nothing"), loading \(view.isLoading)", file: file, line: line)`
+  - L114: `let view = page.view`
+  - L115: `guard !condition(view) else { return }`
+  - L119: `guard !fulfilled, condition(view) else { return }`
+  - L124: `view.observe(\.isLoading) { _, _ in MainActor.assumeIsolated(check) },`
+  - L125: `view.observe(\.url) { _, _ in MainActor.assumeIsolated(check) },`
+  - L126: `view.observe(\.title) { _, _ in MainActor.assumeIsolated(check) },`
+  - L127: `view.observe(\.estimatedProgress) { _, _ in MainActor.assumeIsolated(check) },`
+  - L128: `view.observe(\.canGoBack) { _, _ in MainActor.assumeIsolated(check) },`
+  - L129: `view.observe(\.canGoForward) { _, _ in MainActor.assumeIsolated(check) },`
+  - L134: `XCTFail("\(what): not by \(timeout) s; the view is at \(view.url?.absoluteString ?? "nothing"), "`
+  - L135: `+ "titled \(view.title ?? "nothing"), loading \(view.isLoading)", file: file, line: line)`
 - `Tests/MacPage/PageUIDelegateTests.swift` (5):
   - L58: `let delegate = try XCTUnwrap(page.view.uiDelegate as? NSObject, "the view has no UI delegate")`
   - L176: `let opened = try await page.view.evaluateJavaScript(`
@@ -338,25 +340,19 @@ _None._
 #### Page.swift (self-references, excluded from count: 0 lines)
 _None._
 
-### c. WebKit types in declarations (61 lines in 16 files)
-- `Mac/Sources/MacPageEngine.swift` (3):
+### c. WebKit types in declarations (55 lines in 16 files)
+- `Mac/Sources/MacPageEngine.swift` (4):
   - L17: `case supplied(WKWebViewConfiguration, extensionPage: Bool)`
   - L29: `func configuration(space: UUID) -> WKWebViewConfiguration`
-  - L78: `func configuration(space: UUID) -> WKWebViewConfiguration {`
-- `Mac/Sources/Page.swift` (10):
-  - L42: `final class PageView: WKWebView {`
-  - L66: `let newTab = menu.items.first(where: { $0.identifier?.rawValue == "WKMenuItemIdentifierOpenLinkInNewWindow" }) {`
-  - L144: `static let world = WKContentWorld.world(name: "eGlu")`
-  - L155: `private let controller: WKUserContentController`
-  - L350: `init(tab: UUID, space: UUID, configuration: WKWebViewConfiguration, extensionPage: Bool = false) {`
-  - L356: `let controller = extensionPage ? config.userContentController : WKUserContentController()`
-  - L583: `static func extensionPageVisible(_ web: WKWebView) async -> Bool {`
-  - L591: `static func startExtensionRecording(in web: WKWebView, token: String, video: Any) async throws -> Any? {`
-  - L959: `let configuration = WKSnapshotConfiguration()`
-  - L986: `let configuration = WKSnapshotConfiguration()`
+  - L77: `static func page(configuration: WKWebViewConfiguration, extensionPage: Bool = false) -> WebKitMacPage {`
+  - L83: `func configuration(space: UUID) -> WKWebViewConfiguration {`
 - `Mac/Sources/PageSwipe.swift` (2):
   - L49: `private var from: WKBackForwardListItem?`
   - L59: `static func works(on view: WKWebView) -> Bool {`
+- `Mac/Sources/PageWebKit.swift` (3):
+  - L16: `static let world = WKContentWorld.world(name: "eGlu")`
+  - L49: `static func extensionPageVisible(_ web: WKWebView) async -> Bool {`
+  - L57: `static func startExtensionRecording(in web: WKWebView, token: String, video: Any) async throws -> Any? {`
 - `Mac/Sources/Pages.swift` (1):
   - L68: `func adopt(tab: UUID, space: UUID, configuration: WKWebViewConfiguration, extensionPage: Bool = false) -> Page {`
 - `Mac/Sources/PictureWindow.swift` (9):
@@ -372,8 +368,8 @@ _None._
 - `PadCore/Tests/PadCoreTests/ContentBlockingTests.swift` (1):
   - L479: `let store = try XCTUnwrap(WKContentRuleListStore(url: folder))`
 - `PadCore/Tests/PadCoreTests/ScriptAndPolicyTests.swift` (2):
-  - L336: `extension WKUserContentController {`
-  - L338: `public func addFilterScripts(blocker: String?, scriptlets: String?, appWorld: WKContentWorld) {`
+  - L362: `extension WKUserContentController {`
+  - L364: `public func addFilterScripts(blocker: String?, scriptlets: String?, appWorld: WKContentWorld) {`
 - `Tests/Crashes/CrashRegressionTests.swift` (7):
   - L93: `let page = session.pages.adopt(tab: tab.id, space: space.id, configuration: WKWebViewConfiguration())`
   - L133: `let web = WKWebView(frame: CGRect(x: 0, y: 0, width: 320, height: 480))`
@@ -388,9 +384,9 @@ _None._
   - L59: `func webView(_ webView: WKWebView, stop urlSchemeTask: any WKURLSchemeTask) {}`
 - `Tests/MacPage/PageContentRulesTests.swift` (4):
   - L53: `let raw = try kept("store", of: blockerStore, as: WKContentRuleListStore.self)`
-  - L58: `let controller = try kept("controller", of: page, as: WKUserContentController.self)`
-  - L162: `let raw = try XCTUnwrap(WKContentRuleListStore(url: folder), "no store at the test's folder", file: file, line: line)`
-  - L194: `let view = try kept("view", of: hidden, as: WKWebView.self, file: file, line: line)`
+  - L59: `let controller = try kept("controller", of: page.enginePage, as: WKUserContentController.self)`
+  - L163: `let raw = try XCTUnwrap(WKContentRuleListStore(url: folder), "no store at the test's folder", file: file, line: line)`
+  - L195: `let view = try kept("view", of: hidden, as: WKWebView.self, file: file, line: line)`
 - `Tests/MacPage/PageDownloadAndFileTests.swift` (5):
   - L310: `let download: WKDownload`
   - L401: `var download: WKDownload?`
@@ -411,8 +407,8 @@ _None._
   - L583: `private final class FrameReports: NSObject, WKScriptMessageHandler {`
   - L609: `func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {`
 - `Tests/MacPage/PageTestSupport.swift` (2):
-  - L55: `static func keepingNothing() -> WKWebViewConfiguration {`
-  - L56: `let configuration = WKWebViewConfiguration()`
+  - L56: `static func keepingNothing() -> WKWebViewConfiguration {`
+  - L57: `let configuration = WKWebViewConfiguration()`
 - `Tests/MacPage/PageUIDelegateTests.swift` (2):
   - L70: `let uiDelegate = try XCTUnwrap(objc_getProtocol("WKUIDelegate"))`
   - L339: `func getContextMenu(_ webView: WKWebView, proposedMenu: NSMenu, element: NSObject?, userInfo: Any?,`
@@ -694,7 +690,7 @@ _None._
   - L2416: `func webExtensionController(_ controller: WKWebExtensionController, sendMessage message: Any, toApplicationWithIdentifier applicationIdentifier: String?,`
   - L2450: `func webExtensionController(_ controller: WKWebExtensionController, connectUsing port: WKWebExtension.MessagePort,`
 
-### d. Private WebKit API (37 lines in 15 files)
+### d. Private WebKit API (36 lines in 14 files)
 - `Mac/Sources/ExtensionAnswers.swift` (4):
   - L32: `let folder = folder.appendingPathComponent("_eglu", isDirectory: true)`
   - L340: `folder.appendingPathComponent(id, isDirectory: true).appendingPathComponent("_eglu", isDirectory: true)`
@@ -721,8 +717,6 @@ _None._
   - L151: `@objc(_webView:requestDisplayCapturePermissionForOrigin:initiatedByFrame:withSystemAudio:decisionHandler:)`
 - `Mac/Sources/Extensions.swift` (1):
   - L1682: `let kept = ["\(version).zip", version, "_eglu"]`
-- `Mac/Sources/Page.swift` (1):
-  - L55: `NSStringFromClass(type(of: item)) == "_WKWebExtensionMenuItem"`
 - `Mac/Sources/PageSwipe.swift` (1):
   - L60: `["_pinnedState", "_setRubberBandingEnabled:"].allSatisfy { view.responds(to: Selector($0)) }`
 - `Mac/Sources/Window.swift` (1):
@@ -769,7 +763,7 @@ _None._
   - L133: `let web = WKWebView(frame: CGRect(x: 0, y: 0, width: 320, height: 480))`
   - L163: `let web = WKWebView(frame: CGRect(x: 0, y: 0, width: 320, height: 480))`
 - `Tests/MacPage/PageTestSupport.swift` (1):
-  - L56: `let configuration = WKWebViewConfiguration()`
+  - L57: `let configuration = WKWebViewConfiguration()`
 
 ### f. Script bridges (app: 2 lines in 2 files)
 - `PadCore/Sources/PadCore/Scripts/bridge.js` (1):

@@ -4,6 +4,8 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+- On the Mac, a tab's own web view, with its scripts, the calls into it, its pictures, what it reports and its context menu's WebKit items, lives in the WebKit plugin, and the app's page reaches it only through contracts; the app keeps its rules and its menu changes: the second part of step 12 of keeping eGlu's interface apart from its engines (`Docs/EngineSplitPlan.md`). Nothing changes in use.
+
 - On the Mac, iPhone and iPad, the code both apps share no longer names WebKit: a page's sites' filter scripts are added and the spaces' website stores removed through the WebKit plugin, and on the Mac WebKit's own spell checking steps aside for Harper through it: the first part of step 12 of keeping eGlu's interface apart from its engines (`Docs/EngineSplitPlan.md`). Nothing changes in use.
 
 - On the Mac, iPhone and iPad, grammar checking and reading documents for Handoff go through contracts for writing and for documents, with Harper and the document readers as plugins: step 11 of keeping eGlu's interface apart from its engines, after which the Mac's interface no longer uses the engines package itself (`Docs/EngineSplitPlan.md`). Nothing changes in use.

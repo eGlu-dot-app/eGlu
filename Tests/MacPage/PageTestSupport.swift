@@ -1,4 +1,5 @@
 import WebKit
+import WebKitMacPlugin
 import XCTest
 @testable import eGluMac
 
@@ -63,7 +64,7 @@ class PageTestCase: XCTestCase {
     /// or with a configuration of the test's own.
     func makePage(tab: UUID = UUID(), space: UUID = UUID(),
                   configuration: WKWebViewConfiguration? = nil) -> Page {
-        let page = Page(tab: tab, space: space, configuration: configuration ?? Self.keepingNothing())
+        let page = Page(tab: tab, space: space, enginePage: AppWebKitEngine.page(configuration: configuration ?? Self.keepingNothing()))
         made.append(page)
         return page
     }

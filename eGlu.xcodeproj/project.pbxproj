@@ -228,6 +228,7 @@
 		8BB9D887EC1048FD9E221225 /* MacPageEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C0D6A936868AA273D3E06B8 /* MacPageEngine.swift */; };
 		8BE8BA136696B219B6BF9468 /* ExtensionKeys.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48C063273C199A209263756F /* ExtensionKeys.swift */; };
 		8BEE6AE99925C49E6B79EE00 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = AF4E3E40C591C44EA5F55F41 /* Sparkle */; };
+		8CC743EF67B8637D0807E38D /* PageWebKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9DA04B38BA5961349D30B4E /* PageWebKit.swift */; };
 		8CC7C65DB33AAC7957920426 /* PageWebKitSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB18E3E3C75E9CA5A464D302 /* PageWebKitSurface.swift */; };
 		8CE67B1414A24DF4672FD179 /* Signal.icon in Resources */ = {isa = PBXBuildFile; fileRef = EAC6D7743FC4ED97C5CF909C /* Signal.icon */; };
 		8D182B9D50F1AE91F7EFA848 /* PinnedLook.swift in Sources */ = {isa = PBXBuildFile; fileRef = 979AD767A1E50195F11316AD /* PinnedLook.swift */; };
@@ -287,6 +288,7 @@
 		B3EFE1F06E8AAF26504EC4E4 /* WritingServiceKit in Frameworks */ = {isa = PBXBuildFile; productRef = 72EE9A4C07B1F764A2C95FB4 /* WritingServiceKit */; };
 		B5C1ED2CF557D3F112B0514A /* PictureWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A69D2C69B958B4B92FB35D1B /* PictureWindow.swift */; };
 		B5C499318229C324DD10911E /* DownloadActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BF0C979D82EB7CEE10797AB /* DownloadActivity.swift */; };
+		B7D6107ACC8E3AD53D03B37C /* PageWebKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9DA04B38BA5961349D30B4E /* PageWebKit.swift */; };
 		B82DED3F4620A724C83AA828 /* ExtensionPopupWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1F2F878F154521F64EF667 /* ExtensionPopupWindow.swift */; };
 		B96E316DE61818949E794E11 /* Popup.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3735E61E264D9DDF9DCB253 /* Popup.swift */; };
 		BA4CA0DD47A0FE54DC7A07AD /* RecordingIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C70AF6D92F62AEBFE795FE3A /* RecordingIndicator.swift */; };
@@ -629,6 +631,7 @@
 		B78C9065BA100C29ED568057 /* Engineer.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = Engineer.icon; sourceTree = "<group>"; };
 		B7C0791A3F6DA81A41DC1C4B /* PageDownloadAndFileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageDownloadAndFileTests.swift; sourceTree = "<group>"; };
 		B8982665E67E921A6858CCB7 /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
+		B9DA04B38BA5961349D30B4E /* PageWebKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageWebKit.swift; sourceTree = "<group>"; };
 		BBD98695F13CCA8CBD63163E /* ExtensionReport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionReport.swift; sourceTree = "<group>"; };
 		BC1AB4644B617A408C5773D1 /* PageActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageActions.swift; sourceTree = "<group>"; };
 		BDB2462136DEDBFA50899FAF /* Diagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Diagnostics.swift; sourceTree = "<group>"; };
@@ -1053,6 +1056,7 @@
 				CF441F439AE6323E8AA8FD47 /* PageHolder.swift */,
 				E34DC13D7028D0404EE9C142 /* Pages.swift */,
 				ABCCF96E8E646BB3BE834BB1 /* PageSwipe.swift */,
+				B9DA04B38BA5961349D30B4E /* PageWebKit.swift */,
 				EB18E3E3C75E9CA5A464D302 /* PageWebKitSurface.swift */,
 				86F3E0156D8382BBB63AE2EF /* PasswordWatch.swift */,
 				96454C4458CB7CB240807E73 /* Peek.swift */,
@@ -1471,6 +1475,7 @@
 				0FD836FD661CBF8129738842 /* PageMind.swift in Sources */,
 				7BA99FB6E4EAD99F9B0FC1E7 /* PageShared.swift in Sources */,
 				5337B3C732EC735C3546398A /* PageSwipe.swift in Sources */,
+				8CC743EF67B8637D0807E38D /* PageWebKit.swift in Sources */,
 				8CC7C65DB33AAC7957920426 /* PageWebKitSurface.swift in Sources */,
 				CCB9ED4F2ADF55C2AC7A5CB5 /* Pages.swift in Sources */,
 				5910E41183784117508C78A3 /* PasswordWatch.swift in Sources */,
@@ -1636,6 +1641,7 @@
 				41E5A1E1B37E4058D2410423 /* PageMind.swift in Sources */,
 				1422404791E0897DFA2821C8 /* PageShared.swift in Sources */,
 				2215A00501FFCA2F38827F43 /* PageSwipe.swift in Sources */,
+				B7D6107ACC8E3AD53D03B37C /* PageWebKit.swift in Sources */,
 				2A7333D13F40AFB3C5E46BED /* PageWebKitSurface.swift in Sources */,
 				E10F72CEC53D6AB2414416D5 /* Pages.swift in Sources */,
 				2E886A8635A785F027238432 /* PasswordWatch.swift in Sources */,
