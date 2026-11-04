@@ -71,6 +71,8 @@ enum Diagnostics {
 
     /// The hinge as last heard (Browser.showDiagnostics), on an iPhone Duo.
     static var hinge = "not heard"
+    /// The strip the page runs under as last measured (Browser.stripCover), on an iPhone Duo.
+    static var strip = "no strip measured"
 
     /// The window's measures, for laying out on the iPhone Duo (Docs/iPhoneDuoPlan.md,
     /// Phase 0): its size and size classes, the safe area, the side the vertical bar
@@ -93,6 +95,7 @@ enum Diagnostics {
             default: "none"
             }
             lines.append("vertical bar \(edge) · hinge \(hinge)")
+            lines.append(strip)
             for (kind, label) in [(UIView.ReservedRegion.Kind.division, "fold"), (.occlusion, "occlusion")] {
                 for region in view.reservedRegions(kind: kind, options: .includeInactive) {
                     let frame = region.frame, margins = region.margins

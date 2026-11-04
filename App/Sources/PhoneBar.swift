@@ -42,29 +42,20 @@ struct PhoneBar: View {
         // The tools go when the bar has made room for the keyboard, which
         // the first time is when the keyboard comes and not at the tap.
         let riding = window.barRidesKeyboard
+        // Beside a strip too, the spaces are in the tabs' sheet, as on any
+        // iPhone (TabOverview's SpaceHeading): the bar is the address alone.
         let strip = window.strip != nil
-        // While the tab on screen is pinned: before the address, or after it
-        // beside a strip, where the space's button is before it.
+        // While the tab on screen is pinned: before the address.
         let pinned = typing ? nil : window.tabID.flatMap { session.workspace.tab($0) }.flatMap { $0.isPinned ? $0 : nil }
         VStack(spacing: Self.rowGap) {
-            SlidingRow(slide: window.slide, typing: typing, space: strip ? session.workspace.space(window.spaceID) : nil) {
+            SlidingRow(slide: window.slide, typing: typing, strip: strip) {
                 HStack(spacing: 8) {
-                    if strip && !typing {
-                        // As wide as its name, up to a point.
-                        SpaceButton(session: session, window: window, act: act, besideAddress: true)
-                            .fixedSize()
-                            .transition(before)
-                    }
-                    if let pinned, !strip {
+                    if let pinned {
                         PinnedButton(tab: pinned, window: window, act: act)
                             .transition(appearing)
                     }
                     // Beside a pinned tab's button, which shows its icon, the address has none.
                     AddressCapsule(window: window, editable: window.phone, siteIcon: pinned == nil, act: act)
-                    if let pinned, strip {
-                        PinnedButton(tab: pinned, window: window, act: act)
-                            .transition(appearing)
-                    }
                     if typing {
                         Button("Cancel") { act(.cancelAddress) }
                             .font(.body)
@@ -104,11 +95,6 @@ struct PhoneBar: View {
         reduceMotion ? .opacity : .move(edge: .trailing).combined(with: .opacity)
     }
 
-    /// The space button, beside a strip, makes way for the typing from the other side.
-    private var before: AnyTransition {
-        reduceMotion ? .opacity : .move(edge: .leading).combined(with: .opacity)
-    }
-
     /// The pinned button comes into being where it stands, from a little
     /// smaller and soft, as the address makes room; it never grows from nothing.
     private var appearing: AnyTransition {
@@ -122,8 +108,8 @@ struct PhoneBar: View {
 private struct SlidingRow<Row: View>: View {
     @ObservedObject var slide: BarSlide
     let typing: Bool
-    /// Beside a strip, the space the row starts with; nil where the row ends with the page's menu.
-    let space: Space?
+    /// Beside a strip, where the page's menu is in the strip and not at the row's end.
+    let strip: Bool
     @ViewBuilder let row: Row
 
     var body: some View {
@@ -132,7 +118,7 @@ private struct SlidingRow<Row: View>: View {
             .overlay {
                 if let coming = slide.coming, !typing {
                     GeometryReader { row in
-                        ComingAddress(coming: coming, space: space)
+                        ComingAddress(coming: coming, strip: strip)
                             .padding(.horizontal, 12)
                             // A row's width and the pages' gap along: where it will be once it is in.
                             .offset(x: slide.offset + coming.side * (row.size.width + 16))
@@ -140,7 +126,7 @@ private struct SlidingRow<Row: View>: View {
                     .accessibilityHidden(true)
                 }
             }
-        if space != nil {
+        if strip {
             // Beside a strip the rows come and go at its edge, as the pages
             // do, rather than under it; the glass's edges still show above and below.
             moving.mask { Rectangle().padding(.vertical, -12) }
@@ -151,27 +137,22 @@ private struct SlidingRow<Row: View>: View {
 }
 
 /// The address row of the tab a sideways drag is going to, drawn as the bar
-/// will draw it once that tab is on screen: its capsule with the site's icon
-/// and its name or address, and the menu's button beside it, or beside a
-/// strip the space's button before it. It only shows; the real row takes
-/// its place when the drag has gone through.
+/// will draw it once that tab is on screen: a pinned tab's button before
+/// it, its capsule with the site's icon and its name or address, and the
+/// menu's button beside it, which beside a strip is in the strip instead.
+/// It only shows; the real row takes its place when the drag has gone through.
 private struct ComingAddress: View {
     let coming: SlideNeighbour
-    let space: Space?
+    let strip: Bool
 
     var body: some View {
         HStack(spacing: 8) {
-            if let space {
-                SpaceFace(space: space, besideAddress: true)
-                    .fixedSize()
-            } else if coming.tab.isPinned {
+            if coming.tab.isPinned {
                 PinnedDisc(tab: coming.tab)
             }
             NeighbourAddress(tab: coming.tab, titled: coming.titled, siteIcon: !coming.tab.isPinned)
-            if space == nil {
+            if !strip {
                 MoreDisc()
-            } else if coming.tab.isPinned {
-                PinnedDisc(tab: coming.tab)
             }
         }
     }
@@ -542,6 +523,23 @@ final class StripItems {
         }
         tabs.accessibilityLabel = String(localized: "Tabs, \(count)")
     }
+
+    /// Where the items the system shows stand, in `view`'s points, nil for
+    /// one it gives no place for: the strip's bands come from them
+    /// (Browser.stripCover), and one without a place makes the whole strip
+    /// a band. The system draws the strip outside the app's windows, and no
+    /// API places its overflow (…) under Back and Forward: it is taken as
+    /// one more item, its own capsule's gap under Forward, as measured on
+    /// the iOS 27.2 simulator.
+    func frames(in view: UIView) -> [CGRect?] {
+        let place = { (item: UIBarButtonItem) in item.frame(in: view).flatMap { $0.isEmpty ? nil : $0 } }
+        let forward = place(self.forward)
+        let overflow = forward.map { $0.offsetBy(dx: 0, dy: $0.height + Self.overflowGap) }
+        return [place(back), forward, overflow, place(foot.newTab)] + (tabsShown ? [place(tabs)] : [])
+    }
+
+    /// From Forward's foot to the overflow's top, between the two capsules.
+    private static let overflowGap: CGFloat = 23
 
     /// The tabs' item, only where the tabs aren't on screen already: none
     /// beside a sidebar of tabs (Settings › Tabs › Vertical).

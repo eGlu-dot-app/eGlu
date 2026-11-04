@@ -84,10 +84,34 @@ final class ChromeConstraints {
 
     /// The stack a bezel in from the window's edges, or none.
     func inset(by bezel: CGFloat) {
+        self.bezel = bezel
         stackTop?.constant = bezel
-        stackAtEdge?.constant = bezel
-        stackTrailing?.constant = -bezel
         screenBottom?.constant = -bezel
+        placeSides()
+    }
+
+    private var bezel: CGFloat = 0
+    /// How far past the safe area the stack reaches at its leading and
+    /// trailing sides: under the iPhone Duo's strip, to the window's edge.
+    private var beyond: (leading: CGFloat, trailing: CGFloat) = (0, 0)
+
+    /// The stack on under the iPhone Duo's strip to the window's edge, on
+    /// the strip's side, `width` past the safe area; or, with no side, back
+    /// in the safe area (Browser.placeUnderStrip). The side as it is on
+    /// screen: in right-to-left languages the trailing side is the left.
+    func reachUnderStrip(_ side: CGRectEdge?, width: CGFloat, rightToLeft: Bool) {
+        let trailingSide: CGRectEdge = rightToLeft ? .minXEdge : .maxXEdge
+        beyond = switch side {
+        case nil: (0, 0)
+        case trailingSide?: (0, width)
+        default: (width, 0)
+        }
+        placeSides()
+    }
+
+    private func placeSides() {
+        stackAtEdge?.constant = bezel - beyond.leading
+        stackTrailing?.constant = -bezel + beyond.trailing
     }
 
     /// The sidebar's width and the gap between it and the stack, once both are made.
