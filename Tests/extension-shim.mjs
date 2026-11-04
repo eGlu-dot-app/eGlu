@@ -25,7 +25,7 @@ const tick = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /// A world with WebKit's APIs as an extension's background, page or
 /// content script has them, the shim run in it `times` times.
-function world({ protocol = 'chrome-extension:', apis = true, times = 1, reply, background = false, lastError, channel = false, page = '/page.html', nativeReply, i18n = {}, extra = {}, scripting, permissions = [], namespaces = {}, worker = false, runtimeExtra = {}, events = null, manifestExtra = {} } = {}) {
+function world({ protocol = 'chrome-extension:', apis = true, times = 1, reply, background = false, lastError, channel = false, page = '/page.html', nativeReply, i18n = {}, extra = {}, scripting, permissions = [], namespaces = {}, worker = false, runtimeExtra = {}, events = null, manifestExtra = {}, prototype = false } = {}) {
   const native = [];
   const event = () => {
     const listeners = [];
@@ -69,6 +69,13 @@ function world({ protocol = 'chrome-extension:', apis = true, times = 1, reply, 
     ...namespaces,
   } : undefined;
   if (chrome && lastError) chrome.runtime.lastError = lastError;
+  // runtime.sendMessage on the prototype, where WebKit keeps it: the shim
+  // reaches past its own wrapper there for eGlu's envelopes.
+  if (chrome && prototype) {
+    const { sendMessage } = chrome.runtime;
+    delete chrome.runtime.sendMessage;
+    Object.setPrototypeOf(chrome.runtime, { sendMessage });
+  }
   // A timer's throw reaches the world's error event, as in a browser.
   const timer = (f, ms) => setTimeout(() => {
     try { f(); } catch (error) { target.dispatchEvent(Object.assign(new Event('error'), { error })); }
@@ -266,6 +273,101 @@ function world({ protocol = 'chrome-extension:', apis = true, times = 1, reply, 
   const asked = Date.now();
   const none = await pageA.run('chrome.runtime').sendMessage({ nobody: 1 });
   check('one nobody answers doesn\'t wait long', none === undefined && Date.now() - asked < 1500, String(Date.now() - asked));
+}
+
+// A message for a tab whose own page is the extension's: Chrome brings it
+// to that page (NordPass's sign-in page is told so where to go next);
+// WebKit brings it to content scripts alone, so the worker hands it on.
+{
+  const id = 'abcdefghijklmnopabcdefghijklmnop';
+  const app = 'chrome-extension://' + id + '/app.html#/login';
+  const handed = [];
+  // Each world its own: the shim wraps what it is given.
+  const tabs = () => ({ sendMessage: async () => undefined, get: async (tabId) => ({ id: tabId, url: tabId === 4 ? app : 'https://example.com/' }) });
+  const getAllFrames = async ({ tabId }) => [{ frameId: 0, url: tabId === 4 ? app : 'https://example.com/' }];
+  const w = world({ background: true, prototype: true, permissions: ['tabs', 'webNavigation'], namespaces: { tabs: tabs(), webNavigation: { getAllFrames } },
+    reply: (m) => { if (m && m.__egluToFrame) handed.push(m.__egluToFrame); return undefined; } });
+  await w.run('chrome.tabs').sendMessage(4, { type: 'OPEN', url: 'https://sign-in.invalid/' });
+  check('a message for a tab showing the extension\'s own page is handed to that page',
+    handed.length === 1 && handed[0].tabId === 4 && handed[0].urls.includes(app), JSON.stringify(handed));
+  await w.run('chrome.tabs').sendMessage(5, { type: 'OPEN' });
+  check('one for a website\'s tab goes to its content scripts alone', handed.length === 1, JSON.stringify(handed));
+  const quiet = world({ background: true, prototype: true, namespaces: { tabs: tabs(), webNavigation: { getAllFrames: async () => [] } },
+    reply: (m) => { if (m && m.__egluToFrame) handed.push(m.__egluToFrame); return undefined; } });
+  await quiet.run('chrome.tabs').sendMessage(4, { type: 'OPEN' });
+  check('the tab\'s own address is enough when its frames don\'t list it', handed.length === 2 && handed[1].urls.includes(app), JSON.stringify(handed));
+
+  // The page in that tab takes it; the same page in another tab doesn't.
+  const page = (tabId) => {
+    const seen = [];
+    const p = world({ page: '/app.html#/login', prototype: true,
+      reply: (m) => m && m.__egluCall && m.__egluCall.method === 'getCurrent' ? { value: { id: tabId } } : undefined });
+    p.run('chrome.runtime.onMessage').addListener((m) => { seen.push(m); });
+    return { p, seen };
+  };
+  const inTab = page(4), elsewhere = page(6);
+  const sender = { id, url: 'chrome-extension://' + id + '/bg.js' };
+  for (const { p } of [inTab, elsewhere]) p.chrome.runtime.onMessage.deliver({ __egluToFrame: { tabId: 4, urls: [app], message: { type: 'OPEN' } } }, sender);
+  await tick(50);
+  check('the tab\'s own page hears it', inTab.seen.some((m) => m && m.type === 'OPEN'), JSON.stringify(inTab.seen));
+  check('the same page in another tab doesn\'t', !elsewhere.seen.some((m) => m && m.type === 'OPEN'), JSON.stringify(elsewhere.seen));
+}
+
+// The same, end to end over the pages' channel, which is how a tab's own
+// page hears the worker: WebKit brings it nothing the worker sends.
+{
+  const id = 'abcdefghijklmnopabcdefghijklmnop';
+  const app = 'chrome-extension://' + id + '/app.html#/login';
+  const tabs = { sendMessage: async () => undefined, get: async (tabId) => ({ id: tabId, url: app }) };
+  const worker = world({ background: true, channel: true, prototype: true, page: '/bg.js', namespaces: { tabs, webNavigation: { getAllFrames: async () => [] } } });
+  const page = (tabId, answer) => {
+    const seen = [];
+    const p = world({ channel: true, prototype: true, page: '/app.html#/login',
+      reply: (m) => m && m.__egluCall && m.__egluCall.method === 'getCurrent' ? { value: { id: tabId } } : undefined });
+    p.run('chrome.runtime.onMessage').addListener((m, sender, respond) => { seen.push(m); if (answer) { respond(answer); } });
+    return seen;
+  };
+  const inTab = page(4), elsewhere = page(6);
+  await tick(30);
+  const asked = Date.now();
+  const reply = await worker.run('chrome.tabs').sendMessage(4, { type: 'OPEN', url: 'https://sign-in.invalid/' });
+  await tick(30);
+  check('over the channel, the page in the tab named hears it', inTab.some((m) => m && m.type === 'OPEN'), JSON.stringify(inTab));
+  check('the same page in another tab doesn\'t', !elsewhere.some((m) => m && m.type === 'OPEN'), JSON.stringify(elsewhere));
+  check('and the sender isn\'t kept waiting when it answers nothing', reply === undefined && Date.now() - asked < 2000, String(Date.now() - asked));
+  const answering = page(7, 'from the page');
+  await tick(30);
+  const t7 = { sendMessage: async () => undefined, get: async (tabId) => ({ id: tabId, url: app }) };
+  const worker7 = world({ background: true, channel: true, prototype: true, page: '/bg.js', namespaces: { tabs: t7, webNavigation: { getAllFrames: async () => [] } } });
+  const answered = await worker7.run('chrome.tabs').sendMessage(7, { type: 'ASK' });
+  check('a page\'s answer comes back to the worker', answered === 'from the page' && answering.some((m) => m && m.type === 'ASK'), String(answered));
+}
+
+// A frame in a website has no pages' channel. Its native answer still
+// counts while pages on that channel say they have nothing to answer.
+{
+  const id = 'abcdefghijklmnopabcdefghijklmnop';
+  const app = 'chrome-extension://' + id + '/embedded.html';
+  const frame = world({ channel: true, prototype: true, page: '/embedded.html',
+    extra: { window: { top: { location: { origin: 'https://example.com' } } } },
+    reply: (m) => m && m.__egluCall && m.__egluCall.method === 'getCurrent' ? { value: { id: 8 } } : undefined });
+  frame.run('chrome.runtime.onMessage').addListener((m, sender, respond) => {
+    setTimeout(() => respond(m.empty ? undefined : 'from the frame'), 600);
+    return true;
+  });
+  const worker = world({ background: true, channel: true, prototype: true, page: '/bg.js',
+    namespaces: {
+      tabs: { sendMessage: async () => undefined, get: async (tabId) => ({ id: tabId, url: 'https://example.com' }) },
+      webNavigation: { getAllFrames: async () => [{ frameId: 0, url: 'https://example.com' }, { frameId: 1, url: app }] },
+    },
+    reply: (m) => m && m.__egluToFrame
+      ? frame.chrome.runtime.onMessage.deliver(m, { id, url: 'chrome-extension://' + id + '/bg.js' }) : undefined });
+  const answer = await worker.run('chrome.tabs').sendMessage(8, { ask: true });
+  check('a framed page\'s native answer is waited for beyond the channel\'s first moment', answer === 'from the frame', String(answer));
+  const started = Date.now();
+  const empty = await worker.run('chrome.tabs').sendMessage(8, { empty: true });
+  check('a framed page\'s empty native answer is waited for too', empty === null && Date.now() - started >= 600,
+    String(empty) + ' in ' + (Date.now() - started) + ' ms');
 }
 
 // What WebKit lacks, filled in.

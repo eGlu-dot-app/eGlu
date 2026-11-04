@@ -113,6 +113,13 @@ final class Extensions: NSObject, ObservableObject {
     private var checked: [String: (version: String, result: ExtensionTrial.Checked)] = [:]
     /// The version being tried, by id.
     private var checking: [String: String] = [:]
+    /// What reading each extension's code found (notes), by id, for the
+    /// version and the APIs missing it was read against; and the reading
+    /// under way. A password manager's scripts run to megabytes, and read
+    /// on the main thread, once a space, they held the browser for
+    /// seconds as it loaded.
+    private var scanned: [String: (key: String, notes: [String])] = [:]
+    private var scanning: [String: (key: String, attempt: UUID)] = [:]
     /// The errors already put in the records, by "space/id": a short
     /// fingerprint of each, never its words, until the context unloads.
     private var recorded: [String: Set<String>] = [:]
@@ -539,6 +546,7 @@ final class Extensions: NSObject, ObservableObject {
             #endif
         }
         record(seen, item.id, in: space)
+        if contexts[space]?[item.id] != nil { readCode(of: item) }
         if seen.start == .checking, let context = contexts[space]?[item.id] {
             startBackground(of: context, item, in: space)
         }
@@ -725,7 +733,11 @@ final class Extensions: NSObject, ObservableObject {
         seen.cookiesKeptBack = manifest.permissions.contains("cookies")
         let missing = missing(for: manifest, package)
         lacking[id] = missing
-        seen.mayNotWork = Self.notes(in: archive, manifest, missing: missing)
+        // Read away from the main thread once it has loaded (readCode).
+        if let version = installed.first(where: { $0.id == id })?.version, let done = scanned[id],
+           done.key == Self.scanKey(version, missing) {
+            seen.mayNotWork = done.notes
+        }
         // On the list of those tried by hand, for its version.
         if let item = installed.first(where: { $0.id == id }), item.source == .store,
            let tried = ExtensionTried.shipped.entry(for: id, version: item.version) {
@@ -762,8 +774,41 @@ final class Extensions: NSObject, ObservableObject {
         return missing
     }
 
+    private static func scanKey(_ version: String, _ missing: Set<String>) -> String {
+        version + "|" + missing.sorted().joined(separator: ",")
+    }
+
+    /// Its code read for what it reaches for (notes), off the main thread,
+    /// once for its version and what it lacks; what was found goes to every
+    /// space it is loaded in.
+    private func readCode(of item: Installed) {
+        guard let manifest = manifests[item.id], let missing = lacking[item.id] else { return }
+        let key = Self.scanKey(item.version, missing)
+        let found = { [weak self] (notes: [String]) in
+            guard let self else { return }
+            for space in self.contexts.keys where self.contexts[space]?[item.id] != nil {
+                self.update(item.id, in: space) { $0.mayNotWork = notes }
+            }
+        }
+        if let done = scanned[item.id], done.key == key { return found(done.notes) }
+        guard scanning[item.id]?.key != key else { return }
+        let attempt = UUID()
+        scanning[item.id] = (key, attempt)
+        let file = Self.package(item.id, item.version)
+        Task {
+            let notes = await Task.detached(priority: .utility) {
+                (try? Data(contentsOf: file)).map { Self.notes(in: $0, manifest, missing: missing) } ?? []
+            }.value
+            // Updated, or read against a newer table, meanwhile: that reading wins.
+            guard scanning[item.id]?.attempt == attempt else { return }
+            scanning[item.id] = nil
+            scanned[item.id] = (key, notes)
+            found(notes)
+        }
+    }
+
     /// What its code reaches for, untested, that nothing here answers.
-    private static func notes(in archive: Data, _ manifest: ExtensionManifest, missing: Set<String>) -> [String] {
+    nonisolated private static func notes(in archive: Data, _ manifest: ExtensionManifest, missing: Set<String>) -> [String] {
         var notes: [String] = []
         for file in manifest.files.map(ExtensionPreparation.normalized) where file.hasSuffix(".js") {
             guard let source = ZipFile.file(in: archive, matching: { ExtensionPreparation.normalized($0) == file }) else { continue }
@@ -779,13 +824,12 @@ final class Extensions: NSObject, ObservableObject {
         guard ExtensionTable.shared.table == nil, await ExtensionTable.shared.measured() != nil else { return }
         for item in installed {
             guard let space = contexts.first(where: { $0.value[item.id] != nil })?.key, let context = contexts[space]?[item.id],
-                  let manifest = manifests[item.id], let archive = try? Data(contentsOf: Self.package(item.id, item.version))
+                  let manifest = manifests[item.id]
             else { continue }
             let missing = missing(for: manifest, context.webExtension)
             lacking[item.id] = missing
-            let notes = Self.notes(in: archive, manifest, missing: missing)
+            readCode(of: item)
             for space in contexts.keys where contexts[space]?[item.id] != nil {
-                update(item.id, in: space) { $0.mayNotWork = notes }
                 // Its errors so far, read again against what it lacks now.
                 if let context = contexts[space]?[item.id] { errorsChanged(context, item.id, in: space) }
             }
@@ -1409,7 +1453,8 @@ final class Extensions: NSObject, ObservableObject {
             defer { busy = nil }
             do {
                 let crx = try await download(id)
-                let archive = try CRXFile.archive(of: crx, id: id, fromStore: true)
+                // Its signature checked over every byte: off the main thread.
+                let archive = try await Task.detached(priority: .userInitiated) { try CRXFile.archive(of: crx, id: id, fromStore: true) }.value
                 try await offer(archive, id: id, source: .store, in: window, space: space, startingAccess: access)
             } catch {
                 tell(error, in: window)
@@ -1508,9 +1553,11 @@ final class Extensions: NSObject, ObservableObject {
     @discardableResult
     func keep(_ archive: Data, id: String, name: String, version: String, source: Installed.Source,
                       access: Installed.SiteAccess, spaces: [UUID], granted: [String]?, folder: String? = nil) throws -> Task<Bool, Never> {
-        // A new package, even at the same version (Reload): its pages tried
-        // afresh, and its worker too at the next launch.
+        // A new package, even at the same version (Reload): its code read
+        // and pages tried afresh, and its worker too at the next launch.
         forgetCheck(id)
+        scanned[id] = nil
+        scanning[id] = nil
         // And its icon read again, which a new version may have changed.
         icons[id] = nil
         iconless.remove(id)

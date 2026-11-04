@@ -144,8 +144,12 @@ extension ExtensionTrial {
             // element) are no failure of eGlu's.
             try? await Task.sleep(for: .milliseconds(1500))
             let files = Set(scripts.flatMap(\.scripts).map(ExtensionPreparation.normalized))
+            // Not one that comes of the page being in no tab (copysOwn):
+            // NordPass's content script connects to its worker, which a
+            // page in no tab can't, and in use its pages are all in tabs.
             let theirs = errors(since: before).filter { error in
-                ExtensionError.place(in: error.localizedDescription).map { files.contains(ExtensionPreparation.normalized($0.file)) } ?? false
+                !Self.copysOwn(error.localizedDescription)
+                    && ExtensionError.place(in: error.localizedDescription).map { files.contains(ExtensionPreparation.normalized($0.file)) } ?? false
                     && ExtensionError.problem(in: error.localizedDescription, missing: missing) != nil
             }
             checked.testPage = loaded == nil ? .timedOut : theirs.isEmpty ? .passed : .failed

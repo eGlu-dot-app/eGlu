@@ -4,6 +4,11 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+- On the Mac, reloading an extension at the same version reads its changed scripts again for compatibility warnings, and messages to an extension's page embedded in a website wait for its reply.
+- On the Mac, adding an extension or opening one for the first time no longer holds the whole browser still while eGlu reads its code: for a password manager's megabytes of scripts that took many seconds, once for each space it was on.
+- On the Mac, an extension's popup is as wide as its page: a long name, as Grammarly's, is cut short in its header and no longer widens the popup past the page beside a band of empty glass.
+- On the Mac, an extension whose scripts connect to its background, as NordPass's do, is no longer marked “Some Features Don't Work”: eGlu's own check runs them on a page in no tab, which can't connect, and now leaves that out.
+- On the Mac, an extension's own page in a tab hears the messages its background sends to that tab, as in Chrome. NordPass's sign-in stopped at Continue, its email field greyed out, and now goes on to NordAccount.
 - Pinned tabs come in two tiers on the Mac and iPad. Under the pinned tiles, the space's Bookmarks bar folder is a list of rows, its folders opening in place at any depth. A row opens a tab of its own that stays in the bar instead of joining the other tabs; gone on to another page, its row shows the bookmark's icon, a slash and the page it is on now. Closing it closes the tab and keeps the bookmark. With the tabs along the top, the bar is behind a bookmark button beside the pinned tiles. On iPhone, the dock and the pinned tabs' list keep only the pinned tiles.
 - The sidebar's Bookmarks row is now Other Bookmarks and leaves the Bookmarks bar out, as the bookmarks row along the top (⇧⌘B) now does too. Importing bookmarks puts the file's bookmarks bar (Chrome's, or Safari's Favorites) in the space's Bookmarks bar, and Chrome's Other bookmarks at the top.
 - On the Mac and iPad, resting the pointer on a pinned tile or a Bookmarks bar row shows its whole name, Back to Pinned Address while it is open, and Open in Split View, which opens its page beside the tab on screen.
