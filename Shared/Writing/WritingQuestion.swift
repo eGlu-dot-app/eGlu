@@ -20,6 +20,18 @@ struct WritingQuestion: View {
 
     @State private var otherApps = false
 
+    /// The grey of the words under the heading. On iPad and iPhone the
+    /// system's secondary grey is 3.4:1 on white, under the 4.5:1 text
+    /// needs; Palette.muted is the app's own grey made for that. The Mac's
+    /// sheet keeps the system's.
+    private static var note: Color {
+        #if os(iOS)
+        Palette.muted
+        #else
+        Color.secondary
+        #endif
+    }
+
     var body: some View {
         VStack(spacing: 16) {
             Image(systemName: "character.cursor.ibeam")
@@ -30,19 +42,19 @@ struct WritingQuestion: View {
                 .font(.title2.bold())
                 .multilineTextAlignment(.center)
             Text("Harper, a grammar checker, underlines mistakes in what you type in pages and suggests fixes. It works on this device, in English only, and sends nothing anywhere.")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Self.note)
                 .multilineTextAlignment(.center)
             if offersOtherApps {
                 Toggle("In other apps too, such as Mail and Notes", isOn: $otherApps)
                 if otherApps {
                     Text("eGlu will ask for Accessibility, which lets it read the field you type in.")
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Self.note)
                 }
             }
             Text("You can change this in Settings › Writing.")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Self.note)
             if showsButtons {
                 HStack(spacing: 12) {
                     Button("Not Now") {
