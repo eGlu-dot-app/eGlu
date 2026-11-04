@@ -1505,6 +1505,7 @@ final class Page: NSObject {
             for (let node = document.elementFromPoint(x, y), first = true; node; node = node.parentElement, first = false) {
                 if (first && drawn.test(node.tagName)) sure = false;
                 const style = getComputedStyle(node);
+                if (Number(style.opacity) < 1) sure = false;
                 if (style.backgroundImage !== 'none') sure = false;
                 const parts = /^rgba?\\(([^)]*)\\)$/.exec(style.backgroundColor);
                 if (!parts) {
@@ -1512,7 +1513,13 @@ final class Page: NSObject {
                     continue;
                 }
                 const [r, g, b, a = 1] = parts[1].split(/[\\s,\\/]+/).filter(Boolean).map(Number);
-                if (a >= 0.99) return { rgb: [r, g, b], sure };
+                if (a >= 0.99) {
+                    // Under a box faded by its opacity, it shows mixed with what is behind.
+                    for (let up = node.parentElement; up; up = up.parentElement) {
+                        if (Number(getComputedStyle(up).opacity) < 1) sure = false;
+                    }
+                    return { rgb: [r, g, b], sure };
+                }
                 if (a > 0.01) sure = false;
             }
             return null;
