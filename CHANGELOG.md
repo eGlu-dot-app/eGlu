@@ -4,6 +4,8 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+## 1.1.1
+
 - On the iPhone Duo closed, the page runs on under the strip beside the screen to its edge, its pictures, colours and backgrounds seen through the strip's glass, where a stretched picture of its edge used to be. Text wraps at the strip's edge. Buttons, links and fields slide out from under the strip's status bar and buttons as the page scrolls towards them, and back where the strip is empty; icons side by side move together, keeping their gaps. What a page floats or keeps in place over itself (a chat button, a floating button, a sticky bar, a menu, a sheet) stays inside the screen beside the strip, and so do boxes that hold buttons and fields (a card, a tab list, a search box). Rows of one list keep their buttons in one column. A page's header keeps all its buttons clear of the strip, its last one too (GitHub's avatar), even when you touch the page as it comes in. Where the system doesn't say where the strip's buttons stand, everything that can be pressed keeps clear of the whole strip. Nothing on the page is laid out again while it scrolls or a finger is on it.
 - The pinned tab on screen glows anew, on iPhone, iPad and Mac: its icon's strongest colour at the core and the space's colour at the edge, blended in OKLCh so the colours stay strong where they meet instead of going grey, and the core drifts round the tile, far enough now to be seen. On iPad the other pinned tiles are as the Mac's: a light ground with a thin line round it and the icon as it is, with glass only under the one on screen and the one under the pointer. In the iPhone Duo's list of pinned tabs, only the one on screen and the one under the finger glow; the others show their icons as they are.
 - eGlu's icon is new: the globe seen through fluted glass, whose ribs bend it into the crescents on its left and clear towards the cursor, the globe a little out of focus, more so on the left. In light, white with the globe's blues blurred behind it; in dark, near-black with misty corners. The cursor is clear Liquid Glass in front, white in both.
@@ -15,17 +17,24 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 - On the Mac, dragging the sidebar's edge resizes it smoothly instead of making the sidebar jump back and forth.
 - On the Mac, playing videos and supported calls open Picture in Picture when you switch tabs or spaces, as they do when you switch apps, and return when you come back to the page. Settings › General › Automatic Picture in Picture turns this off without changing manually opened PiP.
 - Site icons stay available after fully quitting and reopening eGlu, even when the system clears its temporary caches. Existing icons carry over without downloading them again.
-- On iPhone and iPad, full-height web apps resize above a docked keyboard so their fields and controls are not hidden behind it. Typing an address and floating iPad keyboards leave the page's size unchanged.
 - Release signing credentials can be restored at session runtime for TestFlight and iCloud-enabled Mac DMG releases, without saving plaintext private keys to persistent storage or snapshots.
+- The app icon's globe and cursor are larger and sit on the icon grid: the whole mark spans the safe area, 56 points in from each side of an 832-point tile, a little above centre. Its shapes and colours are unchanged.
+- The icons in Settings › App icon, and on the Mac in Settings › General › App Icon, are laid out alike: each globe sits in the middle at the same apparent size as eGlu's, Engineer's a little smaller as its pixels keep to the window's lines, and each pointer sits at its lower right about as large as eGlu's cursor, the pen-tool nib and the ballpoint pen a little larger; the pen and the spray can still run off the corner. Signal's pointer sits in its gap in the globe again, and Engineer, Signal and Vista keep every part on one grid of pixels, as drawn. Their drawings and colours are unchanged.
+- The Engineer icon's screen sits inside the window's frame, with rounded corners and a thin edge, as a terminal app's does, the globe and the I-beam lower in it.
+
+### Added
+
+- Native Mac, iPad and iPhone feature videos show tab layouts, Split View, spaces, the command bar, bookmarks, little windows, History, developer tools and Trackpad View without added captions or title cards. Recorded with isolated synthetic content; the existing App Store previews are unchanged.
+
+## 1.1.0
+
+- On iPhone and iPad, full-height web apps resize above a docked keyboard so their fields and controls are not hidden behind it. Typing an address and floating iPad keyboards leave the page's size unchanged.
 - Safience is now eGlu, on iPhone, iPad and Mac. Your spaces, bookmarks, tabs, sign-ins, extensions and iCloud sync carry over as they are: the app's identifier and the folders it keeps them in are unchanged.
 - eGlu's home on GitHub is now github.com/eGlu-dot-app/eGlu, and its old addresses lead there. On the Mac, the copy downloaded from the website looks for updates there.
 - A new app icon, eGlu, on iPhone, iPad and Mac. On iPhone and iPad, the icon before it is Globe in Settings › App icon; whoever chose another icon keeps it.
 - Every menu, button, message and setting on iPhone, iPad and Mac now goes through the app's String Catalog, ready to be translated; the Mac's Settings window and the sentences built from pieces among them. English only for now: the Korean that was there stays, and nothing new is translated yet.
 - The command bar searches only the space you are in: another space's tabs no longer show there, as its history and bookmarks already didn't. Other spaces still show by name, to switch to.
 - Updated the app icon colors, shadow and specular lighting from the local Icon Composer design.
-- The app icon's globe and cursor are larger and sit on the icon grid: the whole mark spans the safe area, 56 points in from each side of an 832-point tile, a little above centre. Its shapes and colours are unchanged.
-- The icons in Settings › App icon, and on the Mac in Settings › General › App Icon, are laid out alike: each globe sits in the middle at the same apparent size as eGlu's, Engineer's a little smaller as its pixels keep to the window's lines, and each pointer sits at its lower right about as large as eGlu's cursor, the pen-tool nib and the ballpoint pen a little larger; the pen and the spray can still run off the corner. Signal's pointer sits in its gap in the globe again, and Engineer, Signal and Vista keep every part on one grid of pixels, as drawn. Their drawings and colours are unchanged.
-- The Engineer icon's screen sits inside the window's frame, with rounded corners and a thin edge, as a terminal app's does, the globe and the I-beam lower in it.
 - A pinned tab on screen glows in its icon's own colours, each where it is in the icon (Instagram's yellow to purple, Google's four), and colours meet without a dull band between them; a black, white or grey icon glows in the space's colour. On dark glass the glow adds light instead of greying.
 - On iPhone, the row the finger is on in the pinned tabs' list glows as its tile does, and the tab on screen's while the finger is on none.
 - Pinned tabs' icons are as large as each other to the eye: a disc a little larger than a square, a wide mark wider and shorter, a plain mark such as GitHub's or ChatGPT's no longer smaller than the rest, and none past its tile's room for it.
@@ -46,14 +55,12 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 - On the Mac, tab managers and other extensions with access to tabs see every tab's address, title and icon, as in Chrome; a website an extension names can send it messages (claude.ai signing in Claude in Chrome); and an extension's button can ask for more access after a pause, as Figma's does.
 - On the Mac, extensions can sign in through their provider's page: the sign-in opens in a tab in front and closes once you're signed in, and one that renews its sign-in by itself does so out of sight, with the space's sign-ins. Extensions that need a Google account signed in to Chrome still can't.
 - On the Mac, an extension's rule that sends a site to one of its own pages works: a blocker's block page shows in the tab instead of the site. uBlock Origin Lite no longer turns every page blank, and Tampermonkey's install page opens from a script's link; a rule WebKit can't take is left out, and the extension's other rules still work.
-
 - On iPhone and iPad, website dialogs now reply safely when dismissed without a button tap or when they cannot be shown, preventing a WebKit crash.
 - Count and log history clearings that cannot be read from storage.
 - Track and log workspace save failures until a later save succeeds.
 
 ### Added
 
-- Native Mac, iPad and iPhone feature videos show tab layouts, Split View, spaces, the command bar, bookmarks, little windows, History, developer tools and Trackpad View without added captions or title cards. Recorded with isolated synthetic content; the existing App Store previews are unchanged.
 - On the Mac, the page menu (…) has the page's zoom: type a size from 50 to 300 percent, or step through Safari's sizes. ⌘+, ⌘− and ⌘0 show the size they came to in a toast ("Zoomed In to 125%"), and say so when the page can't zoom any further.
 - Settings › Writing › Rules is a page of its own, a step below Writing, with a search field that finds rules by their names, what they check and their group. Writing shows how many are on. On iPhone, iPad and Mac; on the Mac, Back (⌘[) returns to Writing.
 - On the Mac, Settings › General › App Icon offers the icons iPhone and iPad have, in light and dark. The one you choose shows in the Dock and in About eGlu at once, and in the Dock after eGlu quits while it is kept there. Finder and Spotlight keep showing eGlu's own icon: macOS lets an app change only its Dock tile. "change icon" in the command bar goes there.
