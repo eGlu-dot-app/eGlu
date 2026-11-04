@@ -4,6 +4,7 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+- eGlu's icon: the cursor is black inside a white border, in light and in dark, still in Liquid Glass. In the tinted and clear looks it stays white.
 - On iPhone and iPad, a header or footer the page fades with opacity no longer sets the bars' colour as if it were solid: there the bars take a picture once the page is still, so they match what shows.
 - On the iPhone Duo, a tab split with the one on screen no longer keeps making room for the strip once the Duo opens and shows both side by side.
 - On the iPhone Duo closed, a paragraph inside a block of text that wraps beside the strip no longer ends a strip's width short of it twice; a card the page keeps to a width of its own is no longer widened to clear the strip; and once the page has been touched, a header's buttons no longer push the box beside them sideways.
