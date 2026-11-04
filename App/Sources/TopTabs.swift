@@ -23,9 +23,10 @@ struct TopTabs: View {
 
     var body: some View {
         let space = session.workspace.space(window.spaceID)
+        let barTabs = space?.barTabs ?? [:]
         // Without the pinned tabs this device hides (Settings › Pinned Tabs).
         let row = TabRow(tabs: (space?.tabs ?? []).filter(session.preferences.shows), splits: space?.splits ?? [],
-                         current: window.tabID, barTabs: Set(space?.barTabs.values.map(\.id) ?? []))
+                         current: window.tabID, barTabs: Set(barTabs.values.map(\.id)))
         let others = session.workspace.spaces.filter { $0.id != window.spaceID }
         HStack(spacing: Side.gap) {
             HStack(spacing: 2) {
@@ -71,7 +72,7 @@ struct TopTabs: View {
                 // A pinned or bookmarks bar tab on screen has the address too, first in the
                 // row: where the page is, and its …, whichever kind of tab it is.
                 let pinnedOnScreen = row.pinned.first { $0.id == window.tabID }
-                    ?? space?.barTabs.values.first { $0.id == window.tabID }
+                    ?? barTabs.values.first { $0.id == window.tabID }
                 let address = pinnedOnScreen != nil || row.others.contains { $0.id == window.tabID }
                 let widths = TabWidths.widths(count: row.others.count + (pinnedOnScreen == nil ? 0 : 1), room: box.size.width,
                                               gap: 4, address: address)
@@ -161,7 +162,9 @@ private struct TopBarBookmarks: View {
     @State private var hovering = false
 
     var body: some View {
-        let selected = space.barTabs.values.contains { $0.id == window.tabID }
+        // The bar's tabs once for the button and all the rows in its popover, not by each.
+        let map = space.barMap
+        let selected = map.tabs.values.contains { $0.id == window.tabID }
         let shape = RoundedRectangle(cornerRadius: TopTab.corner, style: .continuous)
         Button {
             act(.hideTabHover)
@@ -173,7 +176,7 @@ private struct TopBarBookmarks: View {
                 .frame(width: Side.control + 4, height: Side.control)
                 // As under the pinned tiles beside it: the glyph is as tall as their icons.
                 .overlay {
-                    OpenDot(shown: !space.barTabs.isEmpty, size: 3)
+                    OpenDot(shown: !map.tabs.isEmpty, size: 3)
                         .offset(y: OpenDot.under(icon: 16, size: 3))
                 }
                 .background {
@@ -190,12 +193,13 @@ private struct TopBarBookmarks: View {
         .accessibilityLabel("Bookmarks Bar")
         .accessibilityAddTraits(selected ? .isSelected : [])
         .popover(isPresented: $showing, arrowEdge: .top) {
+            let canSplit = BarBookmarkRow.canSplit(window, in: space, map: map)
             ScrollView {
                 VStack(spacing: 2) {
                     ForEach(Bookmarks.rows(of: space.bar?.children ?? [], opening: open,
-                                           keeping: Set(space.barTabs.keys)), id: \.item.id) { row in
-                        BarBookmarkRow(window: window, space: space, item: row.item, depth: row.depth,
-                                       open: open.contains(row.item.id), source: .window, toggle: {
+                                           keeping: Set(map.tabs.keys)), id: \.item.id) { row in
+                        BarBookmarkRow(window: window, space: space, map: map, canSplit: canSplit, item: row.item,
+                                       depth: row.depth, open: open.contains(row.item.id), source: .window, toggle: {
                             withAnimation(.bar) {
                                 if !open.insert(row.item.id).inserted { open.remove(row.item.id) }
                             }

@@ -228,6 +228,63 @@ final class BookmarksBarTests: XCTestCase {
         XCTAssertEqual(w.spaces[0].bar?.children?.map(\.label), ["Slack", "Docs", "Linear"])
     }
 
+    /// The helpers that take the bar worked out once (`barMap`, for a list
+    /// of rows) answer as the ones that work it out for themselves, for
+    /// every kind of tab, and again after the tabs and bookmarks change.
+    func testTheBarMapAgreesWithTheLookupsOneByOne() throws {
+        var (w, _, slackMark, folder, notionMark) = try spaceWithBar()
+        // The same page in the bar twice, each a bookmark of its own.
+        let again = Bookmark(title: "Slack again", url: slack)
+        w.spaces[0].bookmarks[1].children?.append(again)
+        let outside = w.spaces[0].bookmarks[0].id
+        w.spaces[0].tabs.insert(TabRecord(url: figma, title: "Pinned", pinned: figma, bookmark: slackMark), at: 0)
+        w.spaces[0].tabs += [
+            TabRecord(url: slack, title: "Slack", bookmark: slackMark),
+            TabRecord(url: elsewhere, title: "Slack, second", bookmark: slackMark),
+            TabRecord(url: elsewhere, title: "Notion, gone on", bookmark: notionMark),
+            TabRecord(url: URL(string: "https://app.slack.com/client/?redirect=1")!, title: "Again", bookmark: again.id),
+            TabRecord(url: elsewhere, title: "Outside", bookmark: outside),
+            TabRecord(url: notion, title: "Gone", bookmark: UUID()),
+        ]
+        func tab(_ title: String) throws -> TabRecord {
+            try XCTUnwrap(w.spaces[0].tabs.first { $0.title == title })
+        }
+        func agree(line: UInt = #line) {
+            let space = w.spaces[0]
+            let map = space.barMap
+            XCTAssertEqual(map.tabs, space.barTabs, line: line)
+            for tab in space.tabs {
+                XCTAssertEqual(space.isInBar(tab, in: map), space.isInBar(tab), tab.title, line: line)
+                XCTAssertEqual(space.home(of: tab, in: map), space.home(of: tab), tab.title, line: line)
+                XCTAssertEqual(space.isAwayFromHome(tab, in: map), space.isAwayFromHome(tab), tab.title, line: line)
+            }
+        }
+        agree()
+        // And they say something: the first tab for a bookmark, past a pinned one; a folder's; the second of a page.
+        var map = w.spaces[0].barMap
+        XCTAssertEqual(map.tabs[slackMark]?.title, "Slack")
+        XCTAssertEqual(map.tabs[again.id]?.title, "Again")
+        XCTAssertEqual(Set(map.tabs.keys), [slackMark, notionMark, again.id])
+        XCTAssertTrue(w.spaces[0].isAwayFromHome(try tab("Notion, gone on"), in: map))
+        XCTAssertFalse(w.spaces[0].isAwayFromHome(try tab("Again"), in: map), "what the site adds is the same page")
+        XCTAssertEqual(w.spaces[0].home(of: try tab("Notion, gone on"), in: map), notion)
+        XCTAssertEqual(w.spaces[0].home(of: try tab("Pinned"), in: map), figma)
+        XCTAssertNil(w.spaces[0].home(of: try tab("Slack, second"), in: map))
+        XCTAssertNil(w.spaces[0].home(of: try tab("Outside"), in: map))
+
+        // The first Slack tab closed, the folder taken out of the bar, a bookmark's address changed.
+        w.spaces[0].tabs.removeAll { $0.title == "Slack" }
+        w.spaces[0].bookmarks[1].children?.removeAll { $0.id == folder }
+        XCTAssertTrue(Bookmarks.update(again.id, in: &w.spaces[0].bookmarks) { $0.url = elsewhere })
+        agree()
+        map = w.spaces[0].barMap
+        XCTAssertEqual(map.tabs[slackMark]?.title, "Slack, second")
+        XCTAssertNil(map.tabs[notionMark])
+        XCTAssertFalse(w.spaces[0].isInBar(try tab("Notion, gone on"), in: map))
+        XCTAssertEqual(w.spaces[0].home(of: try tab("Again"), in: map), elsewhere)
+        XCTAssertTrue(w.spaces[0].isAwayFromHome(try tab("Again"), in: map))
+    }
+
     func testAnOldFileWithoutTheLinkStillReads() throws {
         let json = #"{"id":"6B4C3E1A-1111-4B0B-9A77-2E1E9B9C0001","title":"A","shown":0,"url":"https://example.com/"}"#
         let tab = try JSONDecoder().decode(TabRecord.self, from: Data(json.utf8))

@@ -180,7 +180,10 @@ public struct Space: Codable, Identifiable, Equatable, Sendable {
     /// bookmark has left the bar, here or on another device, is one of the
     /// others again.
     public var barTabs: [UUID: TabRecord] {
-        let inBar = Bookmarks.barIDs(in: bookmarks)
+        Self.barTabs(of: tabs, inBar: Bookmarks.barIDs(in: bookmarks))
+    }
+
+    private static func barTabs(of tabs: [TabRecord], inBar: Set<UUID>) -> [UUID: TabRecord] {
         var found: [UUID: TabRecord] = [:]
         for tab in tabs where !tab.isPinned {
             guard let bookmark = tab.bookmark, inBar.contains(bookmark), found[bookmark] == nil else { continue }
@@ -189,9 +192,47 @@ public struct Space: Codable, Identifiable, Equatable, Sendable {
         return found
     }
 
+    /// `barTabs` and the addresses of the bar's bookmarks, worked out once
+    /// for a list that asks after each of its rows (the sidebar's bar rows,
+    /// the bar's pane): `isInBar`, `home(of:)` and `isAwayFromHome` each
+    /// walk the bar and every tab again, so a row that asked them for
+    /// itself made a long bar slow. A value for one view update, never
+    /// kept: the space's tabs and bookmarks change under it.
+    public struct BarMap: Equatable, Sendable {
+        /// Its tabs open from the bar, by their bookmark, as `barTabs`.
+        public let tabs: [UUID: TabRecord]
+        /// The address of each bookmark in the bar, by its id: where its
+        /// tab goes back to.
+        let homes: [UUID: URL]
+    }
+
+    public var barMap: BarMap {
+        var inBar: Set<UUID> = []
+        var homes: [UUID: URL] = [:]
+        // Every id at any depth, as Bookmarks.barIDs has them, and each
+        // one's address; for an id there twice, the first's, as
+        // Bookmarks.find finds it.
+        func walk(_ items: [Bookmark]) {
+            for item in items {
+                if inBar.insert(item.id).inserted, let url = item.url { homes[item.id] = url }
+                walk(item.children ?? [])
+            }
+        }
+        walk(bar?.children ?? [])
+        return BarMap(tabs: Self.barTabs(of: tabs, inBar: inBar), homes: homes)
+    }
+
     /// Whether `tab` stands in the bar's row rather than among the others.
     public func isInBar(_ tab: TabRecord) -> Bool {
-        barTabs[tab.bookmark ?? UUID()]?.id == tab.id
+        // Most tabs have no bookmark, and none of those is the bar's: no need to work the bar out for them.
+        guard let bookmark = tab.bookmark else { return false }
+        return barTabs[bookmark]?.id == tab.id
+    }
+
+    /// `isInBar`, from the space's `barMap` worked out already.
+    public func isInBar(_ tab: TabRecord, in map: BarMap) -> Bool {
+        guard let bookmark = tab.bookmark else { return false }
+        return map.tabs[bookmark]?.id == tab.id
     }
 
     /// Its tabs as the list and the row show them, after the pinned tiles
@@ -207,6 +248,13 @@ public struct Space: Codable, Identifiable, Equatable, Sendable {
         if let pinned = tab.pinned { return pinned }
         guard isInBar(tab), let bookmark = tab.bookmark else { return nil }
         return Bookmarks.find(bookmark, in: bookmarks)?.url
+    }
+
+    /// `home(of:)`, from the space's `barMap` worked out already.
+    public func home(of tab: TabRecord, in map: BarMap) -> URL? {
+        if let pinned = tab.pinned { return pinned }
+        guard isInBar(tab, in: map), let bookmark = tab.bookmark else { return nil }
+        return map.homes[bookmark]
     }
 
     /// Tabs whose bookmark is gone from the space altogether let go of it
@@ -227,7 +275,16 @@ public struct Space: Codable, Identifiable, Equatable, Sendable {
     /// fragment (YouTube's ?themeRefresh=1), or https and www., is the same
     /// page still.
     public func isAwayFromHome(_ tab: TabRecord) -> Bool {
-        guard let home = home(of: tab), let url = tab.url else { return false }
+        Self.isAway(tab.url, from: home(of: tab))
+    }
+
+    /// `isAwayFromHome`, from the space's `barMap` worked out already.
+    public func isAwayFromHome(_ tab: TabRecord, in map: BarMap) -> Bool {
+        Self.isAway(tab.url, from: home(of: tab, in: map))
+    }
+
+    private static func isAway(_ url: URL?, from home: URL?) -> Bool {
+        guard let home, let url else { return false }
         func page(_ url: URL) -> String {
             let host = url.host()?.lowercased() ?? ""
             var path = url.path()

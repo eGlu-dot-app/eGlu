@@ -28,9 +28,11 @@ struct SideTabs: View {
 
     var body: some View {
         let space = session.workspace.space(window.spaceID)
+        // The bar's tabs once for all its rows, not by each.
+        let map = space?.barMap
         // Without the pinned tabs this device hides (Settings › Pinned Tabs).
         let row = TabRow(tabs: (space?.tabs ?? []).filter(session.preferences.shows), splits: space?.splits ?? [],
-                         current: window.tabID, barTabs: Set(space?.barTabs.values.map(\.id) ?? []))
+                         current: window.tabID, barTabs: Set(map?.tabs.values.map(\.id) ?? []))
         let others = session.workspace.spaces.filter { $0.id != window.spaceID }
         VStack(spacing: Side.gap) {
             HStack(spacing: 2) {
@@ -62,12 +64,13 @@ struct SideTabs: View {
             }
             ScrollView {
                 VStack(spacing: 2) {
-                    if let space, let bar = space.bar, !(bar.children ?? []).isEmpty {
+                    if let space, let map, let bar = space.bar, !(bar.children ?? []).isEmpty {
+                        let canSplit = BarBookmarkRow.canSplit(window, in: space, map: map)
                         // The bar's rows a group of their own, as far from the rows under them as the Mac's.
                         VStack(spacing: 2) {
-                            ForEach(Bookmarks.rows(of: bar.children ?? [], opening: openBar, keeping: Set(space.barTabs.keys)), id: \.item.id) { entry in
-                                BarBookmarkRow(window: window, space: space, item: entry.item, depth: entry.depth,
-                                               open: openBar.contains(entry.item.id), source: .sidebar, toggle: {
+                            ForEach(Bookmarks.rows(of: bar.children ?? [], opening: openBar, keeping: Set(map.tabs.keys)), id: \.item.id) { entry in
+                                BarBookmarkRow(window: window, space: space, map: map, canSplit: canSplit, item: entry.item,
+                                               depth: entry.depth, open: openBar.contains(entry.item.id), source: .sidebar, toggle: {
                                     withAnimation(.bar) { openBar.formSymmetricDifference([entry.item.id]) }
                                 }, act: act)
                             }
@@ -605,6 +608,11 @@ private struct SideBookmark: View {
 struct BarBookmarkRow: View {
     let window: WindowModel
     let space: Space
+    /// The space's bar tabs, worked out once by the list for all its rows.
+    let map: Space.BarMap
+    /// Whether the tab on screen is one of the others, for Open in Split
+    /// View: the same for every row (`canSplit(_:in:map:)`).
+    let canSplit: Bool
     let item: Bookmark
     let depth: Int
     let open: Bool
@@ -613,8 +621,15 @@ struct BarBookmarkRow: View {
     let act: (BarAction) -> Void
     @State private var hovering = false
 
+    /// Whether the tab on screen is one of the others, which a bookmark can
+    /// open beside in a split, for a list to work out once for its rows.
+    static func canSplit(_ window: WindowModel, in space: Space, map: Space.BarMap) -> Bool {
+        space.tabs.contains { $0.id == window.tabID && !$0.isPinned && !space.isInBar($0, in: map) }
+    }
+
     var body: some View {
-        let tab = space.barTabs[item.id]
+        let tab = map.tabs[item.id]
+        let away = tab.map { space.isAwayFromHome($0, in: map) } ?? false
         let selected = tab?.id == window.tabID && tab != nil
         let inPopover = source == .window
         let shape = inPopover ? Self.popoverRow : AnyShape(RoundedRectangle(cornerRadius: Side.rowCorner, style: .continuous))
@@ -638,7 +653,7 @@ struct BarBookmarkRow: View {
                         }
                     }
                     .frame(width: 16, height: 16)
-                    if let tab, space.isAwayFromHome(tab) {
+                    if let tab, away {
                         // The slash closer to the words than the icon is: "where it is now" is one thing.
                         HStack(spacing: 5) {
                             Text(verbatim: "/")
@@ -697,11 +712,11 @@ struct BarBookmarkRow: View {
             }
             if let tab {
                 Button("Back to Pinned Address", systemImage: "arrow.uturn.backward") { act(.backToPinned(tab.id)) }
-                    .disabled(!space.isAwayFromHome(tab))
+                    .disabled(!away)
                 Button("Close", systemImage: "xmark") { act(.close(tab.id)) }
             }
-            if let url = tab?.url ?? item.url,
-               space.otherTabs.contains(where: { $0.id == window.tabID && $0.id != tab?.id }) {
+            // The tab on screen, when it is one of the others, is never this row's: that one is the bar's.
+            if let url = tab?.url ?? item.url, canSplit {
                 Button("Open in Split View", systemImage: "rectangle.split.2x1") { act(.splitWithPage(url)) }
             }
             Button("Remove from Bookmarks Bar", systemImage: "bookmark.slash", role: .destructive) {

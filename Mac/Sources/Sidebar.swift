@@ -515,11 +515,12 @@ struct BarList: View {
     @State private var open: Set<UUID> = []
 
     var body: some View {
-        let tabs = space.barTabs
-        let rows = Bookmarks.rows(of: bar.children ?? [], opening: open, keeping: Set(tabs.keys))
+        // The bar's tabs once for all its rows, not by each.
+        let map = space.barMap
+        let rows = Bookmarks.rows(of: bar.children ?? [], opening: open, keeping: Set(map.tabs.keys))
         VStack(spacing: 2) {
             ForEach(rows, id: \.item.id) { row in
-                BarRow(model: model, item: row.item, depth: row.depth, tab: tabs[row.item.id], space: space, bar: bar.id,
+                BarRow(model: model, item: row.item, depth: row.depth, map: map, space: space, bar: bar.id,
                        open: open.contains(row.item.id), chose: chose) {
                     withAnimation(.bar) { open.formSymmetricDifference([row.item.id]) }
                 }
@@ -542,8 +543,8 @@ private struct BarRow: View {
     @ObservedObject var model: WindowModel
     let item: Bookmark
     let depth: Int
-    /// Its tab, while it is open.
-    let tab: TabRecord?
+    /// The space's bar tabs, worked out once by the list for all its rows.
+    let map: Space.BarMap
     let space: Space
     let bar: UUID
     let open: Bool
@@ -555,7 +556,14 @@ private struct BarRow: View {
     /// Where the row is in the window, for its card.
     @State private var frame = CGRect.zero
 
+    /// Its tab, while it is open.
+    private var tab: TabRecord? {
+        map.tabs[item.id]
+    }
+
     var body: some View {
+        let tab = tab
+        let away = tab.map { space.isAwayFromHome($0, in: map) } ?? false
         let selected = tab.map { $0.id == model.tabID } ?? false
         let shape = RoundedRectangle(cornerRadius: Metrics.rowCorner, style: .continuous)
         let indent = CGFloat(depth) * 16
@@ -574,7 +582,7 @@ private struct BarRow: View {
                         }
                     }
                     .frame(width: 16, height: 16)
-                    if let tab, space.isAwayFromHome(tab) {
+                    if let tab, away {
                         // The slash closer to the words than the icon is: "where it is now" is one thing.
                         HStack(spacing: 5) {
                             Text(verbatim: "/")
@@ -600,7 +608,7 @@ private struct BarRow: View {
             .buttonStyle(PressReport(pressed: $pressed))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(item.isFolder ? String(localized: "\(item.label), folder")
-                                : tab.flatMap { space.isAwayFromHome($0) ? $0.label : nil } ?? item.label)
+                                : tab.flatMap { away ? $0.label : nil } ?? item.label)
             .accessibilityValue(item.isFolder ? (open ? String(localized: "Open") : String(localized: "Closed"))
                                 : tab != nil ? String(localized: "Open") : "")
             .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
@@ -696,7 +704,7 @@ private struct BarRow: View {
     @ViewBuilder
     private var menu: some View {
         if let tab {
-            TabMenu(model: model, tab: tab)
+            TabMenu(model: model, tab: tab, map: map)
         } else {
             if let url = item.url {
                 Button("Open") { model.openFromBar(item.id) }
@@ -814,9 +822,10 @@ struct PinnedCardView: View {
             return Shown(title: tab.label, tab: PinnedTile.isOpen(tab) ? tab : nil, page: tab.url ?? tab.pinned)
         case .bookmark(let id):
             guard let bookmark = Bookmarks.find(id, in: space.bookmarks) else { return nil }
-            let tab = space.barTabs[id]
+            let map = space.barMap
+            let tab = map.tabs[id]
             // Gone on from its bookmark, where it is now; else the bookmark's own name.
-            let title = tab.flatMap { space.isAwayFromHome($0) ? $0.label : nil } ?? bookmark.label
+            let title = tab.flatMap { space.isAwayFromHome($0, in: map) ? $0.label : nil } ?? bookmark.label
             return Shown(title: title, tab: tab, page: tab?.url ?? bookmark.url)
         }
     }
@@ -1232,11 +1241,16 @@ private struct TailDrop: View {
 struct TabMenu: View {
     @ObservedObject var model: WindowModel
     let tab: TabRecord
+    /// The space's bar tabs, from a row of the bar that has them worked out
+    /// already (BarRow); else worked out here, and only for a tab with a
+    /// bookmark, since one without is never the bar's.
+    var map: Space.BarMap?
 
     var body: some View {
         let session = Session.shared
         let space = session.workspace.spaceID(of: tab.id).flatMap(session.workspace.space)
-        let inBar = space?.isInBar(tab) == true
+        let barMap = map ?? (tab.bookmark == nil ? nil : space?.barMap)
+        let inBar = barMap.flatMap { space?.isInBar(tab, in: $0) } == true
         if tab.isPinned {
             // Where it is pinned, and going back there or pinning it here
             // instead, as the iPhone's pinned button has them.
@@ -1250,11 +1264,11 @@ struct TabMenu: View {
                     .disabled(tab.url == nil)
             }
             Divider()
-        } else if inBar, let bookmark = tab.bookmark {
+        } else if inBar, let bookmark = tab.bookmark, let barMap {
             // The bar's own: going back to its bookmark, or taking it out of the bar.
             Section("In the Bookmarks Bar") {
                 Button("Back to Bookmarked Address") { model.backToPinned(tab.id) }
-                    .disabled(space?.isAwayFromHome(tab) != true)
+                    .disabled(space?.isAwayFromHome(tab, in: barMap) != true)
                 Button("Separate from Bookmarks Bar") { model.separateFromBar(tab.id) }
                 Button("Pin Tab") { model.togglePin(tab.id) }
                 Button("Remove from Bookmarks Bar") { model.removeFromBar(bookmark) }
