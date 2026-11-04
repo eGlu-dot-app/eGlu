@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 import WebKit
 
@@ -16,15 +17,18 @@ import WebKit
 // may refuse one they don't know; that is theirs to decide. Out of the
 // sandbox only: a sandboxed app can't run another's program.
 
-enum ExtensionNative {
-    struct Refused: LocalizedError {
+public enum ExtensionNative {
+    public struct Refused: LocalizedError {
         let why: String
-        var errorDescription: String? { why }
+        public var errorDescription: String? { why }
     }
 
     /// Where Chromium browsers look, per user and for the whole Mac.
     private static var folders: [URL] {
-        let home = FileManager.default.homeDirectoryForCurrentUser
+        folders(home: FileManager.default.homeDirectoryForCurrentUser)
+    }
+
+    static func folders(home: URL) -> [URL] {
         let support = home.appendingPathComponent("Library/Application Support")
         return [
             // eGlu's own first: a host written for it.
@@ -44,12 +48,12 @@ enum ExtensionNative {
     }
 
     /// The program for `name`, if one is registered and lets this extension in.
-    private static func host(_ name: String, for extensionID: String) throws -> URL {
+    static func host(_ name: String, for extensionID: String, folders: [URL]? = nil) throws -> URL {
         guard name.range(of: #"^[a-z0-9_]+(\.[a-z0-9_]+)*$"#, options: .regularExpression) != nil else {
             throw Refused(why: "Invalid native messaging host name")
         }
         let origin = "chrome-extension://\(extensionID)/"
-        for folder in folders {
+        for folder in folders ?? Self.folders {
             let file = folder.appendingPathComponent(name + ".json")
             guard let data = try? Data(contentsOf: file),
                   let manifest = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -69,7 +73,7 @@ enum ExtensionNative {
     }
 
     /// `runtime.sendNativeMessage`: run, send one, read one, stop.
-    static func send(_ message: Any, to name: String, from extensionID: String) async throws -> Any? {
+    public static func send(_ message: Any, to name: String, from extensionID: String) async throws -> Any? {
         let program = try host(name, for: extensionID)
         let pipe = HostPipe(program: program, origin: "chrome-extension://\(extensionID)/")
         try pipe.start()
@@ -80,7 +84,7 @@ enum ExtensionNative {
     /// `runtime.connectNative`: run, and keep the two talking until either
     /// end lets go.
     @MainActor
-    static func connect(_ port: WKWebExtension.MessagePort, from extensionID: String) throws {
+    public static func connect(_ port: WKWebExtension.MessagePort, from extensionID: String) throws {
         guard let name = port.applicationIdentifier else { throw Refused(why: "No host named") }
         let program = try host(name, for: extensionID)
         // A new port is often a worker starting over; the one before may
@@ -135,7 +139,7 @@ enum ExtensionNative {
     /// hosts of ports that have gone are stopped here; a port still
     /// connected keeps its own.
     @MainActor
-    static func stopOrphans() {
+    public static func stopOrphans() {
         for (pipe, port) in Live.pipes.values where port.isDisconnected { pipe.stop() }
     }
 
@@ -155,7 +159,7 @@ enum ExtensionNative {
 }
 
 /// One host program and the framing Chrome uses to talk to it.
-final class HostPipe: @unchecked Sendable {
+public final class HostPipe: @unchecked Sendable {
     /// How long a host that has exited may leave its output open (a child
     /// of its own still holding it) before the connection ends anyway.
     static let exitGrace: TimeInterval = 1.5
@@ -171,8 +175,8 @@ final class HostPipe: @unchecked Sendable {
     private let lock = NSLock()
     /// Held around each use of the input handle, so it is never written once closed.
     private let writing = NSLock()
-    var onMessage: ((Any) -> Void)?
-    var onExit: (() -> Void)?
+    public var onMessage: ((Any) -> Void)?
+    public var onExit: (() -> Void)?
     private var waiters: [(id: Int, continuation: CheckedContinuation<Any?, Error>)] = []
     private var nextWaiter = 0
     private var stopped = false
@@ -183,7 +187,7 @@ final class HostPipe: @unchecked Sendable {
 
     private static var exited: Error { ExtensionNative.Refused(why: "Native host has exited.") }
 
-    init(program: URL, origin: String) {
+    public init(program: URL, origin: String) {
         process.executableURL = program
         process.arguments = [origin]
         process.standardInput = input
@@ -195,7 +199,7 @@ final class HostPipe: @unchecked Sendable {
         _ = fcntl(input.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1)
     }
 
-    func start() throws {
+    public func start() throws {
         output.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let chunk = handle.availableData
             guard let self else { return }
@@ -230,7 +234,7 @@ final class HostPipe: @unchecked Sendable {
         try process.run()
     }
 
-    func stop() {
+    public func stop() {
         lock.lock()
         stopped = true
         lock.unlock()
@@ -246,7 +250,7 @@ final class HostPipe: @unchecked Sendable {
     static let backlogCap = 8 << 20
     private var backlog = 0
 
-    private static func frame(_ message: Any) throws -> Data {
+    static func frame(_ message: Any) throws -> Data {
         let json = try JSONSerialization.data(withJSONObject: message, options: [.fragmentsAllowed])
         guard json.count <= frameCap else { throw ExtensionNative.Refused(why: "Message too long for a native host") }
         var length = UInt32(json.count).littleEndian
@@ -264,7 +268,7 @@ final class HostPipe: @unchecked Sendable {
 
     /// Sends `message` when the host has read what went before; what can't
     /// be sent is dropped, as Chrome drops what goes to a host that is gone.
-    func write(_ message: Any) throws {
+    public func write(_ message: Any) throws {
         let frame = try Self.frame(message)
         lock.lock()
         let over = backlog + frame.count > Self.backlogCap
@@ -279,7 +283,7 @@ final class HostPipe: @unchecked Sendable {
         }
     }
 
-    func readOne() async throws -> Any? {
+    public func readOne() async throws -> Any? {
         try await withCheckedThrowingContinuation { continuation in
             if wait(continuation) == nil { continuation.resume(throwing: Self.exited) }
         }
@@ -287,7 +291,7 @@ final class HostPipe: @unchecked Sendable {
 
     /// Writes `message` and reads the reply. The reply's waiter is in place
     /// before the message goes, so a host quick to answer isn't missed.
-    func request(_ message: Any) async throws -> Any? {
+    public func request(_ message: Any) async throws -> Any? {
         try await withCheckedThrowingContinuation { continuation in
             guard let id = wait(continuation) else { return continuation.resume(throwing: Self.exited) }
             let failed: (Error) -> Void = { error in
@@ -319,7 +323,7 @@ final class HostPipe: @unchecked Sendable {
         return nextWaiter
     }
 
-    private func take(_ chunk: Data) {
+    func take(_ chunk: Data) {
         lock.lock()
         guard !finished else { return lock.unlock() }
         buffer.append(chunk)
@@ -389,3 +393,4 @@ final class HostPipe: @unchecked Sendable {
         exit?()
     }
 }
+#endif

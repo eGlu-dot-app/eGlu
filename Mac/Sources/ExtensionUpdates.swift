@@ -3,6 +3,7 @@ import CryptoKit
 import PadCore
 import SwiftUI
 import WebKit
+import WebKitExtensions
 
 /// Updates from the Chrome Web Store, and extensions loaded from a folder
 /// (Docs/ExtensionsDesign.md, section 3).
@@ -163,7 +164,7 @@ extension Extensions {
         try FileManager.default.createDirectory(at: room, withIntermediateDirectories: true)
         try archive.write(to: file)
         try await Task.detached(priority: .utility) { try Self.prepare(file, into: folder) }.value
-        try await ExtensionTrial.start(try await WKWebExtension(resourceBaseURL: folder), id: id)
+        try await ExtensionTrial.start(try await WKWebExtension(resourceBaseURL: folder), id: id, scheme: Self.scheme)
     }
 
     static func sha256(_ data: Data) -> String {

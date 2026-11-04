@@ -1,3 +1,4 @@
+import WebKitExtensions
 import AppKit
 import Security
 import PadCore

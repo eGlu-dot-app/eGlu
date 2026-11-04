@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 import PadCore
 import WebKit
@@ -20,9 +21,9 @@ import WebKit
 // base64. The Origin and the user agent are the ones Chrome would send.
 
 @MainActor
-enum ExtensionSocket {
+public enum ExtensionSocket {
     /// The native application the shim connects to for a socket.
-    static let name = Extensions.shimApplication + ".socket"
+    public static func name(shimApplication: String) -> String { shimApplication + ".socket" }
 
     /// One session for every socket; each task has its connection as its
     /// own delegate. No cookie jar: none are sent, and none it is sent are
@@ -38,8 +39,8 @@ enum ExtensionSocket {
     /// extension or its space goes.
     private static var open: [ObjectIdentifier: Connection] = [:]
 
-    static func connect(_ port: WKWebExtension.MessagePort, from extensionID: String, in space: UUID, policy: String?) {
-        let connection = Connection(port: port, origin: "\(Extensions.scheme)://\(extensionID)", extensionID: extensionID,
+    public static func connect(_ port: WKWebExtension.MessagePort, from extensionID: String, in space: UUID, policy: String?, scheme: String) {
+        let connection = Connection(port: port, origin: "\(scheme)://\(extensionID)", extensionID: extensionID,
                                     space: space, policy: policy)
         let key = ObjectIdentifier(connection)
         open[key] = connection
@@ -48,10 +49,26 @@ enum ExtensionSocket {
 
     /// Every socket of an extension in a space, or of a space, closed:
     /// WebKit doesn't always tell its ports' ends when it unloads one.
-    static func close(_ extensionID: String? = nil, in space: UUID) {
+    public static func close(_ extensionID: String? = nil, in space: UUID) {
         for connection in open.values where connection.space == space && (extensionID == nil || connection.extensionID == extensionID) {
             connection.close()
         }
+    }
+
+    static func allowed(_ url: URL?, policy: String?) -> Bool {
+        guard let url, ["ws", "wss", "http", "https"].contains(url.scheme?.lowercased() ?? "") else { return false }
+        return ExtensionPolicy.mayTouchData(ofDomain: url.host() ?? "") && ExtensionPolicy.allowsConnection(to: url, policy: policy)
+    }
+
+    static func request(_ address: String, protocols: [String], userAgent: String?, origin: String, policy: String?) -> URLRequest? {
+        guard let url = URL(string: address), ["ws", "wss"].contains(url.scheme?.lowercased()), allowed(url, policy: policy) else { return nil }
+        var request = URLRequest(url: url)
+        request.setValue(origin, forHTTPHeaderField: "Origin")
+        if let userAgent { request.setValue(userAgent, forHTTPHeaderField: "User-Agent") }
+        if !protocols.isEmpty {
+            request.setValue(protocols.joined(separator: ", "), forHTTPHeaderField: "Sec-WebSocket-Protocol")
+        }
+        return request
     }
 
     @MainActor
@@ -115,21 +132,14 @@ enum ExtensionSocket {
         /// (ExtensionPolicy), as the extension's own requests can't, and only
         /// where its connect-src lets it.
         private func allowed(_ url: URL?) -> Bool {
-            guard let url, ["ws", "wss", "http", "https"].contains(url.scheme?.lowercased() ?? "") else { return false }
-            return ExtensionPolicy.mayTouchData(ofDomain: url.host() ?? "") && ExtensionPolicy.allowsConnection(to: url, policy: policy)
+            ExtensionSocket.allowed(url, policy: policy)
         }
 
         private func start(_ address: String, protocols: [String], userAgent: String?) {
             guard task == nil else { return }
-            guard let url = URL(string: address), ["ws", "wss"].contains(url.scheme?.lowercased()), allowed(url) else {
+            guard let request = ExtensionSocket.request(address, protocols: protocols, userAgent: userAgent, origin: origin, policy: policy) else {
                 fail()
                 return
-            }
-            var request = URLRequest(url: url)
-            request.setValue(origin, forHTTPHeaderField: "Origin")
-            if let userAgent { request.setValue(userAgent, forHTTPHeaderField: "User-Agent") }
-            if !protocols.isEmpty {
-                request.setValue(protocols.joined(separator: ", "), forHTTPHeaderField: "Sec-WebSocket-Protocol")
             }
             let task = ExtensionSocket.session.webSocketTask(with: request)
             task.delegate = self
@@ -217,3 +227,4 @@ enum ExtensionSocket {
         }
     }
 }
+#endif

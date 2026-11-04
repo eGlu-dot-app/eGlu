@@ -4,6 +4,7 @@ import IOKit.pwr_mgt
 import PadCore
 import UniformTypeIdentifiers
 import WebKit
+import WebKitExtensions
 import WebKitSupport
 
 /// Chrome extensions, run by WebKit's own extension engine
@@ -201,6 +202,7 @@ final class Extensions: NSObject, ObservableObject {
 
     /// The scheme of extensions' own pages, as Chrome's.
     static let scheme = "chrome-extension"
+    private static let apiTable = ExtensionTable(scheme: scheme)
 
     private override init() {
         super.init()
@@ -599,7 +601,7 @@ final class Extensions: NSObject, ObservableObject {
         if contexts[space]?[item.id] != nil {
             checkCopy(of: item)
             // The first extension on a new macOS build: this Mac's table.
-            if ExtensionTable.shared.table == nil { Task { await measureTable() } }
+            if Self.apiTable.table == nil { Task { await measureTable() } }
         }
         return contexts[space]?[item.id] != nil
     }
@@ -824,7 +826,7 @@ final class Extensions: NSObject, ObservableObject {
         let kept = Set((package.requestedPermissions.union(package.optionalPermissions)).map(\.rawValue))
         let asked = manifest.permissions + manifest.optionalPermissions
         var missing: Set<String>
-        if let table = ExtensionTable.shared.table {
+        if let table = Self.apiTable.table {
             missing = table.missing(asked: asked, kept: kept)
             if manifest.usesChromeSignIn, !table.works("identity.getAuthToken") { missing.insert("identity.getAuthToken") }
         } else {
@@ -886,7 +888,7 @@ final class Extensions: NSObject, ObservableObject {
     /// This Mac's table measured, the first time on a macOS build: what
     /// each loaded extension lacks read again against it.
     private func measureTable() async {
-        guard ExtensionTable.shared.table == nil, await ExtensionTable.shared.measured() != nil else { return }
+        guard Self.apiTable.table == nil, await Self.apiTable.measured() != nil else { return }
         for item in installed {
             guard let space = contexts.first(where: { $0.value[item.id] != nil })?.key, let context = contexts[space]?[item.id],
                   let manifest = manifests[item.id]
@@ -980,9 +982,10 @@ final class Extensions: NSObject, ObservableObject {
         Task {
             try? await Task.sleep(for: .seconds(2))
             // Read against this Mac's table, measured first on a new build.
-            if ExtensionTable.shared.table == nil { await measureTable() }
+            if Self.apiTable.table == nil { await measureTable() }
             let result = await ExtensionTrial.check(Self.prepared(item.id, item.version), id: item.id, manifest: manifest,
-                                                    missing: lacking[item.id] ?? [])
+                                                    missing: lacking[item.id] ?? [], scheme: Self.scheme, shimApplication: Self.shimApplication,
+                                                    letRulesRedirect: Self.letRulesRedirect, sites: Self.sites, fence: Self.fence)
             checking[item.id] = nil
             // Updated meanwhile: the version now on is tried instead; removed, nothing.
             guard let now = installed.first(where: { $0.id == item.id }) else { return }
@@ -1915,7 +1918,7 @@ final class Extensions: NSObject, ObservableObject {
             try controller.load(standIn)
             defer { try? controller.unload(standIn) }
             guard let configuration = standIn.webViewConfiguration else { return false }
-            let done = try await ExtensionBlankPage(configuration).clear(at: base)
+            let done = try await ExtensionBlankPage(configuration, scheme: Self.scheme).clear(at: base)
             #if DEBUG
             Self.note("clear: blank page \(done)")
             #endif
@@ -2196,7 +2199,7 @@ extension Extensions {
                 lines.append("installed \(item.name) incompatible=\(isIncompatible(item.id)) on in \(item.spaces.count)")
             }
             // This Mac's table, once measured: its namespaces, WebKit's own.
-            if let table = ExtensionTable.shared.table {
+            if let table = Self.apiTable.table {
                 let namespaces = table.answers.filter { !$0.key.contains(".") && $0.value == .native }.keys.sorted()
                 lines.append("table \(namespaces.count): \(namespaces.joined(separator: " "))")
                 lines.append("table tabs: \(table.answers.keys.filter { $0.hasPrefix("tabs.") }.count) members")
@@ -2453,10 +2456,10 @@ extension Extensions: WKWebExtensionControllerDelegate {
         guard let space = space(of: controller), contexts[space]?[id] === extensionContext else {
             return completionHandler(Unanswered(why: "Specified native messaging host not found."))
         }
-        if port.applicationIdentifier == ExtensionSocket.name {
+        if port.applicationIdentifier == ExtensionSocket.name(shimApplication: Self.shimApplication) {
             let security = extensionContext.webExtension.manifest["content_security_policy"]
             let policy = (security as? [String: Any])?["extension_pages"] as? String ?? security as? String
-            ExtensionSocket.connect(port, from: id, in: space, policy: policy)
+            ExtensionSocket.connect(port, from: id, in: space, policy: policy, scheme: Self.scheme)
             return completionHandler(nil)
         }
         // The shim's own, opened only to find what WebKit's ports are

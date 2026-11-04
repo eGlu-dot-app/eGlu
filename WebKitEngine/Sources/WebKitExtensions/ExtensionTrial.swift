@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import PadCore
 import WebKit
@@ -8,7 +9,7 @@ import WebKit
 /// nothing it does lands in a space. What an update is tried in before it
 /// takes the old version's place (Docs/ExtensionsDesign.md, sections 3 and 4).
 @MainActor
-enum ExtensionTrial {
+public enum ExtensionTrial {
     struct Failed: LocalizedError {
         let why: String
         var errorDescription: String? { why }
@@ -18,11 +19,11 @@ enum ExtensionTrial {
     /// says its background failed to load. A background that doesn't answer
     /// within eight seconds isn't taken for a failure: WebKit doesn't always
     /// call back, and only its error says it failed.
-    static func start(_ package: WKWebExtension, id: String) async throws {
+    public static func start(_ package: WKWebExtension, id: String, scheme: String) async throws {
         let controller = WKWebExtensionController(configuration: throwaway())
         let context = WKWebExtensionContext(for: package)
         context.uniqueIdentifier = id
-        context.baseURL = URL(string: "\(Extensions.scheme)://\(id)/")!
+        context.baseURL = URL(string: "\(scheme)://\(id)/")!
         try controller.load(context)
         defer { try? controller.unload(context) }
         guard package.hasBackgroundContent else { return }
@@ -52,7 +53,7 @@ extension ExtensionTrial {
     /// A controller that keeps nothing: neither the extensions' storage nor
     /// what their pages store, in one website store of its own that goes
     /// with it.
-    static func throwaway() -> WKWebExtensionController.Configuration {
+    public static func throwaway() -> WKWebExtensionController.Configuration {
         let configuration = WKWebExtensionController.Configuration.nonPersistent()
         let store = WKWebsiteDataStore.nonPersistent()
         configuration.defaultWebsiteDataStore = store
@@ -64,14 +65,23 @@ extension ExtensionTrial {
 
     /// What trying its pages on a copy found (Docs/ExtensionsDesign.md,
     /// section 4, "In the first seconds").
-    struct Checked: Equatable {
-        var testPage: ExtensionEvidence.Probe = .notApplicable
-        var popup: ExtensionEvidence.Probe = .notApplicable
-        var optionsPage: ExtensionEvidence.Probe = .notApplicable
+    public struct Checked: Equatable {
+        public var testPage: ExtensionEvidence.Probe = .notApplicable
+        public var popup: ExtensionEvidence.Probe = .notApplicable
+        public var optionsPage: ExtensionEvidence.Probe = .notApplicable
         /// Errors of a known kind, with the file each came from.
-        var problems: [(problem: ExtensionError.Problem, file: String?)] = []
+        public var problems: [(problem: ExtensionError.Problem, file: String?)] = []
 
-        static func == (a: Checked, b: Checked) -> Bool {
+        public init(testPage: ExtensionEvidence.Probe = .notApplicable, popup: ExtensionEvidence.Probe = .notApplicable,
+                    optionsPage: ExtensionEvidence.Probe = .notApplicable,
+                    problems: [(problem: ExtensionError.Problem, file: String?)] = []) {
+            self.testPage = testPage
+            self.popup = popup
+            self.optionsPage = optionsPage
+            self.problems = problems
+        }
+
+        public static func == (a: Checked, b: Checked) -> Bool {
             a.testPage == b.testPage && a.popup == b.popup && a.optionsPage == b.optionsPage
                 && a.problems.map(\.problem) == b.problems.map(\.problem)
         }
@@ -102,23 +112,27 @@ extension ExtensionTrial {
         words.localizedCaseInsensitiveContains("Tab not found") || words.localizedCaseInsensitiveContains("Window not found")
     }
 
-    static func check(_ folder: URL, id: String, manifest: ExtensionManifest, missing: Set<String>) async -> Checked {
+    public static func check(_ folder: URL, id: String, manifest: ExtensionManifest, missing: Set<String>,
+                             scheme: String, shimApplication: String,
+                             letRulesRedirect: (WKWebExtensionContext, WKWebExtension) -> Void,
+                             sites: (WKWebExtension) -> [WKWebExtension.MatchPattern],
+                             fence: (WKWebExtensionContext) -> Void) async -> Checked {
         var checked = Checked()
         guard let package = try? await WKWebExtension(resourceBaseURL: folder) else { return checked }
         let configuration = throwaway()
         let controller = WKWebExtensionController(configuration: configuration)
-        let quiet = Quiet(missing: missing)
+        let quiet = Quiet(missing: missing, shimApplication: shimApplication)
         controller.delegate = quiet
         defer { withExtendedLifetime(quiet) {} }
         let context = WKWebExtensionContext(for: package)
         context.uniqueIdentifier = id
-        context.baseURL = URL(string: "\(Extensions.scheme)://\(id)/")!
+        context.baseURL = URL(string: "\(scheme)://\(id)/")!
         for permission in package.requestedPermissions where !ExtensionPolicy.heldPermissions.contains(permission.rawValue) {
             context.setPermissionStatus(.grantedExplicitly, for: permission)
         }
-        Extensions.letRulesRedirect(context, package)
-        for pattern in Extensions.sites(of: package) { context.setPermissionStatus(.grantedExplicitly, for: pattern) }
-        Extensions.fence(context)
+        letRulesRedirect(context, package)
+        for pattern in sites(package) { context.setPermissionStatus(.grantedExplicitly, for: pattern) }
+        fence(context)
         for permission in ExtensionPolicy.heldPermissions {
             context.setPermissionStatus(.deniedExplicitly, for: WKWebExtension.Permission(rawValue: permission))
         }
@@ -159,7 +173,7 @@ extension ExtensionTrial {
 
         for (page, keyPath) in [(manifest.popup, \Checked.popup), (manifest.optionsPage, \Checked.optionsPage)] {
             guard let page, let url = URL(string: page, relativeTo: context.baseURL)?.absoluteURL,
-                  url.scheme == Extensions.scheme, url.host() == id, let configuration = context.webViewConfiguration
+                  url.scheme == scheme, url.host() == id, let configuration = context.webViewConfiguration
             else { continue }
             let web = WKWebView(frame: NSRect(x: 0, y: 0, width: 400, height: 600), configuration: configuration)
             let loaded = await Loading.page(in: web) { web.load(URLRequest(url: url)) }
@@ -192,7 +206,10 @@ private final class Quiet: NSObject, WKWebExtensionControllerDelegate {
     /// The errors its shim reported, of a known kind.
     private(set) var reports: [(problem: ExtensionError.Problem, file: String?)] = []
 
-    init(missing: Set<String>) {
+    private let shimApplication: String
+
+    init(missing: Set<String>, shimApplication: String) {
+        self.shimApplication = shimApplication
         self.missing = missing
     }
 
@@ -213,7 +230,7 @@ private final class Quiet: NSObject, WKWebExtensionControllerDelegate {
     }
 
     private func applicationIdentifierIsShims(_ port: WKWebExtension.MessagePort) -> Bool {
-        port.applicationIdentifier?.hasPrefix(Extensions.shimApplication) == true
+        port.applicationIdentifier?.hasPrefix(shimApplication) == true
     }
 
     struct Refused: LocalizedError {
@@ -257,3 +274,4 @@ private final class Loading: NSObject, WKNavigationDelegate {
         finish(false)
     }
 }
+#endif

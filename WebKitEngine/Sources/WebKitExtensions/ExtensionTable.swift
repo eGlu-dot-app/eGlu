@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import PadCore
 import WebKit
@@ -10,18 +11,19 @@ import WebKit
 /// every check compares an extension against. It runs without the shim,
 /// in a controller that keeps nothing, with no tab, window or site.
 @MainActor
-final class ExtensionTable: NSObject, WKWebExtensionControllerDelegate {
-    static let shared = ExtensionTable()
+public final class ExtensionTable: NSObject, WKWebExtensionControllerDelegate {
+    private let scheme: String
     private static let key = "extensionTable"
 
     /// This Mac's table; nil until measured on this macOS build.
-    private(set) var table: ExtensionAPITable?
+    public private(set) var table: ExtensionAPITable?
     private var measuring: Task<Void, Never>?
     private var heard: CheckedContinuation<[String: [String]]?, Never>?
 
-    static var build: String { ProcessInfo.processInfo.operatingSystemVersionString }
+    public static var build: String { ProcessInfo.processInfo.operatingSystemVersionString }
 
-    override init() {
+    public init(scheme: String) {
+        self.scheme = scheme
         super.init()
         if let kept = UserDefaults.standard.dictionary(forKey: Self.key), kept["build"] as? String == Self.build,
            let namespaces = kept["namespaces"] as? [String: [String]] {
@@ -31,7 +33,7 @@ final class ExtensionTable: NSObject, WKWebExtensionControllerDelegate {
 
     /// The table, measured first if this build hasn't been; nil if the
     /// test extension couldn't say within ten seconds.
-    func measured() async -> ExtensionAPITable? {
+    public func measured() async -> ExtensionAPITable? {
         if let table { return table }
         if let measuring {
             await measuring.value
@@ -56,7 +58,7 @@ final class ExtensionTable: NSObject, WKWebExtensionControllerDelegate {
             controller.delegate = self
             let context = WKWebExtensionContext(for: package)
             context.uniqueIdentifier = "eglu-table"
-            context.baseURL = URL(string: "\(Extensions.scheme)://eglu-table/")!
+            context.baseURL = URL(string: "\(scheme)://eglu-table/")!
             for permission in package.requestedPermissions { context.setPermissionStatus(.grantedExplicitly, for: permission) }
             for pattern in package.allRequestedMatchPatterns { context.setPermissionStatus(.grantedExplicitly, for: pattern) }
             try controller.load(context)
@@ -83,7 +85,7 @@ final class ExtensionTable: NSObject, WKWebExtensionControllerDelegate {
     }
 
     /// The worker's list, its one message.
-    func webExtensionController(_ controller: WKWebExtensionController, sendMessage message: Any, toApplicationWithIdentifier applicationIdentifier: String?,
+    public func webExtensionController(_ controller: WKWebExtensionController, sendMessage message: Any, toApplicationWithIdentifier applicationIdentifier: String?,
                                 for extensionContext: WKWebExtensionContext, replyHandler: @escaping (Any?, (any Error)?) -> Void) {
         hear((message as? [String: Any])?.compactMapValues { $0 as? [String] })
         replyHandler(nil, nil)
@@ -146,3 +148,4 @@ final class ExtensionTable: NSObject, WKWebExtensionControllerDelegate {
     chrome.runtime.sendNativeMessage("eglu.table", table);
     """
 }
+#endif

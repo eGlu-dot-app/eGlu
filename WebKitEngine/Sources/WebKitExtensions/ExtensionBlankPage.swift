@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import WebKit
 
@@ -7,19 +8,22 @@ import WebKit
 /// IndexedDB, caches) cleared from it, as Search does (its forgetData).
 /// WebKit's removeData doesn't reach those.
 @MainActor
-final class ExtensionBlankPage: NSObject, WKNavigationDelegate {
-    private let view: WKWebView
+public final class ExtensionBlankPage: NSObject, WKNavigationDelegate {
+    let view: WKWebView
     private var loaded: CheckedContinuation<Bool, Never>?
 
-    init(_ configuration: WKWebViewConfiguration) {
+    private let scheme: String
+
+    public init(_ configuration: WKWebViewConfiguration, scheme: String) {
+        self.scheme = scheme
         view = WKWebView(frame: .zero, configuration: configuration)
         super.init()
         view.navigationDelegate = self
     }
 
     /// Whether it loaded at `base`, an extension's own address, and was cleared.
-    func clear(at base: URL) async throws -> Bool {
-        guard base.scheme == Extensions.scheme else { return false }
+    public func clear(at base: URL) async throws -> Bool {
+        guard base.scheme == scheme else { return false }
         let ready = await withCheckedContinuation { done in
             loaded = done
             view.loadHTMLString("<!doctype html>", baseURL: base)
@@ -30,9 +34,10 @@ final class ExtensionBlankPage: NSObject, WKNavigationDelegate {
         guard ready else { return false }
         // Within half a minute, or it is tried again another time.
         let view = view
+        let scheme = scheme
         return try await withThrowingTaskGroup(of: Bool.self) { group in
             group.addTask { @MainActor in
-                _ = try await view.callAsyncJavaScript(Self.clearing, arguments: ["origin": "\(Extensions.scheme)://\(base.host() ?? "")"],
+                _ = try await view.callAsyncJavaScript(Self.clearing, arguments: ["origin": "\(scheme)://\(base.host() ?? "")"],
                                                        contentWorld: .defaultClient)
                 return true
             }
@@ -48,7 +53,7 @@ final class ExtensionBlankPage: NSObject, WKNavigationDelegate {
 
     /// Fails, so the removal is kept to be tried again, unless every
     /// database is gone: one still open elsewhere is waited for a moment.
-    private static let clearing = """
+    static let clearing = """
         // Only at the extension's own address.
         if (location.origin !== origin) throw new Error("not the extension's own page: " + location.origin);
         localStorage.clear();
@@ -69,8 +74,9 @@ final class ExtensionBlankPage: NSObject, WKNavigationDelegate {
         loaded = nil
     }
 
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { finish(true) }
-    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { finish(false) }
-    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { finish(false) }
-    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { finish(false) }
+    public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { finish(true) }
+    public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { finish(false) }
+    public func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { finish(false) }
+    public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { finish(false) }
 }
+#endif

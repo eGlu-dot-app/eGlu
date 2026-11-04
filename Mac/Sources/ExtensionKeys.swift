@@ -2,6 +2,7 @@ import AppKit
 import PadCore
 import SwiftUI
 import WebKit
+import WebKitExtensions
 
 /// The keys the person gave extensions' commands in Settings › Extensions,
 /// by extension and command, the same in every space; and what each
@@ -36,18 +37,8 @@ final class ExtensionKeys: ObservableObject {
     /// manifest suggests is read from the manifest, never from the command,
     /// whose key eGlu changes.
     func apply(to context: WKWebExtensionContext) {
-        let declared = context.webExtension.manifest["commands"] as? [String: Any] ?? [:]
-        for command in context.commands {
-            let name = Self.name(context.uniqueIdentifier, command.id)
-            let suggestion = ExtensionKey(suggestedKey: (declared[command.id] as? [String: Any])?["suggested_key"])
+        WebKitExtensionKeys.apply(to: context, given: { given[$0] }) { name, suggestion in
             if suggested[name] != suggestion { suggested[name] = suggestion }
-            if let key = given[name] {
-                command.activationKey = key.key
-                command.modifierFlags = Self.flags(key.modifiers)
-            } else {
-                command.activationKey = nil
-                command.modifierFlags = []
-            }
         }
     }
 
@@ -136,21 +127,11 @@ final class ExtensionKeys: ObservableObject {
     }
 
     static func modifiers(_ flags: NSEvent.ModifierFlags) -> ExtensionKey.Modifiers {
-        var out: ExtensionKey.Modifiers = []
-        if flags.contains(.command) { out.insert(.command) }
-        if flags.contains(.option) { out.insert(.option) }
-        if flags.contains(.control) { out.insert(.control) }
-        if flags.contains(.shift) { out.insert(.shift) }
-        return out
+        WebKitExtensionKeys.modifiers(flags)
     }
 
     static func flags(_ modifiers: ExtensionKey.Modifiers) -> NSEvent.ModifierFlags {
-        var out: NSEvent.ModifierFlags = []
-        if modifiers.contains(.command) { out.insert(.command) }
-        if modifiers.contains(.option) { out.insert(.option) }
-        if modifiers.contains(.control) { out.insert(.control) }
-        if modifiers.contains(.shift) { out.insert(.shift) }
-        return out
+        WebKitExtensionKeys.flags(modifiers)
     }
 
     /// The menu line's key, for a command that has one.
