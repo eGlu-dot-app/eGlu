@@ -210,15 +210,16 @@ final class PageDownloadAndFileTests: PageTestCase {
     /// nothing on: the page isn't one and answers none of its callbacks;
     /// the adapter answers those it has, the downloads' among them, and none
     /// it hasn't (a sign-in challenge, the decision's `preferences:` form);
-    /// and it neither answers nor forwards the page's own UI-delegate
-    /// questions, WebKit's private ones among them, which the adapter that
-    /// forwarded to the page (step 4c) answered.
+    /// and it neither answers nor forwards the UI delegate's questions,
+    /// WebKit's private ones among them, which the adapter that forwarded to
+    /// the page (step 4c) answered. Since step 7b the UI delegate is the
+    /// plugin's `WebKitUIAdapter`, which answers them (PageUIDelegateTests).
     func testTheAdapterIsTheWholeNavigationDelegate() throws {
         let page = makePage()
         let adapter = try XCTUnwrap(page.view.navigationDelegate as? WebKitNavigationAdapter,
                                     "the view's navigation delegate isn't the adapter")
         XCTAssertFalse((page as AnyObject) is WKNavigationDelegate, "the page is still a navigation delegate")
-        XCTAssertTrue(page.view.uiDelegate === page)
+        let ui = try XCTUnwrap(page.view.uiDelegate as? WebKitUIAdapter, "the view's UI delegate isn't the UI adapter")
 
         let adapters = ["webView:decidePolicyForNavigationAction:decisionHandler:",
                         "webView:decidePolicyForNavigationResponse:decisionHandler:",
@@ -235,15 +236,15 @@ final class PageDownloadAndFileTests: PageTestCase {
         let nobodys = ["webView:didReceiveAuthenticationChallenge:completionHandler:",
                        "webView:authenticationChallenge:shouldAllowDeprecatedTLS:",
                        "webView:decidePolicyForNavigationAction:preferences:decisionHandler:"].map(NSSelectorFromString)
-        let pages = ["webView:createWebViewWithConfiguration:forNavigationAction:windowFeatures:",
-                     "webViewDidClose:",
-                     "webView:runJavaScriptAlertPanelWithMessage:initiatedByFrame:completionHandler:",
-                     "_webView:getContextMenuFromProposedMenu:forElement:userInfo:completionHandler:",
-                     "_webView:didNotHandleWheelEvent:"].map(NSSelectorFromString)
-        for selector in pages {
-            XCTAssertTrue(page.responds(to: selector), "the page doesn't answer \(selector), so it proves nothing")
+        let uis = ["webView:createWebViewWithConfiguration:forNavigationAction:windowFeatures:",
+                   "webViewDidClose:",
+                   "webView:runJavaScriptAlertPanelWithMessage:initiatedByFrame:completionHandler:",
+                   "_webView:getContextMenuFromProposedMenu:forElement:userInfo:completionHandler:",
+                   "_webView:didNotHandleWheelEvent:"].map(NSSelectorFromString)
+        for selector in uis {
+            XCTAssertTrue(ui.responds(to: selector), "the UI adapter doesn't answer \(selector), so it proves nothing")
         }
-        for selector in nobodys + pages {
+        for selector in nobodys + uis {
             XCTAssertFalse(adapter.responds(to: selector), "the adapter answers \(selector)")
             XCTAssertNil(adapter.forwardingTarget(for: selector), "the adapter forwards \(selector)")
         }

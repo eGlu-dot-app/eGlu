@@ -148,6 +148,7 @@ final class Page: NSObject {
     /// The same view, for hosts to place, move and give the keys.
     private(set) lazy var surface: any WebEngineSurface = PageWebKitSurface(view: view)
     private var navigationAdapter: WebKitNavigationAdapter!
+    private var uiAdapter: WebKitUIAdapter!
     private let channels: any WebMessageChannels
     private let services: any WebFind & WebZoom & WebMediaCapture & WebUserAgent & WebPrinting & WebDeveloperTools
     private let controller: WKUserContentController
@@ -338,14 +339,15 @@ final class Page: NSObject {
         view.page = self
         navigationAdapter = WebKitNavigationAdapter(view: view, policy: self, events: self)
         view.navigationDelegate = navigationAdapter
+        uiAdapter = WebKitUIAdapter(view: view, events: self, presenter: self)
         // An extension's page has WebKit's question about recording the
         // screen answered by eGlu's recording channel (ExtensionCapture).
         if extensionPage {
-            let delegate = ExtensionPageDelegate(next: self)
+            let delegate = ExtensionPageDelegate(next: uiAdapter)
             extensionDelegate = delegate
             view.uiDelegate = delegate
         } else {
-            view.uiDelegate = self
+            view.uiDelegate = uiAdapter
         }
         setUp()
     }
@@ -437,6 +439,7 @@ final class Page: NSObject {
         navigationAdapter.tearDown()
         view.navigationDelegate = nil
         view.uiDelegate = nil
+        uiAdapter.tearDown()
         view.page = nil
         view.removeFromSuperview()
         host = nil
@@ -1329,12 +1332,12 @@ final class Page: NSObject {
 
     /// The window picture.js asked for, in place of the one open: one at a time, as in Chrome.
     private func openPicture(_ child: WebKitChildRequest,
-                             request: DocumentPicture.Request) -> WKWebView {
+                             request: DocumentPicture.Request) -> any WebEngineSurface {
         picture?.close()
         let window = PictureWindow(opener: self, configuration: child.configuration, features: child.features, request: request)
         window.automatic = enteringPicture
         picture = window
-        return window.view
+        return PageWebKitSurface(view: window.view)
     }
 
     /// The window is gone, however it went. The tab may freeze now, once
@@ -1439,33 +1442,14 @@ final class Page: NSObject {
     }
 }
 
-// MARK: - WebKit's questions
+// MARK: Page UI events and dialogs
 
-extension Page: WKUIDelegate {
-    /// WebKit's private way to hear which element a context menu is for:
-    /// its link is kept for "Handoff Linked File", the menu itself shown
-    /// as proposed, so willOpenMenu sees it all.
-    @objc func _webView(_ webView: WKWebView, getContextMenuFromProposedMenu menu: NSMenu,
-                        forElement element: NSObject?, userInfo: Any?,
-                        completionHandler: @escaping (NSMenu?) -> Void) {
-        linkForMenu = element.flatMap(Self.link(of:))
-        completionHandler(menu)
+extension Page: WebPageUIEvents, WebDialogPresenter {
+    func contextMenuOpening(link: URL?) {
+        linkForMenu = link
     }
 
-    /// The link a menu's element is on. The element is WebKit's private
-    /// _WKContextMenuElementInfo, whose hit test result holds the link
-    /// (absoluteLinkURL): each step is asked first, as picture in picture
-    /// asks, since a key it doesn't have would raise.
-    private static func link(of element: NSObject) -> URL? {
-        guard element.responds(to: NSSelectorFromString("hitTestResult")),
-              let result = element.value(forKey: "hitTestResult") as? NSObject,
-              result.responds(to: NSSelectorFromString("absoluteLinkURL")) else { return nil }
-        return result.value(forKey: "absoluteLinkURL") as? URL
-    }
-
-    /// WebKit's private word that the page left a scroll unused, the
-    /// answer its own swipe waits for: the swipe's (PageSwipe.leftAlone).
-    @objc func _webView(_ webView: WKWebView, didNotHandleWheelEvent event: NSEvent) {
+    func scrollNotHandled(_ event: NSEvent) {
         swipe?.leftAlone(event)
     }
 
@@ -1473,9 +1457,7 @@ extension Page: WKUIDelegate {
         view.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
     }
 
-    func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
-                 for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-        let request = WebKitChildRequest(configuration: configuration, action: navigationAction, features: windowFeatures)
+    func childRequested(_ request: any WebChildRequest) -> (any WebEngineSurface)? {
         let navigation = request.navigation
         // A website's window opened on an extension's page: only a page the
         // extension shows that site, as a navigation to one is held to
@@ -1498,6 +1480,9 @@ extension Page: WKUIDelegate {
            Self.offersPicture(committed ?? view.url) {
             // Asked for on leaving the tab, but the tab is back on screen, with eGlu in front, by now: no window.
             if enteringPicture, !videoWanted || !Session.shared.preferences.automaticPictureInPicture { return nil }
+            guard let request = request as? WebKitChildRequest else {
+                preconditionFailure("Page.openPicture requires a WebKitChildRequest")
+            }
             return openPicture(request, request: pictureRequest)
         }
         // While the app calls the site's handler for leaving the tab, the
@@ -1507,51 +1492,50 @@ extension Page: WKUIDelegate {
         if let asked = peekAsked {
             peekAsked = nil
             if Date().timeIntervalSince(asked) < 5, canPeek {
-                return openPeek(navigation.request.url, child: request).page.view
+                return openPeek(navigation.request.url, child: request).page.surface
             }
         }
         let made = host?.page(self, openChild: request)
         if let child = made, child !== self {
             child.wasOpened = true
         }
-        return made?.view
+        return made?.surface
     }
 
-    func webViewDidClose(_ webView: WKWebView) {
+    func closeRequested() {
         host?.pageDidClose(self)
     }
 
-    func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String,
-                 initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping @MainActor () -> Void) {
+    /// `frameHost`: the asking frame's host (not the page's `host`, its window).
+    func alert(_ message: String, host frameHost: String, done: @escaping @MainActor () -> Void) {
         let alert = NSAlert()
-        alert.messageText = frame.securityOrigin.host.isEmpty ? String(localized: "This page says") : String(localized: "\(frame.securityOrigin.host) says")
+        alert.messageText = frameHost.isEmpty ? String(localized: "This page says") : String(localized: "\(frameHost) says")
         alert.informativeText = message
         alert.addButton(withTitle: String(localized: "OK"))
-        present(alert) { _ in completionHandler() }
+        present(alert) { _ in done() }
     }
 
-    func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String,
-                 initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping @MainActor (Bool) -> Void) {
+    func confirm(_ message: String, host frameHost: String, done: @escaping @MainActor (Bool) -> Void) {
         let alert = NSAlert()
-        alert.messageText = frame.securityOrigin.host.isEmpty ? String(localized: "This page asks") : String(localized: "\(frame.securityOrigin.host) asks")
+        alert.messageText = frameHost.isEmpty ? String(localized: "This page asks") : String(localized: "\(frameHost) asks")
         alert.informativeText = message
         alert.addButton(withTitle: String(localized: "OK"))
         alert.addButton(withTitle: String(localized: "Cancel"))
-        present(alert) { completionHandler($0 == .alertFirstButtonReturn) }
+        present(alert) { done($0 == .alertFirstButtonReturn) }
     }
 
-    func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String, defaultText: String?,
-                 initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping @MainActor (String?) -> Void) {
+    func prompt(_ message: String, defaultText: String?, host frameHost: String,
+                done: @escaping @MainActor (String?) -> Void) {
         let alert = NSAlert()
-        alert.messageText = frame.securityOrigin.host.isEmpty ? String(localized: "This page asks") : String(localized: "\(frame.securityOrigin.host) asks")
-        alert.informativeText = prompt
+        alert.messageText = frameHost.isEmpty ? String(localized: "This page asks") : String(localized: "\(frameHost) asks")
+        alert.informativeText = message
         let field = NSTextField(string: defaultText ?? "")
         field.frame = NSRect(x: 0, y: 0, width: 260, height: 24)
         alert.accessoryView = field
         alert.addButton(withTitle: String(localized: "OK"))
         alert.addButton(withTitle: String(localized: "Cancel"))
         alert.window.initialFirstResponder = field
-        present(alert) { completionHandler($0 == .alertFirstButtonReturn ? field.stringValue : nil) }
+        present(alert) { done($0 == .alertFirstButtonReturn ? field.stringValue : nil) }
     }
 
     /// Retain one background dialog until its tab is shown or explicitly reviewed.
@@ -1567,19 +1551,19 @@ extension Page: WKUIDelegate {
 
     /// A page's upload field: the files chosen in the system's panel, which
     /// the sandbox then lets the page read.
-    func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters,
-                 initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping @MainActor ([URL]?) -> Void) {
+    func openFiles(allowsMultiple: Bool, allowsDirectories: Bool,
+                   done: @escaping @MainActor ([URL]?) -> Void) {
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
-        panel.canChooseDirectories = parameters.allowsDirectories
-        panel.allowsMultipleSelection = parameters.allowsMultipleSelection
-        let done: (NSApplication.ModalResponse) -> Void = { response in
-            completionHandler(response == .OK ? panel.urls : nil)
+        panel.canChooseDirectories = allowsDirectories
+        panel.allowsMultipleSelection = allowsMultiple
+        let completed: (NSApplication.ModalResponse) -> Void = { response in
+            done(response == .OK ? panel.urls : nil)
         }
         if let window = host?.hostWindow {
-            panel.beginSheetModal(for: window, completionHandler: done)
+            panel.beginSheetModal(for: window, completionHandler: completed)
         } else {
-            done(panel.runModal())
+            completed(panel.runModal())
         }
     }
 }

@@ -19,7 +19,9 @@ let package = Package(
             .product(name: "WebEngineAppKit", package: "WebEngineKit")
         ]),
         .testTarget(name: "WebKitMacPluginTests", dependencies: [
-            "WebKitMacPlugin", "WebKitSupport", .product(name: "WebEngineCore", package: "WebEngineKit")
+            "WebKitMacPlugin", "WebKitSupport",
+            .product(name: "WebEngineCore", package: "WebEngineKit"),
+            .product(name: "WebEngineAppKit", package: "WebEngineKit")
         ])
     ],
     swiftLanguageModes: [.v6]

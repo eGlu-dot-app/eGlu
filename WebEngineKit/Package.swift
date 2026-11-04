@@ -10,7 +10,7 @@ let package = Package(
     ],
     targets: [
         .target(name: "WebEngineCore"),
-        .target(name: "WebEngineAppKit"),
+        .target(name: "WebEngineAppKit", dependencies: ["WebEngineCore"]),
         .testTarget(name: "WebEngineCoreTests", dependencies: ["WebEngineCore"]),
         .testTarget(name: "WebEngineAppKitTests", dependencies: ["WebEngineAppKit"])
     ],
