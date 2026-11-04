@@ -1,4 +1,5 @@
 import PadCore
+import WebEngineCore
 import WebKit
 
 // The half of Page.swift both apps share: the iPad's (App/Sources/Page.swift)
@@ -15,13 +16,11 @@ import WebKit
 /// and none can be given. It goes nowhere but the site: a step to any
 /// other host ends it, a hands-off host above all. It gets none of the
 /// app's scripts, only the reader's one call, and the content blocker's
-/// lists where the page on screen has them. It stands in the window under
-/// the page on screen, where WebKit runs it as a page that shows; out of a
-/// window its timers are slowed and it may never be drawn. It is asked as
-/// soon as it has begun to load, and the reader waits in it for what it
+/// lists where the page on screen has them. It is asked as soon as it has
+/// begun to load, and the reader waits in it for what it
 /// looks for: all of a video's page takes seconds longer to come.
 @MainActor
-final class Unseen: NSObject, WKNavigationDelegate {
+final class Unseen {
     /// How long the page on screen is given to show its way to what is looked for, in milliseconds.
     static let patienceHere = 1_500
     /// How long a page out of sight is given to begin (its first bytes, after any redirect), and then to
@@ -30,129 +29,28 @@ final class Unseen: NSObject, WKNavigationDelegate {
     private static let start: Duration = .seconds(6)
     private static let patienceThere = 9_000
 
-    private let view: WKWebView
+    private let hidden: any WebHiddenPage
     /// The site it is a page of, and may not leave.
     private let site: SiteAdapter
-    private var loaded: ((Bool) -> Void)?
 
     init(beside page: Page, of site: SiteAdapter) {
         self.site = site
-        let config = WKWebViewConfiguration()
-        config.websiteDataStore = page.view.configuration.websiteDataStore
-        #if os(iOS)
-        config.defaultWebpagePreferences.preferredContentMode = .desktop
-        #endif
-        config.applicationNameForUserAgent = page.view.configuration.applicationNameForUserAgent
-        #if os(iOS)
-        config.allowsInlineMediaPlayback = true
-        #endif
-        config.mediaTypesRequiringUserActionForPlayback = .all
-        #if os(iOS)
-        config.allowsPictureInPictureMediaPlayback = false
-        #endif
-        config.allowsAirPlayForMediaPlayback = false
-        config.preferences.javaScriptCanOpenWindowsAutomatically = false
-        let controller = WKUserContentController()
-        if page.blocksContent {
-            for list in ContentBlocker.shared.lists { controller.add(list) }
+        hidden = page.hiddenPage { url in
+            ["http", "https"].contains(url?.scheme?.lowercased() ?? "") && site.covers(url) && !HandsOff.covers(url)
         }
-        config.userContentController = controller
-        view = WKWebView(frame: page.view.frame, configuration: config)
-        super.init()
-        #if os(iOS)
-        view.customUserAgent = Identity.macUserAgent(applicationName: config.applicationNameForUserAgent ?? "")
-        #endif
-        view.navigationDelegate = self
-        #if os(macOS)
-        view.alphaValue = 0
-        view.setAccessibilityElement(false)
-        view.setAllMediaPlaybackSuspended(true, completionHandler: nil)
-        page.view.superview?.addSubview(view, positioned: .below, relativeTo: page.view)
-        #else
-        view.isUserInteractionEnabled = false
-        view.accessibilityElementsHidden = true
-        view.scrollView.scrollsToTop = false
-        view.alpha = 0
-        view.setAllMediaPlaybackSuspended(true, completionHandler: nil)
-        page.view.superview?.insertSubview(view, belowSubview: page.view)
-        #endif
     }
 
     /// Loads the page, has the reader called on it, and lets the page go, whatever came of it.
     func transcript(at url: URL, call: String, limit: Int) async -> Transcript? {
         defer { stop() }
-        guard !HandsOff.covers(url), await begin(url), !Task.isCancelled else { return nil }
-        let said = try? await view.callAsyncJavaScript(call, arguments: ["limit": limit, "patience": Self.patienceThere], in: nil,
-                                                       contentWorld: Page.world)
+        guard !HandsOff.covers(url), await hidden.begin(url, within: Self.start), !Task.isCancelled else { return nil }
+        let said = try? await hidden.callInAppWorld(call, arguments: ["limit": limit, "patience": Self.patienceThere])
         if case .read(let transcript) = Transcript.answer(said) { return transcript }
         return nil
     }
 
-    /// Whether the page began to load, in the time it is given.
-    private func begin(_ url: URL) async -> Bool {
-        await withCheckedContinuation { (done: CheckedContinuation<Bool, Never>) in
-            loaded = { done.resume(returning: $0) }
-            view.load(URLRequest(url: url))
-            Task { @MainActor [weak self] in
-                try? await Task.sleep(for: Self.start)
-                self?.finish(false)
-            }
-        }
-    }
-
-    /// The one answer to whether it began, from whichever comes first: the page, a failure, or the time running out.
-    private func finish(_ ok: Bool) {
-        loaded?(ok)
-        loaded = nil
-    }
-
     /// The page goes, and whoever waits on its load hears that nothing came of it.
-    func stop() {
-        finish(false)
-        view.navigationDelegate = nil
-        view.stopLoading()
-        view.removeFromSuperview()
-    }
-
-    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
-                 decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void) {
-        // The page itself may go only to its own site, and to a page of the web: a step anywhere else ends the reading.
-        guard navigationAction.targetFrame?.isMainFrame ?? true else { return decisionHandler(.allow) }
-        let url = navigationAction.request.url
-        let own = ["http", "https"].contains(url?.scheme?.lowercased() ?? "") && site.covers(url)
-        guard own, !HandsOff.covers(url), !navigationAction.shouldPerformDownload else {
-            decisionHandler(.cancel)
-            finish(false)
-            return
-        }
-        decisionHandler(.allow)
-    }
-
-    func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,
-                 decisionHandler: @escaping @MainActor (WKNavigationResponsePolicy) -> Void) {
-        decisionHandler(navigationResponse.canShowMIMEType ? .allow : .cancel)
-    }
-
-    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
-        webView.setAllMediaPlaybackSuspended(true, completionHandler: nil)
-        finish(true)
-    }
-
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        webView.setAllMediaPlaybackSuspended(true, completionHandler: nil)
-    }
-
-    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        finish(false)
-    }
-
-    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        finish(false)
-    }
-
-    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
-        finish(false)
-    }
+    func stop() { hidden.stop() }
 }
 
 extension Page {
@@ -174,7 +72,7 @@ extension Page {
             // as a DocumentSource would read it, never through markdown.js.
             guard let url = view.url ?? committed else { return .failed() }
             do {
-                let fetched = try await HandoffFetch.fetch(url, with: view, into: folder)
+                let fetched = try await HandoffFetch.fetch(url, with: downloadStarter, into: folder)
                 let source = DocumentSource(file: fetched, name: (view.title ?? fetched.lastPathComponent),
                                             address: url, format: declared)
                 handoffDocument = source

@@ -4,6 +4,8 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+- On the Mac, iPhone and iPad, sites' SVG icons are drawn, downloads kept and tried again, Handoff's files fetched and a video's transcript read out of sight through the WebKit plugin's support code rather than web views of the app's own; on the Mac the recording pill holds any kind of view: step 9 of keeping eGlu's interface apart from its engines (`Docs/EngineSplitPlan.md`). Nothing changes in use.
+
 - On the Mac, iPhone and iPad, each space's website data store is made and removed by the WebKit plugin's support code rather than the app's own; history and the developer bar's status tell a page's entries apart by the engine's own objects; and on the Mac a frozen tab's place in its history comes back through the WebKit plugin: step 8 of keeping eGlu's interface apart from its engines (`Docs/EngineSplitPlan.md`). Nothing changes in use.
 - On the Mac, a page's dialogs (alert, confirm, prompt), its file fields' panel, the windows it opens and closes and its context menu's link reach the app from the WebKit plugin, which is now the page's UI delegate too: step 7 of keeping eGlu's interface apart from its engines is done (`Docs/EngineSplitPlan.md`). Nothing changes in use.
 - On the Mac, finding words on a page, its zoom, its device sizes, printing and the developer tools go through services of the page's that the WebKit plugin provides, so the developer bar and the menus no longer reach into WebKit: the first half of step 7 of keeping eGlu's interface apart from its engines (`Docs/EngineSplitPlan.md`). Nothing changes in use.

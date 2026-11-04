@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import XCTest
+import WebKitSupport
 
 nonisolated final class SiteIconsTests: XCTestCase {
     private var page: URL { URL(string: "https://example.com/page")! }
@@ -250,7 +251,8 @@ nonisolated final class SiteIconsTests: XCTestCase {
         }
 
         @MainActor func icons(caches keepsCaches: Bool = true) -> SiteIcons {
-            SiteIcons(data: support.appendingPathComponent("Safience"), caches: keepsCaches ? caches : nil)
+            SiteIcons(data: support.appendingPathComponent("Safience"), caches: keepsCaches ? caches : nil,
+                      rasterizer: WebKitSVGRaster.shared)
         }
 
         func file(_ key: String, root: URL? = nil, former: Bool = false) -> URL {

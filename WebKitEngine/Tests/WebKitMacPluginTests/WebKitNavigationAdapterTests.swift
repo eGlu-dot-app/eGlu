@@ -1,6 +1,7 @@
 import AppKit
 import WebEngineCore
 import WebKit
+import WebKitSupport
 @testable import WebKitMacPlugin
 import XCTest
 
@@ -78,11 +79,13 @@ private final class ResponseSchemeHandler: NSObject, WKURLSchemeHandler {
 
 /// No test download may get a destination, even if cancellation races its response.
 @MainActor
-private final class NoFileDownloadDelegate: NSObject, WKDownloadDelegate {
-    func download(_ download: WKDownload, decideDestinationUsing response: URLResponse,
+private final class NoFileDownloadDelegate: NSObject, WebEngineCore.WebDownloadDelegate {
+    func download(_ download: any WebEngineCore.WebDownload, decideDestinationUsing response: URLResponse,
                   suggestedFilename: String, completionHandler: @escaping @MainActor (URL?) -> Void) {
         completionHandler(nil)
     }
+    func downloadDidFinish(_ download: any WebEngineCore.WebDownload) {}
+    func download(_ download: any WebEngineCore.WebDownload, didFailWithError error: any Error, resumeData: Data?) {}
 }
 
 final class WebKitNavigationAdapterTests: XCTestCase {
@@ -121,9 +124,9 @@ final class WebKitNavigationAdapterTests: XCTestCase {
                 return
             }
             XCTAssertEqual(wrapper.originalURL, url)
-            XCTAssertEqual(wrapper.originalURL, wrapper.download.originalRequest?.url)
-            wrapper.download.delegate = noFile
-            wrapper.download.cancel { _ in cancelled.fulfill() }
+            XCTAssertEqual(wrapper.originalURL, wrapper.originalRequest?.url)
+            wrapper.delegate = noFile
+            wrapper.cancel { _ in cancelled.fulfill() }
         }
         adapter.load(URLRequest(url: url))
         await fulfillment(of: [received, cancelled], timeout: 10)

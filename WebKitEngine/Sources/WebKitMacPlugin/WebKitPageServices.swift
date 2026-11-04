@@ -2,12 +2,30 @@ import AppKit
 import WebEngineAppKit
 import WebEngineCore
 import WebKit
+import WebKitSupport
 
 @MainActor
-public final class WebKitPageServices: WebFind, WebZoom, WebMediaCapture, WebUserAgent, WebPrinting, WebDeveloperTools, WebBackForward, WebRestoration {
+public final class WebKitPageServices: WebFind, WebZoom, WebMediaCapture, WebUserAgent, WebPrinting, WebDeveloperTools, WebBackForward, WebRestoration, WebDownloadStarting {
     private weak var view: WKWebView?
 
     public init(view: WKWebView) { self.view = view }
+
+    public func keepingSessionAlive() -> any WebDownloadStarting {
+        guard let view else { return self }
+        return WebKitDownloadStarter(view: view).keepingSessionAlive()
+    }
+
+    public var canStartDownloads: Bool { view != nil }
+
+    public func startDownload(using request: URLRequest,
+                              completionHandler: @escaping @MainActor @Sendable (any WebEngineCore.WebDownload) -> Void) {
+        view?.startDownload(using: request) { completionHandler(WebKitDownload($0)) }
+    }
+
+    public func resumeDownload(fromResumeData data: Data,
+                               completionHandler: @escaping @MainActor @Sendable (any WebEngineCore.WebDownload) -> Void) {
+        view?.resumeDownload(fromResumeData: data) { completionHandler(WebKitDownload($0)) }
+    }
 
     public var currentEntry: AnyObject? { view?.backForwardList.currentItem }
 

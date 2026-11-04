@@ -1,5 +1,6 @@
 import Foundation
 import WebKit
+import WebEngineCore
 #if os(macOS)
 import AppKit
 #else
@@ -13,8 +14,8 @@ import UIKit
 /// loads nothing), onto a canvas, read back as a PNG with its transparency.
 /// One web view, made at the first icon that needs it; it needs no window.
 @MainActor
-final class SVGRaster: NSObject, WKNavigationDelegate {
-    static let shared = SVGRaster()
+public final class WebKitSVGRaster: NSObject, WKNavigationDelegate, WebSVGRasterizer {
+    public static let shared = WebKitSVGRaster()
 
     private var view: WKWebView?
     private var loaded = false
@@ -29,7 +30,7 @@ final class SVGRaster: NSObject, WKNavigationDelegate {
     /// The drawing with its light or its dark look chosen for it: each
     /// `(prefers-color-scheme: …)` it asks is made true or false outright.
     /// A drawing on a canvas is drawn in its light look whatever the page's.
-    nonisolated static func forcing(_ svg: String, dark: Bool) -> String {
+    nonisolated public static func forcing(_ svg: String, dark: Bool) -> String {
         guard hasDarkLook(svg) else { return svg }
         let always = "(min-width: 0px)", never = "(max-width: 0px)"
         var text = svg
@@ -43,7 +44,7 @@ final class SVGRaster: NSObject, WKNavigationDelegate {
 
     /// The drawing at `side` pixels a side, whole and centred; nil when it
     /// isn't one WebKit can draw, or it takes over three seconds.
-    func picture(of svg: String, side: Int, dark: Bool) async -> SiteImage? {
+    public func png(of svg: String, side: Int, dark: Bool) async -> Data? {
         await ready()
         guard let view else { return nil }
         let text = Self.forcing(svg, dark: dark)
@@ -56,7 +57,7 @@ final class SVGRaster: NSObject, WKNavigationDelegate {
         guard let url = result, let comma = url.firstIndex(of: ","),
               let png = Data(base64Encoded: String(url[url.index(after: comma)...]))
         else { return nil }
-        return SiteImage(data: png)
+        return png
     }
 
     /// Sized to the canvas before it is drawn: a drawing that gives only
@@ -98,15 +99,15 @@ final class SVGRaster: NSObject, WKNavigationDelegate {
         await withCheckedContinuation { waiting.append($0) }
     }
 
-    nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+    nonisolated public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         MainActor.assumeIsolated { settle() }
     }
 
-    nonisolated func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+    nonisolated public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         MainActor.assumeIsolated { settle(failed: true) }
     }
 
-    nonisolated func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+    nonisolated public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         // Made again at the next icon; any icon waiting for it goes without.
         MainActor.assumeIsolated { settle(failed: true) }
     }

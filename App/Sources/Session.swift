@@ -1,5 +1,7 @@
 import Combine
 import PadCore
+import WebEngineCore
+import WebKitSupport
 import UIKit
 import os
 
@@ -394,5 +396,11 @@ struct WindowState {
 extension SiteIcons {
     /// The app's icons, kept with its other data; the Caches folder they
     /// were kept in before is this app's own.
-    static let shared = SiteIcons(data: Session.folder, caches: .cachesDirectory)
+    static let shared = SiteIcons(data: Session.folder, caches: .cachesDirectory, rasterizer: WebKitSVGRaster.shared)
+}
+
+extension Downloads {
+    static func retryStarter(space: UUID) -> any WebDownloadStarting {
+        WebKitDownloadStarter(store: WebKitStores.store(for: space))
+    }
 }

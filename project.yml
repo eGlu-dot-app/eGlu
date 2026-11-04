@@ -102,6 +102,8 @@ targets:
       - path: App
       - path: Shared
     dependencies:
+      - package: WebEngineKit
+        product: WebEngineCore
       - package: PadCore
       - package: Engines
       - package: WebKitEngine
@@ -172,9 +174,12 @@ targets:
     platform: macOS
     sources:
       - path: Shared/SiteIcons.swift
-      - path: Shared/SVGRaster.swift
       - path: Tests/SiteIconsTests.swift
     dependencies:
+      - package: WebKitEngine
+        product: WebKitSupport
+      - package: WebEngineKit
+        product: WebEngineCore
       - package: PadCore
     settings:
       base:

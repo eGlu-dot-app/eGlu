@@ -2,8 +2,7 @@ import Foundation
 import os
 import PadCore
 import SwiftUI
-import WebKit
-import WebKitSupport
+import WebEngineCore
 #if canImport(UIKit)
 import UIKit
 #else
@@ -11,20 +10,20 @@ import AppKit
 #endif
 
 @MainActor
-final class Downloads: NSObject, ObservableObject, WKDownloadDelegate {
+final class Downloads: NSObject, ObservableObject, WebDownloadDelegate {
     static let shared = Downloads()
     private static let log = Logger(subsystem: "net.taehee.safience", category: "Downloads")
     typealias Item = DownloadRecord
     @Published private(set) var items: [Item] = []
     @Published private(set) var storageProblem: String?
     private struct Running {
-        let download: WKDownload
+        let download: any WebDownload
         let item: UUID
         let page: ObjectIdentifier?
         var watch: NSKeyValueObservation?
     }
     private var running: [ObjectIdentifier: Running] = [:]
-    private var retryViews: [UUID: WKWebView] = [:]
+    private var retryViews: [UUID: any WebDownloadStarting] = [:]
     private var stopping: Set<UUID> = []
     private static var folder: URL { Session.folder.appendingPathComponent("Downloads", isDirectory: true) }
     private static var index: URL { folder.appendingPathComponent("activity.json") }
@@ -64,8 +63,8 @@ final class Downloads: NSObject, ObservableObject, WKDownloadDelegate {
         return known.isEmpty ? 0 : known.reduce(0, +) / Double(known.count)
     }
     func isDownloading(for page: Page) -> Bool { running.values.contains { $0.page == ObjectIdentifier(page) } }
-    func adopt(_ download: WKDownload, for page: Page) { adopt(download, from: page) }
-    func adopt(_ download: WKDownload, from page: Page) {
+    func adopt(_ download: any WebDownload, for page: Page) { adopt(download, from: page) }
+    func adopt(_ download: any WebDownload, from page: Page) {
         let request = download.originalRequest
         let suggested = request?.url?.lastPathComponent ?? ""
         let item = Item(name: suggested.isEmpty ? String(localized: "Download") : suggested,
@@ -75,7 +74,7 @@ final class Downloads: NSObject, ObservableObject, WKDownloadDelegate {
         persist()
     }
 
-    private func attach(_ download: WKDownload, item: UUID, page: ObjectIdentifier?) {
+    private func attach(_ download: any WebDownload, item: UUID, page: ObjectIdentifier?) {
         download.delegate = self
         running[ObjectIdentifier(download)] = Running(download: download, item: item, page: page)
         let watch = download.progress.observe(\.fractionCompleted, options: [.initial, .new]) { [weak self] progress, _ in
@@ -84,7 +83,7 @@ final class Downloads: NSObject, ObservableObject, WKDownloadDelegate {
         }
         running[ObjectIdentifier(download)]?.watch = watch
     }
-    private func update(_ download: WKDownload, _ change: (inout Item) -> Void) {
+    private func update(_ download: any WebDownload, _ change: (inout Item) -> Void) {
         guard let id = running[ObjectIdentifier(download)]?.item, let index = items.firstIndex(where: { $0.id == id }) else { return }
         change(&items[index])
     }
@@ -92,7 +91,7 @@ final class Downloads: NSObject, ObservableObject, WKDownloadDelegate {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
         update(&items[index]); persist()
     }
-    private func end(_ download: WKDownload) {
+    private func end(_ download: any WebDownload) {
         guard let ended = running.removeValue(forKey: ObjectIdentifier(download)) else { return }
         ended.watch?.invalidate()
         retryViews[ended.item] = nil
@@ -142,22 +141,20 @@ final class Downloads: NSObject, ObservableObject, WKDownloadDelegate {
             change(item.id) { $0.problem = String(localized: "The source space was removed. Open the source page in an existing space to download again.") }
             return
         }
-        let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = WebKitStores.store(for: item.space)
-        let view = WKWebView(frame: .zero, configuration: configuration)
-        retryViews[item.id] = view
+        let starter = Self.retryStarter(space: item.space)
+        retryViews[item.id] = starter
         change(item.id) { $0.phase = .downloading; $0.fraction = nil; $0.problem = nil }
-        let started: @MainActor @Sendable (WKDownload) -> Void = { [weak self] download in
+        let started: @MainActor @Sendable (any WebDownload) -> Void = { [weak self] download in
             self?.attach(download, item: item.id, page: nil)
         }
         if let resume = item.resumeData, !resume.isEmpty {
-            view.resumeDownload(fromResumeData: resume, completionHandler: started)
+            starter.resumeDownload(fromResumeData: resume, completionHandler: started)
         } else if let source = item.source {
-            view.startDownload(using: URLRequest(url: source), completionHandler: started)
+            starter.startDownload(using: URLRequest(url: source), completionHandler: started)
         }
     }
 
-    func download(_ download: WKDownload, decideDestinationUsing response: URLResponse, suggestedFilename: String,
+    func download(_ download: any WebDownload, decideDestinationUsing response: URLResponse, suggestedFilename: String,
                   completionHandler: @escaping @MainActor (URL?) -> Void) {
         guard let id = running[ObjectIdentifier(download)]?.item else { return completionHandler(nil) }
         let destination: URL
@@ -186,7 +183,7 @@ final class Downloads: NSObject, ObservableObject, WKDownloadDelegate {
         update(download) { $0.name = name; $0.file = file }
         persist(); completionHandler(file)
     }
-    func downloadDidFinish(_ download: WKDownload) {
+    func downloadDidFinish(_ download: any WebDownload) {
         update(download) { $0.phase = .finished; $0.fraction = 1; $0.problem = nil; $0.resumeData = nil }
         #if os(macOS)
         if let file = items.first(where: { $0.id == running[ObjectIdentifier(download)]?.item })?.file {
@@ -197,7 +194,7 @@ final class Downloads: NSObject, ObservableObject, WKDownloadDelegate {
         #endif
         end(download)
     }
-    func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {
+    func download(_ download: any WebDownload, didFailWithError error: Error, resumeData: Data?) {
         if let id = running[ObjectIdentifier(download)]?.item, stopping.contains(id) { return }
         update(download) {
             if $0.phase != .cancelled {

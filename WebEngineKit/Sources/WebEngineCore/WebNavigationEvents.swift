@@ -20,12 +20,6 @@ public struct WebLoadError: Error, Sendable, Equatable {
     }
 }
 
-/// A download a navigation became. The host takes it over and it outlives the page.
-@MainActor
-public protocol WebDownload: AnyObject {
-    var originalURL: URL? { get }
-}
-
 /// What happens to the main frame's load, reported in order, on the main actor.
 /// Navigation and document identifiers wait until a slice needs them:
 /// Page does not use WebKit's navigation objects in these callbacks.

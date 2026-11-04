@@ -1,5 +1,6 @@
 import WebEngineCore
 import WebKit
+import WebKitSupport
 
 /// The web view's whole navigation delegate: decisions, lifecycle and downloads.
 /// WebKit's private UI-delegate callbacks (context menu and unused wheel events)

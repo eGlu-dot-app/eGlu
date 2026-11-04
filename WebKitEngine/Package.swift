@@ -12,13 +12,18 @@ let package = Package(
         .package(path: "../WebEngineKit")
     ],
     targets: [
-        .target(name: "WebKitSupport", resources: [.copy("Scripts")]),
+        .target(name: "WebKitSupport", dependencies: [
+            .product(name: "WebEngineCore", package: "WebEngineKit")
+        ], resources: [.copy("Scripts")]),
         .target(name: "WebKitMacPlugin", dependencies: [
             "WebKitSupport",
             .product(name: "WebEngineCore", package: "WebEngineKit"),
             .product(name: "WebEngineAppKit", package: "WebEngineKit")
         ]),
-        .testTarget(name: "WebKitSupportTests", dependencies: ["WebKitSupport"]),
+        .testTarget(name: "WebKitSupportTests", dependencies: [
+            "WebKitSupport",
+            .product(name: "WebEngineCore", package: "WebEngineKit")
+        ]),
         .testTarget(name: "WebKitMacPluginTests", dependencies: [
             "WebKitMacPlugin", "WebKitSupport",
             .product(name: "WebEngineCore", package: "WebEngineKit"),

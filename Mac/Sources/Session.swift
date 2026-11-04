@@ -3,6 +3,7 @@ import Combine
 import PadCore
 import Security
 import UniformTypeIdentifiers
+import WebEngineCore
 
 /// What every window shares: the spaces and their tabs, the settings, the
 /// pages, and the windows themselves. The iPad's Session, for a Mac.
@@ -632,5 +633,12 @@ extension SiteIcons {
     /// folder of its own (EGLU_DATA_ROOT) leaves the Caches folder alone:
     /// out of the sandbox, it is the real app's too.
     static let shared = SiteIcons(data: Session.folder,
-                                  caches: Session.dataRootOverride == nil ? .cachesDirectory : nil)
+                                  caches: Session.dataRootOverride == nil ? .cachesDirectory : nil,
+                                  rasterizer: Session.shared.engine.svgRasterizer)
+}
+
+extension Downloads {
+    static func retryStarter(space: UUID) -> any WebDownloadStarting {
+        Session.shared.engine.downloadStarter(space: space)
+    }
 }

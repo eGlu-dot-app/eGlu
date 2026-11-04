@@ -5,7 +5,7 @@ import Foundation
 import PadCore
 import PDFKit
 import UniformTypeIdentifiers
-import WebKit
+import WebEngineCore
 
 /// A document handed off: a file chosen or dropped, a download, or a file
 /// behind a link, fetched through the tab's own web view (HandoffFetch).
@@ -29,7 +29,7 @@ final class DocumentSource: HandoffSource {
     private let data: Data?
     private let url: URL?
     private let link: URL?
-    private weak var view: WKWebView?
+    private let downloads: (any WebDownloadStarting)?
     /// The format the tab's kind declared, where bytes and extension don't.
     private let hint: FileFormat?
 
@@ -38,7 +38,7 @@ final class DocumentSource: HandoffSource {
         self.data = data
         url = nil
         link = nil
-        view = nil
+        downloads = nil
         title = name
         self.address = address
         hint = nil
@@ -49,7 +49,7 @@ final class DocumentSource: HandoffSource {
         data = nil
         self.url = url
         link = nil
-        view = nil
+        downloads = nil
         title = name ?? url.lastPathComponent
         self.address = address
         self.hint = hint
@@ -57,11 +57,11 @@ final class DocumentSource: HandoffSource {
 
     /// From a link to fetch through the tab's own web view, into the
     /// job's folder, when the file is read; its `address` the link's.
-    init(link url: URL, view: WKWebView) {
+    init(link url: URL, downloads: any WebDownloadStarting) {
         data = nil
         self.url = nil
         link = url
-        self.view = view
+        self.downloads = downloads
         title = url.lastPathComponent
         address = url
         hint = nil
@@ -89,7 +89,7 @@ final class DocumentSource: HandoffSource {
 
     func reading(limit: Int, into folder: URL, telling: Handoff.Telling?) async -> Handoff.ReadOutcome {
         do {
-            let opened = try await Self.open(data: data, url: url, link: link, view: view, name: title,
+            let opened = try await Self.open(data: data, url: url, link: link, downloads: downloads?.keepingSessionAlive(), name: title,
                                              hint: hint, into: folder)
             let (reading, facts) = try await Self.convert(opened.data, facts: opened.facts, engine: opened.engine, room: limit,
                                                           into: folder, telling: telling)
@@ -115,12 +115,12 @@ final class DocumentSource: HandoffSource {
     /// the tab said it holds (`hint`). `engine` is the engines' own name
     /// for it, which says more than its kind does: a .doc is Word's as a
     /// .docx is, and needs another reader.
-    private static func open(data: Data?, url: URL?, link: URL?, view: WKWebView?, name: String, hint: FileFormat?,
+    private static func open(data: Data?, url: URL?, link: URL?, downloads: (any WebDownloadStarting)?, name: String, hint: FileFormat?,
                              into folder: URL) async throws -> (data: Data, facts: FileFacts, engine: DocumentFormat?) {
         var given = data
         if let link {
-            guard let view else { throw DocumentProblem(message: String(localized: "The tab it was on is gone.")) }
-            let fetched = try await HandoffFetch.fetch(link, with: view, into: folder)
+            guard let downloads, downloads.canStartDownloads else { throw DocumentProblem(message: String(localized: "The tab it was on is gone.")) }
+            let fetched = try await HandoffFetch.fetch(link, with: downloads, into: folder)
             given = try await bytes(of: nil, url: fetched)
         }
         let data = try await bytes(of: given, url: url)

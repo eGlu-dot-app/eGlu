@@ -2,6 +2,7 @@ import PadCore
 import UIKit
 import WebKit
 import WebKitSupport
+import WebEngineCore
 
 /// What a page asks of whoever is showing it: a window (Browser) or a
 /// sign-in pop-up (Popup).
@@ -74,6 +75,7 @@ final class Page: NSObject {
 
     let tab: UUID
     let space: UUID
+    let downloadStarter: any WebDownloadStarting
     let view: PageView
     private let controller: WKUserContentController
     weak var host: PageHost?
@@ -267,6 +269,13 @@ final class Page: NSObject {
     }
     var stats = Stats()
 
+    func hiddenPage(allowing allows: @escaping @MainActor @Sendable (URL?) -> Bool) -> any WebHiddenPage {
+        // Served the site as a computer is, as the page beside it may not be.
+        WebKitHiddenPage(beside: view, ruleLists: blocksContent ? ContentBlocker.shared.lists : [], appWorld: Page.world,
+                         customUserAgent: Identity.macUserAgent(applicationName: view.configuration.applicationNameForUserAgent ?? ""),
+                         allows: allows)
+    }
+
     /// `configuration`: WebKit's, for a page opened by another page; a new
     /// one in the space's store otherwise. Either way the page gets a script
     /// controller of its own, so the scripts swapped for one page (none at
@@ -281,6 +290,7 @@ final class Page: NSObject {
         config.userContentController = controller
         self.controller = controller
         view = PageView(frame: .zero, configuration: config, keyboardByWindow: keyboardByWindow)
+        downloadStarter = WebKitDownloadStarter(view: view)
         super.init()
         view.page = self
         view.navigationDelegate = self
@@ -1994,11 +2004,11 @@ extension Page: WKNavigationDelegate {
     }
 
     func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {
-        Downloads.shared.adopt(download, for: self)
+        Downloads.shared.adopt(WebKitDownload(download), for: self)
     }
 
     func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) {
-        Downloads.shared.adopt(download, for: self)
+        Downloads.shared.adopt(WebKitDownload(download), for: self)
     }
 }
 

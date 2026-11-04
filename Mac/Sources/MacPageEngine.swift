@@ -20,10 +20,13 @@ enum MacPageSource {
 /// Makes the Mac's pages and starts their engine services.
 @MainActor
 protocol MacPageEngine: AnyObject {
+    var svgRasterizer: any WebSVGRasterizer { get }
     /// A page for the tab, space and configuration source.
     func makePage(tab: UUID, space: UUID, source: MacPageSource) -> Page
     /// A new configuration in the space's store.
     func configuration(space: UUID) -> WKWebViewConfiguration
+    /// The space's session for a download retry.
+    func downloadStarter(space: UUID) -> any WebDownloadStarting
     /// Empties a removed space's store and schedules its removal.
     func eraseStore(space: UUID)
     /// Removes website stores no space uses.
@@ -37,6 +40,8 @@ protocol MacPageEngine: AnyObject {
 /// The app's WebKit page factory until Page moves into the plugin.
 @MainActor
 final class AppWebKitEngine: MacPageEngine {
+    var svgRasterizer: any WebSVGRasterizer { WebKitSVGRaster.shared }
+
     /// A supplied configuration stays supplied, including an extension's controller.
     func makePage(tab: UUID, space: UUID, source: MacPageSource) -> Page {
         switch source {
@@ -62,6 +67,10 @@ final class AppWebKitEngine: MacPageEngine {
         WebKitConfiguration.make(store: WebKitStores.store(for: space),
                                 extensionController: Extensions.shared.controller(for: space),
                                 applicationNameForUserAgent: Identity.applicationName(for: ProcessInfo.processInfo.operatingSystemVersion))
+    }
+
+    func downloadStarter(space: UUID) -> any WebDownloadStarting {
+        WebKitDownloadStarter(store: WebKitStores.store(for: space))
     }
 
     func eraseStore(space: UUID) {

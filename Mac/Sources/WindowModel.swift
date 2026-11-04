@@ -1371,7 +1371,7 @@ final class WindowModel: ObservableObject, PageHost {
     /// "Handoff Linked File" in the page's menu: fetched through the
     /// tab's own view and read as the document it is.
     func page(_ page: Page, handOffFileAt url: URL) {
-        startHandoff(source: DocumentSource(link: url, view: page.view))
+        startHandoff(source: DocumentSource(link: url, downloads: page.downloadStarter))
     }
 
     // MARK: PageHost

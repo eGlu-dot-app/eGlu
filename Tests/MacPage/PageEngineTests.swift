@@ -218,6 +218,8 @@ final class PageEngineTests: PageTestCase {
 /// configuration is supplied. It sweeps and starts nothing.
 @MainActor
 final class SpyEngine: MacPageEngine {
+    var svgRasterizer: any WebSVGRasterizer { AppWebKitEngine().svgRasterizer }
+
     /// The source a page was asked for with; a supplied configuration is in `Call`.
     enum Source: Equatable {
         case space
@@ -274,6 +276,10 @@ final class SpyEngine: MacPageEngine {
 
     func configuration(space: UUID) -> WKWebViewConfiguration {
         PageTestCase.keepingNothing()
+    }
+
+    func downloadStarter(space: UUID) -> any WebDownloadStarting {
+        AppWebKitEngine().downloadStarter(space: space)
     }
 
     func eraseStore(space: UUID) { AppWebKitEngine().eraseStore(space: space) }

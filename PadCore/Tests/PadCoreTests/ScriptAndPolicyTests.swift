@@ -253,15 +253,17 @@ final class PolicyTests: XCTestCase {
 
     /// On the iPad (App/) and on the Mac (Mac/), each with a Page.swift of its
     /// own; in what both compile (Shared/), only PageShared.swift, the half of
-    /// Page.swift the two share. SVGRaster.swift, there,
-    /// calls into a page of the app's own, where sites' SVG icons are drawn:
-    /// it may, so long as that page is never a site's. So may the Mac's
+    /// Page.swift the two share. In the WebKit plugin's support code, which
+    /// both link, only two: WebKitSVGRaster.swift calls into a page of the
+    /// app's own, where sites' SVG icons are drawn, and may, so long as that
+    /// page is never a site's; WebKitHiddenPage.swift calls the reader of
+    /// PageShared.swift's Unseen, in the app's world only, on a site page
+    /// Unseen has asked HandsOff about and whose steps it decides. So may the Mac's
     /// ExtensionBlankPage.swift, an empty page of the app's own at a removed
     /// extension's address, where what it kept is cleared; and its
     /// ExtensionPopup.swift, whose views (an extension's popup and side
     /// panel) only ever load that extension's own pages.
     func testOnlyPageSwiftCallsIntoPagesAndItAsksHandsOffFirst() throws {
-        let ownPage = "SVGRaster.swift"
         let sharedPage = "PageShared.swift"
         let blank = "ExtensionBlankPage.swift"
         let surface = "ExtensionPopup.swift"
@@ -293,24 +295,37 @@ final class PolicyTests: XCTestCase {
                 XCTAssertFalse(trial.contains("loadFileURL"), "ExtensionTrial.swift must never load a file")
             }
             let pageFile = folder == "Shared" ? sharedPage : "Page.swift"
-            for (name, text) in swift where name != pageFile && name != ownPage && name != blank && name != surface {
+            for (name, text) in swift where name != pageFile && name != blank && name != surface {
                 for call in ["evaluateJavaScript", "callAsyncJavaScript", "addUserScript"] {
                     XCTAssertFalse(text.contains(call), "\(folder)/\(name) calls \(call); calls into pages go through Page.swift")
                 }
             }
-            if let raster = swift.first(where: { $0.0 == ownPage })?.1 {
-                XCTAssertTrue(raster.contains("loadHTMLString(") && raster.contains("baseURL: nil"),
-                              "\(ownPage)'s page must be the app's own, with no site for its origin")
-                for load in ["load(URLRequest", ".load(", "loadFileURL", "addUserScript"] {
-                    XCTAssertFalse(raster.contains(load), "\(ownPage) must never load a site or add a script to one")
-                }
-            }
-            if folder == "Shared" {
-                XCTAssertNotNil(swift.first { $0.0 == ownPage }, "Shared/ has no \(ownPage)")
-            }
             let text = try XCTUnwrap(swift.first { $0.0 == pageFile }?.1, "\(folder) has no \(pageFile)")
             XCTAssertTrue(text.contains("HandsOff.covers"), "\(folder)/\(pageFile) doesn't ask HandsOff")
         }
+        let ownPage = "WebKitSVGRaster.swift"
+        let hiddenPage = "WebKitHiddenPage.swift"
+        let support = try sources(in: "WebKitEngine/Sources", ending: ".swift")
+        for (name, text) in support where name != ownPage && name != hiddenPage {
+            for call in ["evaluateJavaScript", "callAsyncJavaScript", "addUserScript"] {
+                XCTAssertFalse(text.contains(call), "WebKitEngine's \(name) calls \(call)")
+            }
+        }
+        let raster = try XCTUnwrap(support.first { $0.0 == ownPage }?.1, "WebKitEngine has no \(ownPage)")
+        XCTAssertTrue(raster.contains("loadHTMLString(") && raster.contains("baseURL: nil"),
+                      "\(ownPage)'s page must be the app's own, with no site for its origin")
+        for load in ["load(URLRequest", ".load(", "loadFileURL", "addUserScript"] {
+            XCTAssertFalse(raster.contains(load), "\(ownPage) must never load a site or add a script to one")
+        }
+        let hidden = try XCTUnwrap(support.first { $0.0 == hiddenPage }?.1, "WebKitEngine has no \(hiddenPage)")
+        XCTAssertTrue(hidden.contains("contentWorld: appWorld") && hidden.contains("guard allows(url)"),
+                      "\(hiddenPage) must call only in the app's world and load only what its owner allows")
+        for call in ["evaluateJavaScript", "addUserScript", "loadFileURL", "loadHTMLString"] {
+            XCTAssertFalse(hidden.contains(call), "\(hiddenPage) must not \(call)")
+        }
+        let unseen = try XCTUnwrap(try sources(in: "Shared", ending: ".swift").first { $0.0 == sharedPage }?.1)
+        XCTAssertTrue(unseen.contains("guard !HandsOff.covers(url), await hidden.begin("),
+                      "Unseen must ask HandsOff before its hidden page loads")
     }
 
     /// What Apple's browser entitlement asks of the app

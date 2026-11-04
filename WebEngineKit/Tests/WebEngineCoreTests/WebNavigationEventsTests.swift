@@ -47,6 +47,10 @@ final class WebNavigationEventsTests: XCTestCase {
 @MainActor
 private final class Download: WebDownload {
     let originalURL: URL?
+    var originalRequest: URLRequest? { originalURL.map { URLRequest(url: $0) } }
+    let progress = Progress(totalUnitCount: 1)
+    weak var delegate: (any WebDownloadDelegate)?
+    func cancel(_ done: @escaping @MainActor @Sendable (Data?) -> Void) { done(nil) }
     init(originalURL: URL?) { self.originalURL = originalURL }
 }
 

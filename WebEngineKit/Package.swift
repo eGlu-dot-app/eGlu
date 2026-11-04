@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "WebEngineKit",
-    platforms: [.macOS("26.0")],
+    platforms: [.macOS("26.0"), .iOS("17.0")],
     products: [
         .library(name: "WebEngineCore", targets: ["WebEngineCore"]),
         .library(name: "WebEngineAppKit", targets: ["WebEngineAppKit"])

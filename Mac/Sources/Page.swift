@@ -5,6 +5,7 @@ import WebEngineAppKit
 import WebEngineCore
 import WebKit
 import WebKitMacPlugin
+import WebKitSupport
 
 /// What a page asks of whoever is showing it: a window (WindowModel), a
 /// Peek over a tab (PeekPage), a little window (LittleWindow) or a sign-in
@@ -150,7 +151,7 @@ final class Page: NSObject {
     private var navigationAdapter: WebKitNavigationAdapter!
     private var uiAdapter: WebKitUIAdapter!
     private let channels: any WebMessageChannels
-    private let services: any WebFind & WebZoom & WebMediaCapture & WebUserAgent & WebPrinting & WebDeveloperTools & WebBackForward & WebRestoration
+    private let services: any WebFind & WebZoom & WebMediaCapture & WebUserAgent & WebPrinting & WebDeveloperTools & WebBackForward & WebRestoration & WebDownloadStarting
     private let controller: WKUserContentController
     weak var host: PageHost?
 
@@ -169,6 +170,13 @@ final class Page: NSObject {
             services.restorationData = newValue
         }
     }
+
+    func hiddenPage(allowing allows: @escaping @MainActor @Sendable (URL?) -> Bool) -> any WebHiddenPage {
+        WebKitHiddenPage(beside: view, ruleLists: blocksContent ? ContentBlocker.shared.lists : [],
+                         appWorld: Page.world, allows: allows)
+    }
+
+    var downloadStarter: any WebDownloadStarting { services }
 
     var pageZoom: Double { services.pageZoom }
     var magnification: Double { services.magnification }
@@ -1583,10 +1591,6 @@ extension Page: WebNavigationEvents {
     /// A tab that was only ever the file's way in, with no page of its own
     /// to show, goes once the download has begun, as Safari's does.
     func navigationBecameDownload(_ download: any WebEngineCore.WebDownload) {
-        guard let download = (download as? WebKitDownload)?.download else {
-            assertionFailure("Expected a WebKitDownload")
-            return
-        }
         Downloads.shared.adopt(download, from: self)
         if committed == nil, !view.canGoBack { host?.pageDidClose(self) }
     }

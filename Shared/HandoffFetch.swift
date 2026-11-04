@@ -1,5 +1,5 @@
 import Foundation
-import WebKit
+import WebEngineCore
 
 /// A file fetched for a handoff through the tab's own web view, so the
 /// space's sign-ins come with it: named into the job's folder by a
@@ -12,7 +12,8 @@ enum HandoffFetch {
     /// the handoff, or out of time, the download is cancelled and not
     /// waited for.
     @MainActor
-    static func fetch(_ url: URL, with view: WKWebView, into folder: URL) async throws -> URL {
+    static func fetch(_ url: URL, with downloads: any WebDownloadStarting, into folder: URL) async throws -> URL {
+        let downloads = downloads.keepingSessionAlive()
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         if url.isFileURL {
             #if os(macOS)
@@ -24,7 +25,7 @@ enum HandoffFetch {
             return to
         }
         let fetched = await HandoffTime.value(by: .now + limit) { @MainActor in
-            try? await Self.download(url, with: view, into: folder)
+            try? await Self.download(url, with: downloads, into: folder)
         }
         guard let fetched else { throw FetchError.failed }
         return fetched
@@ -37,9 +38,13 @@ enum HandoffFetch {
     /// Called off, the download is cancelled, and its wait ends there
     /// whether or not WebKit says so after.
     @MainActor
-    private static func download(_ url: URL, with view: WKWebView, into folder: URL) async throws -> URL {
-        let download = await view.startDownload(using: URLRequest(url: url))
-        let fetch = Fetch(folder: folder)
+    private static func download(_ url: URL, with downloads: any WebDownloadStarting, into folder: URL) async throws -> URL {
+        // A session whose page has gone starts nothing, and would never answer.
+        guard downloads.canStartDownloads else { throw FetchError.failed }
+        let download = await withCheckedContinuation { done in
+            downloads.startDownload(using: URLRequest(url: url)) { done.resume(returning: $0) }
+        }
+        let fetch = Fetch(folder: folder, download: download)
         download.delegate = fetch
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { done in
@@ -49,7 +54,9 @@ enum HandoffFetch {
             Task { @MainActor in
                 fetch.answer(.failure(CancellationError()))
                 // What it had fetched is not kept to resume from: the handoff is over.
-                _ = await download.cancel()
+                download.cancel { _ in
+                    withExtendedLifetime((fetch, download)) {}
+                }
             }
         }
     }
@@ -61,16 +68,19 @@ enum HandoffFetch {
 
     /// The delegate of Handoff's own: it names the file in the job's
     /// folder and answers once, on finish, fail or cancel. Held until then.
-    private final class Fetch: NSObject, WKDownloadDelegate {
+    @MainActor
+    private final class Fetch: NSObject, WebDownloadDelegate {
         private let folder: URL
         private var waiting: CheckedContinuation<URL, Error>?
         /// What it came to, where that came before anyone waited.
         private var answered: Result<URL, Error>?
         private var held: Fetch?
+        private var download: (any WebDownload)?
         private var place: URL?
 
-        init(folder: URL) {
+        init(folder: URL, download: any WebDownload) {
             self.folder = folder
+            self.download = download
             super.init()
             held = self
         }
@@ -84,10 +94,11 @@ enum HandoffFetch {
             answered = result
             waiting?.resume(with: result)
             waiting = nil
+            download = nil
             held = nil
         }
 
-        func download(_ download: WKDownload, decideDestinationUsing response: URLResponse,
+        func download(_ download: any WebDownload, decideDestinationUsing response: URLResponse,
                       suggestedFilename: String, completionHandler: @escaping @MainActor (URL?) -> Void) {
             // WebKit writes only where no file is: a name the site gives twice, or a retry, gets one of its own.
             let to = Self.free(suggestedFilename, in: folder)
@@ -95,11 +106,11 @@ enum HandoffFetch {
             completionHandler(to)
         }
 
-        func downloadDidFinish(_ download: WKDownload) {
+        func downloadDidFinish(_ download: any WebDownload) {
             if let place { answer(.success(place)) } else { answer(.failure(FetchError.failed)) }
         }
 
-        func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {
+        func download(_ download: any WebDownload, didFailWithError error: Error, resumeData: Data?) {
             answer(.failure(error))
         }
 
