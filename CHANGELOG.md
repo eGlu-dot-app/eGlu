@@ -4,6 +4,10 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+- Pinned tabs come in two tiers on the Mac and iPad. Under the pinned tiles, the space's Bookmarks bar folder is a list of rows, its folders opening in place at any depth. A row opens a tab of its own that stays in the bar instead of joining the other tabs; gone on to another page, its row shows the bookmark's icon, a slash and the page it is on now. Closing it closes the tab and keeps the bookmark. With the tabs along the top, the bar is behind a bookmark button beside the pinned tiles. On iPhone, the dock and the pinned tabs' list keep only the pinned tiles.
+- The sidebar's Bookmarks row is now Other Bookmarks and leaves the Bookmarks bar out, as the bookmarks row along the top (⇧⌘B) now does too. Importing bookmarks puts the file's bookmarks bar (Chrome's, or Safari's Favorites) in the space's Bookmarks bar, and Chrome's Other bookmarks at the top.
+- On the Mac and iPad, resting the pointer on a pinned tile or a Bookmarks bar row shows its whole name, Back to Pinned Address while it is open, and Open in Split View, which opens its page beside the tab on screen.
+- Open pinned tabs and Bookmarks bar tabs have a small dot, as the iPhone's dock has: under a tile's icon, left of a row's. Clear leaves Bookmarks bar tabs open, as it leaves pinned tabs.
 - A long history no longer holds up history suggestions: with 10,000 pages, the daily tidying of history and taking in visits from iCloud each took up to a minute, with history in the address bar waiting behind them, and now take under a second. Searches left behind by typing on are dropped, and a page loaded in a tab no longer waits while the tab's saved snapshots are cleared.
 - On the Mac, dragging the sidebar's edge resizes it smoothly instead of making the sidebar jump back and forth.
 - On the Mac, playing videos and supported calls open Picture in Picture when you switch tabs or spaces, as they do when you switch apps, and return when you come back to the page. Settings › General › Automatic Picture in Picture turns this off without changing manually opened PiP.

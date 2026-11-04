@@ -45,6 +45,10 @@ struct Sidebar: View {
                         ScrollViewReader { reader in
                             ScrollView {
                                 VStack(spacing: 6) {
+                                    // The pinned tabs' second tier: the bookmarks bar, a row each.
+                                    if let bar = space.bar, !(bar.children ?? []).isEmpty {
+                                        BarList(model: model, space: space, bar: bar)
+                                    }
                                     BookmarksRow(model: model)
                                     SectionLine()
                                     TabList(model: model, space: space)
@@ -88,6 +92,9 @@ struct Sidebar: View {
         }
         .padding([.top, .bottom, .leading], Metrics.gap)
         .padding(.trailing, floating ? Metrics.gap : 0)
+        .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(BrowserView.place)).maxX } action: { model.sidebarEdge = $0 }
+        // Gone, it holds no card away from what it stood beside.
+        .onDisappear { model.sidebarEdge = 0 }
     }
 }
 
@@ -268,9 +275,14 @@ struct PageActionsButton: View {
 // MARK: Pinned tabs
 
 /// A tab carried by a drag: within the sidebar to another place, onto the
-/// tiles to pin it, or onto a space's button to move it there.
+/// tiles to pin it, onto the bookmarks bar to keep it there, or onto a
+/// space's button to move it there. A bookmark of the bar, open or not,
+/// is carried as one too, to another place in the bar: then `bookmark` is
+/// its id, and `tab` its tab's, or no tab's at all, which every place but
+/// the bar finds no tab for and so leaves alone.
 struct TabDrag: Codable, Transferable {
     let tab: UUID
+    var bookmark: UUID?
 
     static var transferRepresentation: some TransferRepresentation {
         CodableRepresentation(contentType: .egluTab)
@@ -328,6 +340,8 @@ struct PinnedTile: View {
     /// Where the pointer is over the tile, and the tile's size, for the plate to lean toward it.
     @State private var pointer: CGPoint?
     @State private var size = CGSize.zero
+    /// Where the tile is in the window, for its card (PinnedCardView).
+    @State private var frame = CGRect.zero
 
     /// What differs between the sidebar's tiles and the top row's.
     struct Look {
@@ -344,14 +358,18 @@ struct PinnedTile: View {
         let glassAtRest: Bool
         /// A click on the one on screen opens the command bar on its address, as the tab on screen does.
         let openTypesAddress: Bool
+        /// Its card under it, along the top; beside it in the sidebar.
+        let cardBelow: Bool
+        /// The open dot under the icon (OpenDot).
+        let dot: CGFloat
 
         @MainActor static let sidebar = Look(corner: Metrics.tileCorner, icon: Metrics.tileIcon, width: nil, height: Metrics.tile,
                                              glow: 44, reach: CGSize(width: 13, height: 9), plate: PinnedIcon.tilePlate,
-                                             glassAtRest: true, openTypesAddress: false)
+                                             glassAtRest: true, openTypesAddress: false, cardBelow: false, dot: 4)
         /// Glass only on the one on screen: the others are icons on the row, as its tabs are names.
         @MainActor static let topRow = Look(corner: 9, icon: 16, width: Metrics.control + 4, height: Metrics.control,
                                             glow: 28, reach: CGSize(width: 6, height: 4), plate: (side: 18, corner: 6, blur: 6),
-                                            glassAtRest: false, openTypesAddress: true)
+                                            glassAtRest: false, openTypesAddress: true, cardBelow: true, dot: 3)
     }
 
     /// A tile at rest, off screen and not under the pointer: lighter than the
@@ -398,6 +416,11 @@ struct PinnedTile: View {
             }
             .frame(maxWidth: look.width ?? .infinity)
             .frame(width: look.width, height: look.height)
+            // Open, as the iPhone's dock marks it: a dot just under the icon.
+            .overlay {
+                OpenDot(shown: PinnedTile.isOpen(tab), size: look.dot)
+                    .offset(y: OpenDot.under(icon: look.icon, size: look.dot))
+            }
             .onGeometryChange(for: CGSize.self) { $0.size } action: { size = $0 }
             .background(Highlight(hovering: hovering && !selected, shape: shape))
             // The plate's softened edge stays inside the tile.
@@ -425,15 +448,31 @@ struct PinnedTile: View {
         .animation(.bar, value: selected)
         .animation(.bar, value: open)
         .animation(.bar, value: colour)
-        // The glass comes and goes with the pointer, as quickly as a highlight does.
-        .onHover { inside in withAnimation(.hover) { hovering = inside } }
+        // The glass comes and goes with the pointer, as quickly as a highlight does;
+        // its card, with its whole name, after a moment (PinnedCardView).
+        .onHover { inside in
+            withAnimation(.hover) { hovering = inside }
+            if inside {
+                model.pointer(on: PinnedCard(item: .tab(tab.id), anchor: frame, below: look.cardBelow))
+            } else {
+                model.pointerOnCard(false)
+            }
+        }
         .onContinuousHover { phase in
             // Slow enough to read as light following, not a spot jumping to the pointer.
             withAnimation(.spring(duration: 0.6, bounce: 0)) {
                 if case .active(let point) = phase { pointer = point } else { pointer = nil }
             }
         }
-        .help(tab.label)
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(BrowserView.place)) } action: { frame = $0 }
+        #if DEBUG
+        // `-pinnedCard name`: the card of the tile whose name has it, out at once, for a picture.
+        .task(id: frame) {
+            guard frame != .zero, let wanted = UserDefaults.standard.string(forKey: "pinnedCard"),
+                  tab.label.localizedCaseInsensitiveContains(wanted) else { return }
+            model.pointer(on: PinnedCard(item: .tab(tab.id), anchor: frame, below: look.cardBelow))
+        }
+        #endif
         .draggable(TabDrag(tab: tab.id)) {
             SiteIconView(url: url, size: look.icon)
                 .environment(\.spaceColor, colour)
@@ -445,15 +484,358 @@ struct PinnedTile: View {
         } isTargeted: { targeted = $0 }
         .contextMenu { TabMenu(model: model, tab: tab) }
         .accessibilityLabel(tab.label)
+        .accessibilityValue(PinnedTile.isOpen(tab) ? String(localized: "Open") : "")
         .accessibilityAddTraits(selected ? [.isSelected] : [])
+    }
+
+    /// Open, as the iPhone has it (Pinned.isOpen): its page loaded, or gone
+    /// on from the address it was pinned with. Closed, it is back there with
+    /// its page let go, as closing a pinned tab leaves it.
+    static func isOpen(_ tab: TabRecord) -> Bool {
+        tab.isPinned && (Session.shared.pages.isLive(tab.id) || tab.isAwayFromPinned)
+    }
+}
+
+
+// MARK: The bookmarks bar
+
+/// The pinned tabs' second tier: the bookmarks bar's bookmarks as rows
+/// under the tiles, as Arc keeps its pinned tabs under its favourites, a
+/// folder in it opening in place, a step in. Each opens in a tab of its own
+/// that stands in its row (Workspace.openFromBar), with a dot left of its
+/// icon while it is open; an open one stays in sight in a folder that is
+/// shut. Along the top, the same rows in the bar button's pane (BarPanel, `chose`).
+struct BarList: View {
+    @ObservedObject var model: WindowModel
+    let space: Space
+    let bar: Bookmark
+    /// In the pane along the top: a bookmark chosen puts it away.
+    var chose: (() -> Void)?
+    /// The folders open.
+    @State private var open: Set<UUID> = []
+
+    var body: some View {
+        // The bar's tabs once for all its rows, not by each.
+        let map = space.barMap
+        let rows = Bookmarks.rows(of: bar.children ?? [], opening: open, keeping: Set(map.tabs.keys))
+        VStack(spacing: 2) {
+            ForEach(rows, id: \.item.id) { row in
+                BarRow(model: model, item: row.item, depth: row.depth, map: map, space: space, bar: bar.id,
+                       open: open.contains(row.item.id), chose: chose) {
+                    withAnimation(.bar) { open.formSymmetricDifference([row.item.id]) }
+                }
+                .transition(.opacity)
+            }
+        }
+        .animation(.bar, value: rows.map(\.item.id))
+    }
+}
+
+/// A bookmark of the bar, as a tab's row is: a dot while it is open, its
+/// site's icon, its name; gone on from its bookmark, the bookmark's icon, a
+/// slash and where it is now, as Arc shows a pinned tab that has. The one
+/// on screen raised in glass, a close button on an open one under the
+/// pointer, and its card after a moment (PinnedCardView). A folder in the
+/// space's colour, turning to show it is open. A tab dropped on a row goes
+/// into the bar before it, on a folder into the folder; a row dragged to
+/// another moves there.
+private struct BarRow: View {
+    @ObservedObject var model: WindowModel
+    let item: Bookmark
+    let depth: Int
+    /// The space's bar tabs, worked out once by the list for all its rows.
+    let map: Space.BarMap
+    let space: Space
+    let bar: UUID
+    let open: Bool
+    let chose: (() -> Void)?
+    let toggle: () -> Void
+    @State private var hovering = false
+    @State private var pressed = false
+    @State private var targeted = false
+    /// Where the row is in the window, for its card.
+    @State private var frame = CGRect.zero
+
+    /// Its tab, while it is open.
+    private var tab: TabRecord? {
+        map.tabs[item.id]
+    }
+
+    var body: some View {
+        let tab = tab
+        let away = tab.map { space.isAwayFromHome($0, in: map) } ?? false
+        let selected = tab.map { $0.id == model.tabID } ?? false
+        let shape = RoundedRectangle(cornerRadius: Metrics.rowCorner, style: .continuous)
+        let indent = CGFloat(depth) * 16
+        HStack(spacing: 8) {
+            Button(action: choose) {
+                HStack(spacing: 8) {
+                    ZStack {
+                        if item.isFolder {
+                            Image(systemName: "folder.fill")
+                                .font(.system(size: 12))
+                                .foregroundStyle(space.color.color)
+                        } else if selected, model.loading, model.page != nil {
+                            ProgressView().controlSize(.mini)
+                        } else {
+                            SiteIconView(url: item.url, size: 16)
+                        }
+                    }
+                    .frame(width: 16, height: 16)
+                    if let tab, away {
+                        // The slash closer to the words than the icon is: "where it is now" is one thing.
+                        HStack(spacing: 5) {
+                            Text(verbatim: "/")
+                                .font(.system(size: 13, weight: .light))
+                                .foregroundStyle(.tertiary)
+                            title(tab.label, selected: selected)
+                        }
+                    } else {
+                        title(item.label, selected: selected)
+                    }
+                    Spacer(minLength: 0)
+                    if item.isFolder {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.tertiary)
+                            .rotationEffect(.degrees(open ? 90 : 0))
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
+            }
+            // The row's ground darkens the moment it is pressed, not when it is let go.
+            .buttonStyle(PressReport(pressed: $pressed))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(item.isFolder ? String(localized: "\(item.label), folder")
+                                : tab.flatMap { away ? $0.label : nil } ?? item.label)
+            .accessibilityValue(item.isFolder ? (open ? String(localized: "Open") : String(localized: "Closed"))
+                                : tab != nil ? String(localized: "Open") : "")
+            .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+            // The element made in the button's place has no press of its own.
+            .accessibilityAction(.default, choose)
+            if hovering, let tab {
+                CloseButton { model.closeTab(tab.id) }
+                    .transition(.opacity)
+            }
+        }
+        .padding(.leading, 10 + indent)
+        .padding(.trailing, 7)
+        .frame(height: Metrics.row)
+        // Open: a dot left of the icon, nearer it than the row's edge.
+        .overlay(alignment: .leading) {
+            OpenDot(shown: tab != nil)
+                .padding(.leading, OpenDot.before(lead: 10) + indent)
+        }
+        .background {
+            if selected, chose == nil {
+                shape.fill(.clear).glassEffect(.regular, in: shape)
+            } else {
+                // In the bar's pane, already glass, the one on screen a step darker than under the pointer.
+                Highlight(hovering: hovering || (targeted && item.isFolder), pressed: selected || pressed, shape: shape)
+            }
+        }
+        .overlay(alignment: .top) { DropLine(shown: targeted && !item.isFolder) }
+        .contentShape(shape)
+        .onHover { inside in
+            withAnimation(.hover) { hovering = inside }
+            // Its card beside the sidebar, or beside the bar's pane along the top.
+            guard !item.isFolder else { return }
+            if inside {
+                model.pointer(on: PinnedCard(item: .bookmark(item.id), anchor: frame))
+            } else {
+                model.pointerOnCard(false)
+            }
+        }
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(BrowserView.place)) } action: { frame = $0 }
+        #if DEBUG
+        // `-pinnedCard name`, as for a tile.
+        .task(id: frame) {
+            guard frame != .zero, !item.isFolder, let wanted = UserDefaults.standard.string(forKey: "pinnedCard"),
+                  (tab?.label ?? item.label).localizedCaseInsensitiveContains(wanted) else { return }
+            model.pointer(on: PinnedCard(item: .bookmark(item.id), anchor: frame))
+        }
+        #endif
+        .draggable(TabDrag(tab: tab?.id ?? item.id, bookmark: item.id)) {
+            HStack(spacing: 6) {
+                if item.isFolder {
+                    Image(systemName: "folder.fill").foregroundStyle(space.color.color)
+                } else {
+                    SiteIconView(url: item.url, size: 16)
+                }
+                Text(item.label).font(.system(size: 13)).lineLimit(1)
+            }
+            .padding(8)
+            .frame(width: 200, alignment: .leading)
+        }
+        .dropDestination(for: TabDrag.self) { drags, _ in
+            guard let drag = drags.first, drag.bookmark != item.id else { return false }
+            // On a folder, into it; on a bookmark, before it in its folder.
+            let folder = item.isFolder ? item.id : Bookmarks.parent(of: item.id, in: space.bookmarks) ?? bar
+            let before = item.isFolder ? nil : item.id
+            if let bookmark = drag.bookmark {
+                model.moveInBar(bookmark, into: folder, before: before)
+            } else {
+                model.addToBar(drag.tab, into: folder, before: before)
+            }
+            return true
+        } isTargeted: { targeted = $0 }
+        .contextMenu { menu }
+    }
+
+    /// A folder opens or shuts; a bookmark opens in its tab.
+    private func choose() {
+        if item.isFolder {
+            toggle()
+        } else {
+            model.openFromBar(item.id)
+            chose?()
+        }
+    }
+
+    private func title(_ text: String, selected: Bool) -> some View {
+        Text(text)
+            .font(.system(size: 13, weight: selected ? .medium : .regular))
+            .foregroundStyle(selected ? Color.primary : Color.primary.opacity(0.85))
+            .lineLimit(1)
+            .truncationMode(.tail)
+    }
+
+    @ViewBuilder
+    private var menu: some View {
+        if let tab {
+            TabMenu(model: model, tab: tab, map: map)
+        } else {
+            if let url = item.url {
+                Button("Open") { model.openFromBar(item.id) }
+                Button("Open in New Tab") { model.open(url, newTab: true) }
+                Button("Copy Address") { model.copyAddress(url) }
+                Divider()
+            }
+            let folder = item.isFolder ? item.id : Bookmarks.parent(of: item.id, in: space.bookmarks) ?? bar
+            Button("New Folder") { model.newFolderInBar(in: folder) }
+            Button("Rename…") { model.renameInBar(item.id) }
+            Button(item.isFolder ? String(localized: "Remove Folder from Bookmarks Bar") : String(localized: "Remove from Bookmarks Bar")) {
+                model.removeFromBar(item.id)
+            }
+        }
+    }
+}
+
+/// A plain button that says when it is held, for a row whose ground is drawn
+/// outside the button to darken under the press, as RowButtonStyle's does.
+private struct PressReport: ButtonStyle {
+    @Binding var pressed: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .onChange(of: configuration.isPressed) { _, now in pressed = now }
+    }
+}
+
+// MARK: Pinned cards
+
+/// The card beside a pinned tile or a bar bookmark the pointer rests on:
+/// which it is, and where.
+struct PinnedCard: Equatable {
+    enum Item: Equatable {
+        /// A pinned tab's tile.
+        case tab(UUID)
+        /// A bookmark of the bar, open or not.
+        case bookmark(UUID)
+    }
+
+    let item: Item
+    /// The tile's or the row's frame in the window (BrowserView.place).
+    let anchor: CGRect
+    /// Under it, as along the top; beside it, as in the sidebar.
+    var below = false
+}
+
+/// A pinned tab's card, as Arc's: its whole name, which a tile has no room
+/// for and a row cuts short, and what can be done with it at once: going
+/// back to where it was pinned, while it is open, and its page in a split
+/// beside the tab on screen, while that is an ordinary tab. In glass, over
+/// the page, beside the sidebar or under the row along the top.
+struct PinnedCardView: View {
+    @ObservedObject var model: WindowModel
+    let card: PinnedCard
+    @ObservedObject private var session = Session.shared
+    @Environment(\.colorScheme) private var scheme
+
+    /// What the card says and offers, as the workspace is now.
+    private struct Shown {
+        let title: String
+        /// Its tab, while it is open.
+        let tab: TabRecord?
+        /// The page its split would show: where its tab is, else where it was pinned.
+        let page: URL?
+    }
+
+    var body: some View {
+        if let shown {
+            let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
+            let canSplit = model.canSplitBeside && shown.tab?.id != model.tabID && shown.page != nil
+            let actions = shown.tab != nil || canSplit
+            VStack(alignment: .leading, spacing: 6) {
+                Text(shown.title)
+                    .font(.system(size: 14, weight: .semibold))
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if actions {
+                    HStack(spacing: 2) {
+                        if let tab = shown.tab {
+                            PlainIcon("arrow.uturn.backward", help: String(localized: "Back to Pinned Address")) {
+                                model.backToPinned(tab.id)
+                            }
+                        }
+                        if canSplit, let page = shown.page {
+                            PlainIcon("rectangle.split.2x1", help: String(localized: "Open in Split View")) {
+                                model.splitBeside(page)
+                            }
+                        }
+                    }
+                    // The glyphs, not their cells, in line with the name; the cells' corners
+                    // (8) as far in from the card's (18) as the cells are from its edges (10).
+                    .padding(.leading, -6)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
+            .padding(.bottom, actions ? 10 : 14)
+            .frame(width: 240)
+            // Over whatever the page shows: glass, but nearly as solid as the window, for its words.
+            .glassEffect(.regular.tint(Color(nsColor: .windowBackgroundColor).opacity(0.72)), in: shape)
+            .shadow(color: .black.opacity(scheme == .dark ? 0.35 : 0.12), radius: 18, y: 8)
+            .onHover { model.pointerOnCard($0) }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(shown.title)
+        }
+    }
+
+    private var shown: Shown? {
+        guard let space = session.workspace.space(model.spaceID) else { return nil }
+        switch card.item {
+        case .tab(let id):
+            guard let tab = space.tabs.first(where: { $0.id == id }), tab.isPinned else { return nil }
+            return Shown(title: tab.label, tab: PinnedTile.isOpen(tab) ? tab : nil, page: tab.url ?? tab.pinned)
+        case .bookmark(let id):
+            guard let bookmark = Bookmarks.find(id, in: space.bookmarks) else { return nil }
+            let map = space.barMap
+            let tab = map.tabs[id]
+            // Gone on from its bookmark, where it is now; else the bookmark's own name.
+            let title = tab.flatMap { space.isAwayFromHome($0, in: map) ? $0.label : nil } ?? bookmark.label
+            return Shown(title: title, tab: tab, page: tab?.url ?? bookmark.url)
+        }
     }
 }
 
 // MARK: Bookmarks
 
-/// The way to the space's bookmarks, where they used to lie over the tabs:
-/// a row as New Tab is, which brings them out over the list as a popover
-/// (BookmarksPanel), so they never read as more tabs.
+/// The way to the space's other bookmarks, all but the bar, as Chromium
+/// calls them: a row as New Tab is, which brings them out over the list as
+/// a popover (BookmarksPanel), so they never read as more tabs.
 private struct BookmarksRow: View {
     @ObservedObject var model: WindowModel
 
@@ -465,7 +847,7 @@ private struct BookmarksRow: View {
                 Image(systemName: "book")
                     .font(.system(size: 12, weight: .semibold))
                     .frame(width: 16)
-                Text("Bookmarks")
+                Text("Other Bookmarks")
                     .font(.system(size: 13))
                 Spacer()
             }
@@ -474,11 +856,11 @@ private struct BookmarksRow: View {
             .frame(height: Metrics.row)
         }
         .buttonStyle(RowButtonStyle(corner: Metrics.rowCorner))
-        .help("Bookmarks")
+        .help("Other Bookmarks")
     }
 }
 
-/// The space's bookmarks, out over the sidebar's list as a popover is, from
+/// The space's other bookmarks, out over the sidebar's list as a popover is, from
 /// where their row is: a pane of Liquid Glass, untinted, lifted by a soft
 /// shadow, with a name and ✕, so they read as something passing over the
 /// sidebar and not as more of its tabs. A click opens one in the tab on screen and puts
@@ -503,7 +885,7 @@ private struct BookmarksPanel: View {
                 .accessibilityHidden(true)
             VStack(spacing: 0) {
                 HStack(spacing: 8) {
-                    Text("Bookmarks")
+                    Text("Other Bookmarks")
                         .font(.system(size: 13, weight: .semibold))
                     Spacer(minLength: 0)
                     CloseButton(label: String(localized: "Close Bookmarks"), help: String(localized: "Close Bookmarks (Esc)")) { close() }
@@ -537,15 +919,16 @@ private struct BookmarksPanel: View {
     }
 
     private var rows: some View {
-        VStack(spacing: 2) {
-            if space.bookmarks.isEmpty {
+        let others = Bookmarks.others(in: space.bookmarks)
+        return VStack(spacing: 2) {
+            if others.isEmpty {
                 Text("Bookmark a page with ⌘D")
                     .font(.system(size: 12))
                     .foregroundStyle(.tertiary)
                     .padding(.horizontal, 10)
                     .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
             }
-            ForEach(Bookmarks.rows(of: space.bookmarks, opening: open), id: \.item.id) { row in
+            ForEach(Bookmarks.rows(of: others, opening: open), id: \.item.id) { row in
                 BookmarkRow(model: model, item: row.item, depth: row.depth, colour: space.color,
                             open: open.contains(row.item.id), chose: chose) {
                     withAnimation(.bar) { open.formSymmetricDifference([row.item.id]) }
@@ -647,7 +1030,7 @@ struct TabList: View {
 
     var body: some View {
         VStack(spacing: 2) {
-            NewTabRow(model: model, unpinned: space.tabs.filter { !$0.isPinned }.map(\.id))
+            NewTabRow(model: model, unpinned: space.otherTabs.map(\.id))
             ForEach(Self.items(of: space), id: \.first?.id) { item in
                 if item.count == 2 {
                     // A split's two, as one place in the list: one under the other on a ground of their own.
@@ -670,10 +1053,11 @@ struct TabList: View {
         }
     }
 
-    /// The space's tabs that aren't pinned, one at a time, or a split's two
-    /// together, as the workspace keeps them: side by side, left first.
+    /// The space's tabs that aren't pinned or in the bookmarks bar, one at a
+    /// time, or a split's two together, as the workspace keeps them: side by
+    /// side, left first.
     static func items(of space: Space) -> [[TabRecord]] {
-        let tabs = space.tabs.filter { !$0.isPinned }
+        let tabs = space.otherTabs
         var items: [[TabRecord]] = []
         var index = 0
         while index < tabs.count {
@@ -857,9 +1241,16 @@ private struct TailDrop: View {
 struct TabMenu: View {
     @ObservedObject var model: WindowModel
     let tab: TabRecord
+    /// The space's bar tabs, from a row of the bar that has them worked out
+    /// already (BarRow); else worked out here, and only for a tab with a
+    /// bookmark, since one without is never the bar's.
+    var map: Space.BarMap?
 
     var body: some View {
         let session = Session.shared
+        let space = session.workspace.spaceID(of: tab.id).flatMap(session.workspace.space)
+        let barMap = map ?? (tab.bookmark == nil ? nil : space?.barMap)
+        let inBar = barMap.flatMap { space?.isInBar(tab, in: $0) } == true
         if tab.isPinned {
             // Where it is pinned, and going back there or pinning it here
             // instead, as the iPhone's pinned button has them.
@@ -869,10 +1260,24 @@ struct TabMenu: View {
                 Button("Replace with Current Page") { model.repin(tab.id) }
                     .disabled(!tab.isAwayFromPinned)
                 Button("Unpin Tab") { model.togglePin(tab.id) }
+                Button("Move to Bookmarks Bar") { model.addToBar(tab.id) }
+                    .disabled(tab.url == nil)
+            }
+            Divider()
+        } else if inBar, let bookmark = tab.bookmark, let barMap {
+            // The bar's own: going back to its bookmark, or taking it out of the bar.
+            Section("In the Bookmarks Bar") {
+                Button("Back to Bookmarked Address") { model.backToPinned(tab.id) }
+                    .disabled(space?.isAwayFromHome(tab, in: barMap) != true)
+                Button("Separate from Bookmarks Bar") { model.separateFromBar(tab.id) }
+                Button("Pin Tab") { model.togglePin(tab.id) }
+                Button("Remove from Bookmarks Bar") { model.removeFromBar(bookmark) }
             }
             Divider()
         } else {
             Button("Pin Tab") { model.togglePin(tab.id) }
+                .disabled(tab.url == nil)
+            Button("Add to Bookmarks Bar") { model.addToBar(tab.id) }
                 .disabled(tab.url == nil)
         }
         Button("Duplicate Tab") { model.duplicate(tab.id) }
@@ -880,13 +1285,13 @@ struct TabMenu: View {
         Button("Copy Link") { model.copyLink(tab.id) }
             .disabled(tab.url == nil)
         // Split View: two ordinary tabs of the space, side by side.
-        if !tab.isPinned {
+        if !tab.isPinned, !inBar {
             if session.workspace.split(containing: tab.id) != nil {
                 Button("Separate Tabs") { model.separate(tab.id) }
                 Button("Swap Sides") { model.swapSides(tab.id) }
             } else if tab.id == model.tabID {
                 Button("Split with New Tab") { model.splitWithNewTab() }
-            } else if let current = model.tab, !current.isPinned, model.spaceID == session.workspace.spaceID(of: tab.id) {
+            } else if model.canSplitBeside, model.spaceID == session.workspace.spaceID(of: tab.id) {
                 Button("Open in Split View") { model.split(with: tab.id) }
             }
         }
@@ -925,7 +1330,7 @@ struct SpaceBar: View {
     @Namespace private var places
 
     var body: some View {
-        let clearable = model.space?.tabs.contains { !$0.isPinned } == true
+        let clearable = model.space?.otherTabs.isEmpty == false
         // With one space there is nowhere to go: its button alone is left out (a phone's bar keeps it).
         let several = session.workspace.spaces.count > 1
         HStack(spacing: 2) {
@@ -953,7 +1358,7 @@ struct SpaceBar: View {
                     DownloadsButton(model: model)
                         .transition(.opacity)
                 }
-                PlainIcon("trash", help: String(localized: "Clear: Close Every Tab That Isn’t Pinned"), enabled: clearable) {
+                PlainIcon("trash", help: String(localized: "Clear: Close Every Tab That Isn’t Pinned or in the Bookmarks Bar"), enabled: clearable) {
                     model.clearTabs()
                 }
             }

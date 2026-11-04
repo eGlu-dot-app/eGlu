@@ -106,8 +106,8 @@ struct TabRow {
     let paired: Set<UUID>
     let current: TabRecord?
 
-    init(tabs: [TabRecord], splits: [Split], current id: UUID?) {
-        let ordinary = tabs.filter { !$0.isPinned }
+    init(tabs: [TabRecord], splits: [Split], current id: UUID?, barTabs: Set<UUID> = []) {
+        let ordinary = tabs.filter { !$0.isPinned && !barTabs.contains($0.id) }
         pinned = tabs.filter(\.isPinned)
         others = ordinary
         self.splits = splits

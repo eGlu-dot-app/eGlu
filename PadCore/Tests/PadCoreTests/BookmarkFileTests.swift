@@ -56,19 +56,22 @@ final class BookmarkFileTests: XCTestCase {
     </HTML>
     """
 
-    func testChromesBarComesFirstAndItsFoldersKeepTheirShape() {
+    func testChromesBarComesFirstAsTheBarAndItsFoldersKeepTheirShape() {
         let read = BookmarkFile.parse(Data(chrome.utf8))
-        XCTAssertEqual(read.items.map(\.label), ["Figma", "Design & Docs", "Other bookmarks", "Linear"])
-        XCTAssertEqual(read.items[1].children?.map(\.label), ["Notion"], "javascript: is left out")
-        XCTAssertEqual(read.items[2].children?.first?.label, "Slack — the team", "entities decoded, spaces tidied")
-        XCTAssertEqual(read.items[3].url?.absoluteString, "https://linear.app/")
+        XCTAssertEqual(read.items.map(\.label), ["Bookmarks bar", "Slack — the team", "Linear"],
+                       "Other bookmarks are the top's own rest; entities decoded, spaces tidied")
+        XCTAssertEqual(read.items[0].title, Bookmarks.barName)
+        XCTAssertEqual(read.items[0].children?.map(\.label), ["Figma", "Design & Docs"])
+        XCTAssertEqual(read.items[0].children?[1].children?.map(\.label), ["Notion"], "javascript: is left out")
+        XCTAssertEqual(read.items[2].url?.absoluteString, "https://linear.app/")
         XCTAssertEqual(read.count, 4)
         XCTAssertEqual(read.icons["figma.com"], Data(base64Encoded: "iVBORw0KGgo="))
     }
 
     func testSafarisFavoritesComeFirst() {
         let read = BookmarkFile.parse(Data(safari.utf8))
-        XCTAssertEqual(read.items.map(\.label), ["Apple", "Reading List"])
+        XCTAssertEqual(read.items.map(\.label), ["Bookmarks bar", "Reading List"])
+        XCTAssertEqual(read.items[0].children?.map(\.label), ["Apple"])
         XCTAssertEqual(read.items[1].children?.first?.url?.absoluteString, "https://webkit.org/blog/")
         XCTAssertTrue(read.icons.isEmpty)
     }
@@ -88,16 +91,18 @@ final class BookmarkFileTests: XCTestCase {
         var space: [Bookmark] = []
         XCTAssertEqual(Bookmarks.merge(read.items, into: &space), 4)
         XCTAssertEqual(Bookmarks.merge(read.items, into: &space), 0)
-        XCTAssertEqual(space.count, 4)
+        XCTAssertEqual(space.count, 3, "the bar, Slack and Linear")
     }
 
     func testAFolderOfTheSameNameIsMergedInto() throws {
-        var space = [Bookmark(folder: "Design & Docs", children: [
+        // The bar by its older spelling, a folder in it as Chrome's.
+        var space = [Bookmark(folder: "Bookmarks Bar", children: [Bookmark(folder: "Design & Docs", children: [
             Bookmark(title: "Notion", url: try XCTUnwrap(URL(string: "https://www.notion.so"))),
-        ])]
+        ])])]
         let read = BookmarkFile.parse(Data(chrome.utf8))
         XCTAssertEqual(Bookmarks.merge(read.items, into: &space), 3, "Notion was there already")
-        XCTAssertEqual(space.first?.children?.count, 1)
+        XCTAssertEqual(space.first?.children?.map(\.label), ["Design & Docs", "Figma"])
+        XCTAssertEqual(space.first?.children?.first?.children?.count, 1)
     }
 
     // MARK: Safari's export, a ZIP
@@ -108,7 +113,7 @@ final class BookmarkFileTests: XCTestCase {
         XCTAssertTrue(ZipFile.isArchive(archive))
         XCTAssertEqual(ZipFile.names(in: archive), ["Safari Export/Bookmarks.html"])
         let file = try XCTUnwrap(ZipFile.file(in: archive) { $0.hasSuffix("Bookmarks.html") })
-        XCTAssertEqual(BookmarkFile.parse(file).items.map(\.label), ["Apple", "Reading List"])
+        XCTAssertEqual(BookmarkFile.parse(file).items.map(\.label), ["Bookmarks bar", "Reading List"])
         XCTAssertNil(ZipFile.file(in: archive) { $0.hasSuffix("History.json") })
         XCTAssertFalse(ZipFile.isArchive(Data(safari.utf8)))
     }
