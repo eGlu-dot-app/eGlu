@@ -1,9 +1,9 @@
 import Combine
-import Engines
 import OSLog
 import PadCore
 import SwiftUI
 import UIKit
+import WritingServiceKit
 
 @main
 final class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -15,7 +15,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         // which launch need not wait for.
         Task.detached(priority: .utility) {
             Logger(subsystem: "net.taehee.safience", category: "engines")
-                .log("engines linked: \((try? Grammar.rules().count) ?? -1) grammar rules")
+                .log("engines linked: \((try? WritingChecker.engine.rules().count) ?? -1) grammar rules")
         }
         #endif
         Session.shared.start()

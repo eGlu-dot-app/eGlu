@@ -1,5 +1,5 @@
 import AppKit
-import Engines
+import WritingServiceKit
 import PadCore
 import SwiftUI
 import WebEngineCore
@@ -199,7 +199,7 @@ final class WindowModel: ObservableObject, PageHost {
         case "writingPanel":
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                 let json = #"{"start":0,"end":4,"rule":"SpellCheck","kind":"Spelling","message":"Did you mean to spell `IPTV` this way?","priority":0,"suggestions":[],"context":"IPTV"}"#
-                guard let lint = try? JSONDecoder().decode(GrammarLint.self, from: Data(json.utf8)),
+                guard let lint = try? JSONDecoder().decode(WritingIssue.self, from: Data(json.utf8)),
                       let frame = self.window?.frame, let screen = self.window?.screen ?? NSScreen.main else { return }
                 let rect = CGRect(x: frame.midX - 20, y: screen.frame.maxY - frame.midY, width: 40, height: 18)
                 WritingPanel.shared.show(lint: lint, at: rect, suggestions: ["IP's", "Int", "Iota"],

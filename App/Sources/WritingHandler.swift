@@ -1,4 +1,4 @@
-import Engines
+import WritingServiceKit
 import PadCore
 import WebKit
 
@@ -82,7 +82,7 @@ final class WritingHandler: NSObject, WKScriptMessageHandlerWithReply {
     /// A lint as writing.js holds it: its span in the text sent, the kind
     /// and rule, the message, Harper's context, the fixes, and the words
     /// flagged (the dictionary's entry, and what Replace removes).
-    private static func json(for lint: GrammarLint, in text: String) -> [String: Any] {
+    private static func json(for lint: WritingIssue, in text: String) -> [String: Any] {
         let ns = text as NSString
         let span = NSRange(location: lint.start, length: lint.end - lint.start)
         let word = span.location != NSNotFound && NSMaxRange(span) <= ns.length

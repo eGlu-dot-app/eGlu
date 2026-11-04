@@ -1,5 +1,4 @@
 import AppKit
-import Engines
 import SwiftUI
 
 /// eGlu › About eGlu: Apple's own About panel, with the engines' licences
@@ -31,7 +30,7 @@ enum AboutPanel {
         var heading = body
         heading[.font] = NSFont.boldSystemFont(ofSize: size)
 
-        let lines = EngineLicenses.text.components(separatedBy: "\n")
+        let lines = PluginLicences.text.components(separatedBy: "\n")
         let text = NSMutableAttributedString()
         var index = 0
         while index < lines.count {

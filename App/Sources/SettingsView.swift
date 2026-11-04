@@ -1,4 +1,4 @@
-import Engines
+import WritingServiceKit
 import GameController
 import PadCore
 import SwiftUI
@@ -546,7 +546,7 @@ struct CloudSection: View {
 /// rule and dictionary lists are shared with it (Shared/Writing/WritingLists.swift).
 private struct WritingSection: View {
     @ObservedObject var session: Session
-    @State private var rules: [GrammarRule] = []
+    @State private var rules: [WritingRule] = []
     @State private var words: [String] = WritingWords.load()
 
     var body: some View {
@@ -561,7 +561,7 @@ private struct WritingSection: View {
             Section {
                 Picker("English", selection: $session.preferences.writingDialect) {
                     // Harper's dialects, in its own order.
-                    ForEach(Dialect.allCases, id: \.rawValue) { dialect in
+                    ForEach(WritingDialect.allCases, id: \.rawValue) { dialect in
                         Text(dialect.name).tag(dialect.rawValue)
                     }
                 }

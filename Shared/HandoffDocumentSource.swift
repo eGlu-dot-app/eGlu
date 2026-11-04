@@ -1,6 +1,6 @@
 import AVFoundation
 import CoreGraphics
-import Engines
+import DocumentServiceKit
 import Foundation
 import PadCore
 import PDFKit
@@ -97,7 +97,7 @@ final class DocumentSource: HandoffSource {
             return reading.blocks.isEmpty ? .noReadableContent : .content(reading)
         } catch let problem as DocumentProblem {
             return .failed(problem.message)
-        } catch let problem as EngineError {
+        } catch let problem as DocumentReadError {
             return problem.kind == .encrypted
                 ? .protectedPage(Self.words(for: problem.kind))
                 : .failed(Self.words(for: problem.kind))
@@ -116,7 +116,7 @@ final class DocumentSource: HandoffSource {
     /// for it, which says more than its kind does: a .doc is Word's as a
     /// .docx is, and needs another reader.
     private static func open(data: Data?, url: URL?, link: URL?, downloads: (any WebDownloadStarting)?, name: String, hint: FileFormat?,
-                             into folder: URL) async throws -> (data: Data, facts: FileFacts, engine: DocumentFormat?) {
+                             into folder: URL) async throws -> (data: Data, facts: FileFacts, engine: DocumentKind?) {
         var given = data
         if let link {
             guard let downloads, downloads.canStartDownloads else { throw DocumentProblem(message: String(localized: "The tab it was on is gone.")) }
@@ -128,7 +128,7 @@ final class DocumentSource: HandoffSource {
             throw DocumentProblem(message: String(localized: "Too large to read: \(FileFacts.size(data.count))."))
         }
         let ext = url?.pathExtension ?? (name as NSString).pathExtension
-        let engine = (try? await detect(data)) ?? DocumentFormat(ext: ext)
+        let engine = (try? await detect(data)) ?? DocumentKind(ext: ext)
         var format = engine.flatMap(FileFormat.init) ?? FileFormat(ext: ext)
         if format == nil, HandoffPicture.isPicture(data) {
             format = .picture
@@ -152,15 +152,15 @@ final class DocumentSource: HandoffSource {
 
     /// What the bytes are, away from the main thread.
     @concurrent
-    private static func detect(_ data: Data) async throws -> DocumentFormat? {
-        try Documents.detect(data)
+    private static func detect(_ data: Data) async throws -> DocumentKind? {
+        try reader.detect(data)
     }
 
     /// The document's bytes read, away from the main thread: the engines'
     /// synchronous work, and the reading made of their Markdown, cut at
     /// `room` where a page, a sheet or a part of the file ends.
     @concurrent
-    private static func convert(_ data: Data, facts: FileFacts, engine: DocumentFormat?, room: Int,
+    private static func convert(_ data: Data, facts: FileFacts, engine: DocumentKind?, room: Int,
                                 into folder: URL, telling: Handoff.Telling? = nil) async throws
         -> (PageReading, FileFacts) {
         let (markdown, facts, truncated) = try await markdown(data, facts: facts, engine: engine, room: room,
@@ -171,7 +171,7 @@ final class DocumentSource: HandoffSource {
     /// The document's Markdown and what is known of it, the third value
     /// `truncated`: true where it was cut to fit `room`, or a PDF's time ran out.
     @concurrent
-    private static func markdown(_ data: Data, facts: FileFacts, engine: DocumentFormat?, room: Int,
+    private static func markdown(_ data: Data, facts: FileFacts, engine: DocumentKind?, room: Int,
                                  into folder: URL, telling: Handoff.Telling? = nil) async throws
         -> (String, FileFacts, Bool) {
         var facts = facts
@@ -180,10 +180,10 @@ final class DocumentSource: HandoffSource {
             // The time from here: the engines' reading of the pages counts too.
             return try await pdf(data, facts: facts, room: room, by: .now + readingLimit)
         case .word, .openText, .rtf, .epub, .powerPoint, .openPresentation, .excel, .openSpreadsheet, .csv:
-            guard let format = engine ?? DocumentFormat(facts.format) else {
+            guard let format = engine ?? DocumentKind(facts.format) else {
                 throw DocumentProblem(message: String(localized: "eGlu can't read this kind of file."))
             }
-            let whole = try Documents.markdown(data, format: format).markdown
+            let whole = try reader.markdown(data, kind: format).markdown
             // What an Office file says of itself; the engines give its words alone.
             let declared = HandoffDocument.declared(in: data)
             if facts.format == .word { facts.pages = declared.pages }
@@ -341,7 +341,7 @@ final class DocumentSource: HandoffSource {
                 continue
             }
             // Detected first, as for the file itself (a .docx's own mark).
-            let engine = (try? await detect(inside)) ?? DocumentFormat(ext: (name as NSString).pathExtension)
+            let engine = (try? await detect(inside)) ?? DocumentKind(ext: (name as NSString).pathExtension)
             let inner = FileFacts(format: engine.flatMap(FileFormat.init)
                                       ?? FileFormat(ext: (name as NSString).pathExtension) ?? .text,
                                   name: name, bytes: inside.count)
@@ -373,7 +373,7 @@ final class DocumentSource: HandoffSource {
     private static func pdf(_ data: Data, facts: FileFacts, room: Int, by deadline: ContinuousClock.Instant) async throws
         -> (String, FileFacts, Bool) {
         var facts = facts
-        let whole = try Documents.pdfPages(data, pages: Array(0..<pageLimit))
+        let whole = try reader.pdfPages(data, pages: Array(0..<pageLimit))
         facts.pages = whole.pageCount
         facts.title = whole.title
         facts.author = whole.author
@@ -421,7 +421,7 @@ final class DocumentSource: HandoffSource {
     }
 
     /// What the guide can say, by what went wrong.
-    private static func words(for kind: EngineError.Kind) -> String {
+    private static func words(for kind: DocumentReadError.Kind) -> String {
         switch kind {
         case .encrypted: return String(localized: "This file is protected by a password.")
         case .unsupported: return String(localized: "eGlu can't read this kind of file.")
@@ -458,7 +458,7 @@ extension FileFormat {
     }
 
     /// The file's kind from the format the engines detected.
-    nonisolated init?(_ format: DocumentFormat) {
+    nonisolated init?(_ format: DocumentKind) {
         switch format {
         case .doc, .docx: self = .word
         case .odt: self = .openText
@@ -499,7 +499,7 @@ extension FileFormat {
     }
 }
 
-extension DocumentFormat {
+extension DocumentKind {
     /// The engines' format by the file's extension, where the bytes say
     /// nothing the engines know: CSV always, and a file too short or
     /// damaged to tell.

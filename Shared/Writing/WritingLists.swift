@@ -1,9 +1,9 @@
 // From harperSwift's harper-desktop/macos-popup (Apache-2.0), changed for eGlu.
 
-import Engines
+import WritingServiceKit
 import SwiftUI
 
-extension Dialect {
+extension WritingDialect {
     /// The dialect's name in Settings › Writing's English picker.
     var name: String {
         switch self {
@@ -21,7 +21,7 @@ extension Dialect {
 /// name, what they say or their group's name.
 struct WritingRulesPage: View {
     @ObservedObject private var session = Session.shared
-    @State private var rules: [GrammarRule] = []
+    @State private var rules: [WritingRule] = []
     @State private var query = ""
 
     var body: some View {
@@ -33,7 +33,7 @@ struct WritingRulesPage: View {
     }
 
     /// What the row on Writing that opens it says: how many of them are on.
-    static func summary(rules: [GrammarRule], changed: [String: Bool]) -> String {
+    static func summary(rules: [WritingRule], changed: [String: Bool]) -> String {
         guard !rules.isEmpty else { return "" }
         let on = rules.filter { changed[$0.id] ?? $0.isOnByDefault }.count
         return String(localized: "\(on) of \(rules.count) On")
@@ -45,7 +45,7 @@ struct WritingRulesPage: View {
 /// preferences.writingRules: only the differences from Harper's defaults,
 /// so a rule put back where it was leaves the dictionary.
 struct WritingRuleList: View {
-    let rules: [GrammarRule]
+    let rules: [WritingRule]
     @Binding var changed: [String: Bool]
     var query = ""
 
@@ -97,9 +97,9 @@ struct WritingRuleList: View {
 
     /// Harper's group names, in the order its rules come; only those with a
     /// rule the search finds, and only those rules.
-    private var groups: [(name: String, rules: [GrammarRule])] {
+    private var groups: [(name: String, rules: [WritingRule])] {
         var order: [String] = []
-        var byName: [String: [GrammarRule]] = [:]
+        var byName: [String: [WritingRule]] = [:]
         let words = searching.split(separator: " ").map(String.init)
         for rule in rules where words.allSatisfy({ word in
             [rule.label, rule.description, rule.group].contains { $0.localizedStandardContains(word) }
@@ -110,7 +110,7 @@ struct WritingRuleList: View {
         return order.map { ($0, byName[$0] ?? []) }
     }
 
-    private func on(_ rule: GrammarRule) -> Binding<Bool> {
+    private func on(_ rule: WritingRule) -> Binding<Bool> {
         Binding(
             get: { changed[rule.id] ?? rule.isOnByDefault },
             set: { on in
@@ -122,7 +122,7 @@ struct WritingRuleList: View {
             })
     }
 
-    private func isChanged(_ rule: GrammarRule) -> Bool {
+    private func isChanged(_ rule: WritingRule) -> Bool {
         (changed[rule.id] ?? rule.isOnByDefault) != rule.isOnByDefault
     }
 }

@@ -230,6 +230,7 @@ final class PolicyTests: XCTestCase {
             "WebKitEngine/Sources",
             "WritingServiceKit/Sources",
             "DocumentServiceKit/Sources",
+            "EnginePlugins/Sources",
             "HarperPlugin/Sources",
             "DocumentsPlugin/Sources",
         ]

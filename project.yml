@@ -28,6 +28,12 @@ settings:
     MARKETING_VERSION: "1.1.1"
     CURRENT_PROJECT_VERSION: "50"
 packages:
+  WritingServiceKit:
+    path: WritingServiceKit
+  DocumentServiceKit:
+    path: DocumentServiceKit
+  EnginePlugins:
+    path: EnginePlugins
   WebEngineKit:
     path: WebEngineKit
   WebKitEngine:
@@ -62,7 +68,12 @@ targetTemplates:
       - path: Shared
     dependencies:
       - package: PadCore
-      - package: Engines
+      - package: WritingServiceKit
+      - package: DocumentServiceKit
+      - package: EnginePlugins
+        product: HarperPlugin
+      - package: EnginePlugins
+        product: DocumentsPlugin
       - package: WebEngineKit
         product: WebEngineCore
       - package: WebEngineKit
@@ -106,6 +117,12 @@ targets:
         product: WebEngineCore
       - package: PadCore
       - package: Engines
+      - package: WritingServiceKit
+      - package: DocumentServiceKit
+      - package: EnginePlugins
+        product: HarperPlugin
+      - package: EnginePlugins
+        product: DocumentsPlugin
       - package: WebKitEngine
         product: WebKitSupport
     settings:

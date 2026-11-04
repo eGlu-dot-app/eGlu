@@ -1,7 +1,7 @@
 // From harperSwift's harper-desktop/macos-popup (Apache-2.0), changed for eGlu.
 
 import AppKit
-import Engines
+import WritingServiceKit
 import SwiftUI
 
 /// Borderless panel that never activates eGlu and never becomes the key
@@ -83,7 +83,7 @@ final class WritingPanel {
 
     /// Show the panel for `lint` beside `rect` on screen (top-left origin,
     /// as Accessibility gives it). `actions` hears what the person clicks.
-    func show(lint: GrammarLint, at rect: CGRect,
+    func show(lint: WritingIssue, at rect: CGRect,
               suggestions: [String], canAddToDictionary: Bool,
               actions: @escaping (PopupAction, Int) -> Void) {
         self.actions = actions
@@ -159,7 +159,7 @@ final class WritingPanel {
 
     /// VoiceOver hears what lint the panel is for when it opens, since the
     /// panel never takes the keyboard focus.
-    private func announce(lint: GrammarLint) {
+    private func announce(lint: WritingIssue) {
         NSAccessibility.post(
             element: NSApplication.shared,
             notification: .announcementRequested,

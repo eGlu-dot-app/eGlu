@@ -5,8 +5,8 @@
 
 | Section | Count | Files |
 |:---|---:|---:|
-| a. Imports (Mac/) | 34 | 34 |
-| a. Imports (Shared/) | 4 | 4 |
+| a. Imports (Mac/) | 27 | 27 |
+| a. Imports (Shared/) | 1 | 1 |
 | b. Reach-ins into page view (app) | 33 | 9 |
 | b. Reach-ins (tests) | 170 | 19 |
 | b. Reach-ins (Page.swift self-references) | 0 | 0 |
@@ -17,19 +17,15 @@
 | f. Script bridges (app) | 2 | 2 |
 | f. Script bridges (WebKit plugin) | 6 | 2 |
 | f. Script bridges (tests) | 3 | 1 |
-| **Total** | **442** | **55** |
+| **Total** | **432** | **46** |
 
 ## Details
 
 ### a. Imports
 
-#### Mac/ (34 lines in 34 files)
-- `Mac/Sources/About.swift` (1):
-  - L2: `import Engines`
+#### Mac/ (27 lines in 27 files)
 - `Mac/Sources/ApplePasswords.swift` (1):
   - L5: `import WebKit`
-- `Mac/Sources/EgluApp.swift` (1):
-  - L2: `import Engines`
 - `Mac/Sources/ExtensionAnswers.swift` (1):
   - L5: `import WebKit`
 - `Mac/Sources/ExtensionAsk.swift` (1):
@@ -78,30 +74,14 @@
   - L4: `import WebKit`
 - `Mac/Sources/PictureWindow.swift` (1):
   - L5: `import WebKit`
-- `Mac/Sources/SettingsView.swift` (1):
-  - L2: `import Engines`
 - `Mac/Sources/Window.swift` (1):
   - L3: `import WebKit`
-- `Mac/Sources/WindowModel.swift` (1):
-  - L2: `import Engines`
-- `Mac/Sources/Writing/Elsewhere/ElsewhereChecker.swift` (1):
-  - L4: `import Engines`
-- `Mac/Sources/Writing/Panel/PopupPanel.swift` (1):
-  - L4: `import Engines`
-- `Mac/Sources/Writing/WritingHandler.swift` (1):
-  - L1: `import Engines`
 - `Mac/Sources/Writing/WritingSpelling.swift` (1):
   - L2: `import WebKit`
 
-#### Shared/ (4 lines in 4 files)
-- `Shared/HandoffDocumentSource.swift` (1):
-  - L3: `import Engines`
+#### Shared/ (1 lines in 1 files)
 - `Shared/PageShared.swift` (1):
   - L3: `import WebKit`
-- `Shared/Writing/WritingChecker.swift` (1):
-  - L1: `import Engines`
-- `Shared/Writing/WritingLists.swift` (1):
-  - L3: `import Engines`
 
 ### b. Reach-ins into a page's web view (33 lines in 9 files)
 - `Mac/Sources/ApplePasswords.swift` (8):
