@@ -35,6 +35,14 @@ enum StripTour {
                 guard let browser else { return }
                 browser.open(address)
                 try? await Task.sleep(for: .seconds(5))
+                // A slow page is waited for, 20 seconds more at most, then given
+                // the time a quick one had: the report is of the page asked for.
+                var waited = 0
+                while browser.page?.view.isLoading == true, waited < 40 {
+                    try? await Task.sleep(for: .milliseconds(500))
+                    waited += 1
+                }
+                if waited > 0 { try? await Task.sleep(for: .seconds(3)) }
                 let report = await run(Self.report, in: browser) ?? "no page"
                 // A line each: the log cuts long ones.
                 for line in report.split(separator: "\n") {
@@ -45,13 +53,16 @@ enum StripTour {
         }
     }
 
-    // Down the page a screen at a time (at most 14), what is left under the
-    // strip at each once the page has been still a moment; then back up.
+    // Nothing for a page still loading. The address it is at (a redirect
+    // may have taken it elsewhere), then down the page a screen at a time
+    // (at most 14), what is left under the strip at each once the page has
+    // been still a moment; then back up.
     private static let report = """
+        if (document.readyState !== 'complete') return 'page did not finish loading';
         const strip = window.__egluStrip;
         if (!strip) return 'no strip script';
         const pause = (ms) => new Promise((done) => setTimeout(done, ms));
-        const lines = [];
+        const lines = [JSON.stringify({ url: location.href })];
         const seen = new Set();
         const step = Math.round(innerHeight * 0.8);
         for (let i = 0; i < 14; i++) {
