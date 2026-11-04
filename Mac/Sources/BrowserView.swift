@@ -85,10 +85,22 @@ struct BrowserView: View {
                 peek
                     .accessibilityHidden(model.commandBar != nil)
             }
+            // The bookmarks bar's rows along the top, out under their button.
+            if let button = model.barPanelButton, !model.tabsInSidebar, model.commandBar == nil {
+                BarPanelPlace(model: model, button: button)
+                    // From its button, which is over its top leading corner.
+                    .transition(.opacity.combined(with: .scale(scale: 0.97, anchor: .topLeading)))
+            }
+            // A pinned tab's card, over the page beside its tile or row.
+            if let card = model.pinnedCard, model.commandBar == nil {
+                PinnedCardPlace(model: model, card: card)
+                    .transition(.opacity.combined(with: .scale(scale: 0.97, anchor: card.below ? .top : .leading)))
+            }
             if let purpose = model.commandBar {
                 commandBar(purpose)
             }
         }
+        .coordinateSpace(.named(Self.place))
         .ignoresSafeArea()
         // A site's letter, until its icon comes, on the space's colour (SiteIconView).
         .environment(\.spaceColor, colour)
@@ -147,6 +159,10 @@ struct BrowserView: View {
 
         .onChange(of: model.spaceID) { _, space in seed = WindowSeed(id: seed?.id ?? UUID(), space: space) }
     }
+
+    /// The window's own coordinates, from its top left: where a pinned
+    /// tile or a bar row is measured for its card to stand beside it.
+    static let place = "window"
 
     /// The sidebar's edge, beside the card: dragged, it makes the sidebar wider or narrower.
     private var edge: some View {
@@ -762,5 +778,45 @@ private struct FindBar: View {
         .glassEffect(.regular, in: Capsule())
         .onAppear { focused = true }
         .onChange(of: model.findRequests) { _, _ in focused = true }
+    }
+}
+
+/// Where a pinned tab's card stands: past the sidebar's edge, level with
+/// its tile's or row's middle, or under its tile along the top, its start
+/// under the tile's; and wholly in the window either way.
+private struct PinnedCardPlace: View {
+    @ObservedObject var model: WindowModel
+    let card: PinnedCard
+    @State private var size = CGSize(width: 240, height: 80)
+
+    var body: some View {
+        GeometryReader { box in
+            let anchor = card.anchor
+            // Past the sidebar, whichever column the tile is in.
+            let x = card.below ? anchor.minX : max(anchor.maxX, model.sidebarEdge) + Metrics.gap
+            let y = card.below ? anchor.maxY + 6 : anchor.midY - size.height / 2
+            PinnedCardView(model: model, card: card)
+                .onGeometryChange(for: CGSize.self) { $0.size } action: { size = $0 }
+                .offset(x: min(max(x, Metrics.gap), box.size.width - size.width - Metrics.gap),
+                        y: min(max(y, Metrics.gap), box.size.height - size.height - Metrics.gap))
+        }
+    }
+}
+
+/// Where the bar's rows come out along the top: under their button, its
+/// start under the button's, and wholly in the window, as tall as the room
+/// under the button allows.
+private struct BarPanelPlace: View {
+    @ObservedObject var model: WindowModel
+    let button: CGRect
+
+    var body: some View {
+        GeometryReader { box in
+            let top = button.maxY + 6
+            BarPanel(model: model)
+                .frame(maxHeight: max(box.size.height - top - Metrics.gap, 120), alignment: .top)
+                .fixedSize(horizontal: true, vertical: false)
+                .offset(x: min(max(button.minX, Metrics.gap), box.size.width - 280 - Metrics.gap), y: top)
+        }
     }
 }

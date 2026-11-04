@@ -9,8 +9,10 @@ struct ExtensionPresentationTests {
         #expect(ExtensionAccessDescription.site("<all_urls>") == "All websites")
         #expect(ExtensionAccessDescription.site("http://*/*") == "All HTTP websites")
     }
-    @Test func deniedCookiesAreNotPresentedAsGrantedAccess() {
-        #expect(ExtensionAccessDescription.capability("cookies").contains("blocked"))
+    /// Said only where cookies are being given (a request): what a yes
+    /// reaches. Held cookies are never a line of what it may do (below).
+    @Test func cookiesSayTheyReachSignIns() {
+        #expect(ExtensionAccessDescription.capability("cookies").contains("sign-ins"))
     }
     /// Common permissions are said in words, not by their manifest names.
     @Test(arguments: ["webNavigation", "idle", "tabGroups", "browsingData", "topSites", "sessions", "system.display"])
@@ -43,6 +45,15 @@ struct ExtensionPresentationTests {
         #expect(summary.siteHeadline(onClick: true) == "Read and change the page you're on, only when you click it")
         let many = ExtensionAccessSummary(permissions: [], sites: ["https://a.com/*", "https://b.com/*", "https://c.com/*", "https://d.com/*"])
         #expect(many.siteHeadline(onClick: false) == "Read and change pages on 4 sites")
+    }
+    /// Grammarly's: cookies are the person's choice, so not a line of what
+    /// it may do, and not hidden among the routine ones either.
+    @Test func cookiesAreAChoiceNotALine() {
+        let summary = ExtensionAccessSummary(permissions: ["cookies", "storage"], sites: [])
+        #expect(summary.cookies)
+        #expect(!(summary.notable + summary.routine).contains { $0.symbol == ExtensionAccessDescription.symbol("cookies") })
+        #expect(!ExtensionAccessSummary(permissions: ["cookies"], sites: []).isEmpty)
+        #expect(!ExtensionAccessSummary(permissions: ["storage"], sites: []).cookies)
     }
     @Test func grantsSplitIntoSitesAndCapabilities() {
         let summary = ExtensionAccessSummary(grants: ["site:file:///*", "site:https://*/*", "contextMenus", "menus"])

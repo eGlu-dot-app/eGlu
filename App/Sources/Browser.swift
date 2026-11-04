@@ -278,6 +278,14 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
     /// The tabs down the window's side, in place of the row along the top
     /// and the address bar (Settings › Tabs).
     private var sideTabs: UIHostingController<SideTabs>?
+    /// The hover card is a window child so it can extend past the sidebar.
+    private var tabHoverCard: UIHostingController<TabHoverCard>?
+    private var hoveredTab: TabHover?
+    private var tabHoverSpace: UUID?
+    private var tabHoverWork: DispatchWorkItem?
+    private var tabHoverCloseWork: DispatchWorkItem?
+    private var hoveringTab = false
+    private var hoveringTabCard = false
     /// What moves the stack, the sidebar and the phone bar between layouts.
     private let chromeConstraints = ChromeConstraints()
     /// Wider than a phone, the window is the Mac's, with the tabs along the
@@ -556,6 +564,7 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
     /// The window is gone (its scene was closed): its page stays, off
     /// screen now, for the Freezer to decide about.
     func disconnect() {
+        hideTabHover()
         connected = false
         let ownedWelcome = Browser.welcomeOwner === self
         if ownedWelcome { Browser.welcomeOwner = nil }
@@ -845,6 +854,7 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         // A sixth of the way down, as Spotlight's sits, and clear of the bars in a short window.
         let down = max(72, (view.bounds.height * 0.16).rounded())
         if let commandBarTop, commandBarTop.constant != down { commandBarTop.constant = down }
+        placeTabHover()
     }
 
     /// The stage has this pass's frame: the panes go in it, and the cards'
@@ -1018,6 +1028,7 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
     /// rows along the top on a wide window, the bar at the bottom on a
     /// phone-width one, as tall as its form.
     private func show(_ layout: ChromeLayout) {
+        hideTabHover()
         let phone = layout.phoneBar != nil
         if sideTabs?.view.isHidden == layout.sidebar {
             sideTabs?.view.isHidden = !layout.sidebar
@@ -1295,6 +1306,7 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
     /// forward there instead when you asked for it; a window coming back
     /// takes another tab of its space, or none.
     func show(tab id: UUID?, inSpace space: UUID, userInitiated: Bool = true) {
+        hideTabHover()
         pinnedControl.close()
         let session = Session.shared
         guard let id, let record = session.workspace.tab(id), let owner = session.workspace.spaceID(of: id) else {
@@ -1373,6 +1385,11 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
     /// popover does, and still goes where it was meant to.
     private func pressed(_ keys: UIKeyModifierFlags, at point: CGPoint) {
         model.lastPress = (keys, Date())
+        if let card = tabHoverCard?.view, !card.bounds.contains(card.convert(point, from: nil)) {
+            hideTabHover()
+        } else if tabHoverCard == nil {
+            hideTabHover()
+        }
         // The touch is the window's; the bookmarks' frame the sidebar's (SideTabs.space).
         guard model.bookmarksOpen, let side = sideTabs?.view,
               !model.bookmarksFrame.contains(side.convert(point, from: nil))
@@ -1909,6 +1926,7 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
     }
 
     private func showEmpty(space: UUID) {
+        hideTabHover()
         detach()
         model.spaceID = space
         model.tabID = nil
@@ -2496,6 +2514,12 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
     func act(_ action: BarAction) {
         let session = Session.shared
         switch action {
+        case .hoverTab(let item): beginTabHover(item); return
+        case .leaveTab(let id): leaveTabHover(id); return
+        case .hideTabHover: hideTabHover(); return
+        default: hideTabHover()
+        }
+        switch action {
         case .select(let tab): show(tab: tab, inSpace: session.workspace.spaceID(of: tab) ?? model.spaceID)
         case .close(let tab): closeTab(tab)
         case .closeTabs(let tabs): requestCloseTabs(tabs)
@@ -2573,6 +2597,16 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         case .openInNewTab(let url):
             guard let tab = session.change({ $0.openTab(url, in: model.spaceID, after: model.tabID) }) else { return }
             show(tab: tab, inSpace: model.spaceID)
+        case .openFromBar(let id):
+            if let url = session.workspace.space(model.spaceID).flatMap({ Bookmarks.find(id, in: $0.bookmarks)?.url }) {
+                HistoryRecorder.shared.expect(.bookmark, url)
+            }
+            if let tab = session.change({ $0.openFromBar(id, in: model.spaceID) }) {
+                show(tab: tab, inSpace: model.spaceID)
+            }
+        case .addToBar(let tab, let folder, let before):
+            guard session.workspace.spaceID(of: tab) == model.spaceID else { return }
+            session.change { _ = $0.addToBar(tab, into: folder, before: before) }
         case .toggleBookmark: toggleBookmark()
         case .removeBookmark(let id): session.change { $0.removeBookmark(id, in: model.spaceID) }
         case .newFolder(let name, let parent): session.change { _ = $0.addFolder(named: name, in: parent, of: model.spaceID) }
@@ -2595,10 +2629,126 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         case .inspectFromMac: inspectNote()
         case .splitWith(let other): split(with: other)
         case .splitWithNewTab: splitWithNewTab()
+        case .splitWithPage(let url):
+            guard let tab = model.tabID, let new = session.change({ $0.splitWithNewTab(tab, url: url) }) else { return }
+            show(tab: new, inSpace: model.spaceID)
+            syncSplit()
+            focusPage()
         case .separate(let tab): session.change { $0.separate(tab) }
         case .copy(let url): copy(url)
         case .swapSides(let tab): session.change { $0.swapSides(tab) }
+        case .hoverTab, .leaveTab, .hideTabHover: break
         }
+    }
+
+    /// A pointer resting on a pinned page opens its card after half a second.
+    private func beginTabHover(_ item: TabHover) {
+        guard !model.phone, !model.editingAddress, !item.anchor.isEmpty, !item.anchor.isNull else { return }
+        tabHoverCloseWork?.cancel()
+        hoveringTab = true
+        if hoveredTab?.id == item.id, tabHoverCard != nil { return }
+        hideTabHover()
+        hoveredTab = item
+        tabHoverSpace = model.spaceID
+        hoveringTab = true
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, hoveringTab, hoveredTab?.id == item.id, tabHoverSpace == model.spaceID else { return }
+            showTabHover(item)
+        }
+        tabHoverWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
+    }
+
+    /// Leaving the row and its card allows a short crossing between them.
+    private func leaveTabHover(_ id: UUID) {
+        guard hoveredTab?.id == id else { return }
+        hoveringTab = false
+        tabHoverWork?.cancel()
+        closeTabHoverLater()
+    }
+
+    private func closeTabHoverLater() {
+        tabHoverCloseWork?.cancel()
+        guard !hoveringTab, !hoveringTabCard else { return }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, !hoveringTab, !hoveringTabCard else { return }
+            hideTabHover()
+        }
+        tabHoverCloseWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: work)
+    }
+
+    /// The card belongs to the browser, outside the sidebar's hosting view.
+    private func showTabHover(_ item: TabHover) {
+        let session = Session.shared
+        guard connected, view.window != nil, let space = session.workspace.space(model.spaceID),
+              !model.phone, !model.editingAddress else { return }
+        let tab = item.tab.flatMap { session.workspace.tab($0) }
+        let isOpen = tab.map { $0.isPinned ? Pinned.isOpen($0) : space.isInBar($0) } ?? false
+        let shown = TabHover(id: item.id, tab: tab?.id, title: tab?.label ?? item.title,
+                             url: tab?.url ?? item.url, isOpen: isOpen, anchor: item.anchor, source: item.source)
+        let canSplit = space.otherTabs.contains { $0.id == model.tabID && $0.id != item.tab }
+        let host = UIHostingController(rootView: TabHoverCard(item: shown, canSplit: canSplit, hovering: { [weak self] inside in
+            guard let self else { return }
+            hoveringTabCard = inside
+            if inside { tabHoverCloseWork?.cancel() } else { closeTabHoverLater() }
+        }, act: { [weak self] in self?.act($0) }))
+        host.safeAreaRegions = []
+        host.view.backgroundColor = .clear
+        addChild(host)
+        // A popover's rows need their card above the presentation as well.
+        let container: UIView = item.source == .window ? (view.window ?? view) : view
+        container.addSubview(host.view)
+        host.didMove(toParent: self)
+        tabHoverCard = host
+        placeTabHover()
+    }
+
+    /// Converts each bar's coordinates and keeps the card inside the window.
+    private func placeTabHover() {
+        guard let host = tabHoverCard, let item = hoveredTab, let container = host.view.superview else { return }
+        guard tabHoverSpace == model.spaceID else { hideTabHover(); return }
+        let anchor: CGRect
+        switch item.source {
+        case .sidebar:
+            guard let side = sideTabs?.view, !side.isHidden else { hideTabHover(); return }
+            anchor = view.convert(item.anchor, from: side)
+        case .top:
+            guard let top = topBar?.view, !top.isHidden else { hideTabHover(); return }
+            anchor = view.convert(item.anchor, from: top)
+        case .window:
+            anchor = view.convert(item.anchor, from: nil)
+        }
+        let size = host.sizeThatFits(in: CGSize(width: 260, height: CGFloat.greatestFiniteMagnitude))
+        let bounds = view.bounds.inset(by: UIEdgeInsets(top: view.safeAreaInsets.top + 8, left: 8,
+                                                       bottom: view.safeAreaInsets.bottom + 8, right: 8))
+        var x = item.source == .top ? anchor.minX : anchor.maxX + 8
+        let y = item.source == .top ? anchor.maxY + 8 : anchor.minY
+        if item.source == .sidebar, let side = sideTabs?.view {
+            x = max(x, view.convert(side.bounds, from: side).maxX + 8)
+        } else if item.source == .window, x + 260 > bounds.maxX, anchor.minX - 268 >= bounds.minX {
+            x = anchor.minX - 268
+        }
+        let frame = CGRect(x: min(max(x, bounds.minX), max(bounds.minX, bounds.maxX - 260)),
+                           y: min(max(y, bounds.minY), max(bounds.minY, bounds.maxY - size.height)),
+                           width: 260, height: size.height)
+        host.view.frame = container.convert(frame, from: view)
+    }
+
+    private func hideTabHover() {
+        tabHoverWork?.cancel()
+        tabHoverCloseWork?.cancel()
+        tabHoverWork = nil
+        tabHoverCloseWork = nil
+        hoveredTab = nil
+        tabHoverSpace = nil
+        hoveringTab = false
+        hoveringTabCard = false
+        guard let host = tabHoverCard else { return }
+        tabHoverCard = nil
+        host.willMove(toParent: nil)
+        host.view.removeFromSuperview()
+        host.removeFromParent()
     }
 
     // MARK: Pinned tabs and bookmarks
@@ -2615,7 +2765,12 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         let moving = space.split(containing: tab).map { [$0.left, $0.right] } ?? [tab]
         guard !moving.contains(target),
               let index = space.tabs.filter({ !moving.contains($0.id) }).firstIndex(where: { $0.id == target }) else { return }
-        session.change { $0.moveTab(tab, toIndex: index) }
+        // From the bar's row among the others: out of the bar, its bookmark staying.
+        let amongOthers = space.otherTabs.contains { $0.id == target }
+        session.change { workspace in
+            if amongOthers { workspace.separateFromBar(tab) }
+            workspace.moveTab(tab, toIndex: index)
+        }
     }
 
     private func closeTab(_ id: UUID) {

@@ -420,7 +420,7 @@ final class ExtensionCheckTests: XCTestCase {
     }
 
     func testCookiesKeptBackAreSaid() {
-        XCTAssertEqual(started { $0.cookiesKeptBack = true }.lines.last, "Can't read cookies: kept from Google's sign-in.")
+        XCTAssertEqual(started { $0.cookiesKeptBack = true }.lines.last, "Can't read cookies until you allow them in its settings.")
         var checking = ExtensionEvidence()
         checking.cookiesKeptBack = true
         XCTAssertEqual(ExtensionVerdict(checking).lines, [], "nothing under Checking…")
@@ -503,7 +503,7 @@ final class ExtensionCheckTests: XCTestCase {
 
     func testEveryExtensionIsKeptOffGooglesSignIn() throws {
         XCTAssertEqual(ExtensionPolicy.deniedSites, ["*://*.accounts.google.com/*"])
-        XCTAssertTrue(ExtensionPolicy.deniedPermissions.contains("cookies"))
+        XCTAssertTrue(ExtensionPolicy.heldPermissions.contains("cookies"), "until the person allows them for one extension")
         XCTAssertFalse(ExtensionPolicy.grantsOnClick(try XCTUnwrap(URL(string: "https://accounts.google.com/signin"))))
         XCTAssertFalse(ExtensionPolicy.grantsOnClick(try XCTUnwrap(URL(string: "https://x.accounts.google.com/"))))
         XCTAssertTrue(ExtensionPolicy.grantsOnClick(try XCTUnwrap(URL(string: "https://mail.google.com/"))))

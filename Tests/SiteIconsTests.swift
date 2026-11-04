@@ -26,6 +26,35 @@ nonisolated final class SiteIconsTests: XCTestCase {
         XCTAssertFalse(reopened.needs(page))
     }
 
+    @MainActor func testBulkImportSavesEveryIconBeforeOneAnnouncement() async throws {
+        let storage = try Storage()
+        defer { storage.remove() }
+        let icons = storage.icons()
+        let png = try picture(.red)
+        let imported = Dictionary(uniqueKeysWithValues: (0..<500).map { ("site\($0).example", png) })
+        let saved = expectation(description: "All imported icons saved")
+        saved.assertForOverFulfill = true
+        let changes = icons.$revision.dropFirst().sink { revision in
+            XCTAssertEqual(revision, 1)
+            for key in imported.keys {
+                XCTAssertTrue(FileManager.default.fileExists(atPath: storage.file(key).path), key)
+            }
+            saved.fulfill()
+        }
+        defer { changes.cancel() }
+        icons.adopt(imported)
+        await fulfillment(of: [saved], timeout: 30)
+
+        try FileManager.default.removeItem(at: storage.caches)
+        let reopened = storage.icons()
+        for key in imported.keys {
+            let page = try XCTUnwrap(URL(string: "https://" + key))
+            XCTAssertNotNil(reopened.image(for: page), key)
+            XCTAssertFalse(reopened.needs(page), key)
+        }
+        XCTAssertEqual(icons.revision, 1)
+    }
+
     @MainActor func testDownloadedIconSurvivesNewInstanceWithoutLoadingThePage() async throws {
         let storage = try Storage()
         defer { storage.remove() }

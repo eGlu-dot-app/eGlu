@@ -15,13 +15,20 @@ public struct TabRecord: Codable, Identifiable, Equatable, Sendable {
     /// the other devices know it by; nil otherwise, when its own id is
     /// that id (SyncPlan).
     public var cloudID: UUID?
+    /// For a tab opened from its space's bookmarks bar, that bookmark's id:
+    /// it stands in the bar's row under the pinned tiles, not among the
+    /// space's tabs, while the bookmark is in the bar (Space.barTabs), and
+    /// closing it takes it away, the bookmark staying. Nil for every other tab.
+    public var bookmark: UUID?
 
-    public init(id: UUID = UUID(), url: URL?, title: String = "", shown: Date = .distantPast, pinned: URL? = nil) {
+    public init(id: UUID = UUID(), url: URL?, title: String = "", shown: Date = .distantPast, pinned: URL? = nil,
+                bookmark: UUID? = nil) {
         self.id = id
         self.url = url
         self.title = title
         self.shown = shown
         self.pinned = pinned
+        self.bookmark = bookmark
     }
 
     public var isPinned: Bool {
@@ -158,6 +165,133 @@ public struct Space: Codable, Identifiable, Equatable, Sendable {
     /// How many tabs at the front of the row are pinned.
     public var pinnedCount: Int {
         tabs.prefix { $0.isPinned }.count
+    }
+
+    // MARK: The bookmarks bar
+
+    /// Its bookmarks bar, the folder whose bookmarks stand under its pinned
+    /// tiles (Bookmarks.bar); nil until it has one.
+    public var bar: Bookmark? {
+        Bookmarks.bar(in: bookmarks)
+    }
+
+    /// Its tabs open from the bar, by their bookmark: only those whose
+    /// bookmark is in the bar still, the first for each. A tab whose
+    /// bookmark has left the bar, here or on another device, is one of the
+    /// others again.
+    public var barTabs: [UUID: TabRecord] {
+        Self.barTabs(of: tabs, inBar: Bookmarks.barIDs(in: bookmarks))
+    }
+
+    private static func barTabs(of tabs: [TabRecord], inBar: Set<UUID>) -> [UUID: TabRecord] {
+        var found: [UUID: TabRecord] = [:]
+        for tab in tabs where !tab.isPinned {
+            guard let bookmark = tab.bookmark, inBar.contains(bookmark), found[bookmark] == nil else { continue }
+            found[bookmark] = tab
+        }
+        return found
+    }
+
+    /// `barTabs` and the addresses of the bar's bookmarks, worked out once
+    /// for a list that asks after each of its rows (the sidebar's bar rows,
+    /// the bar's pane): `isInBar`, `home(of:)` and `isAwayFromHome` each
+    /// walk the bar and every tab again, so a row that asked them for
+    /// itself made a long bar slow. A value for one view update, never
+    /// kept: the space's tabs and bookmarks change under it.
+    public struct BarMap: Equatable, Sendable {
+        /// Its tabs open from the bar, by their bookmark, as `barTabs`.
+        public let tabs: [UUID: TabRecord]
+        /// The address of each bookmark in the bar, by its id: where its
+        /// tab goes back to.
+        let homes: [UUID: URL]
+    }
+
+    public var barMap: BarMap {
+        var inBar: Set<UUID> = []
+        var homes: [UUID: URL] = [:]
+        // Every id at any depth, as Bookmarks.barIDs has them, and each
+        // one's address; for an id there twice, the first's, as
+        // Bookmarks.find finds it.
+        func walk(_ items: [Bookmark]) {
+            for item in items {
+                if inBar.insert(item.id).inserted, let url = item.url { homes[item.id] = url }
+                walk(item.children ?? [])
+            }
+        }
+        walk(bar?.children ?? [])
+        return BarMap(tabs: Self.barTabs(of: tabs, inBar: inBar), homes: homes)
+    }
+
+    /// Whether `tab` stands in the bar's row rather than among the others.
+    public func isInBar(_ tab: TabRecord) -> Bool {
+        // Most tabs have no bookmark, and none of those is the bar's: no need to work the bar out for them.
+        guard let bookmark = tab.bookmark else { return false }
+        return barTabs[bookmark]?.id == tab.id
+    }
+
+    /// `isInBar`, from the space's `barMap` worked out already.
+    public func isInBar(_ tab: TabRecord, in map: BarMap) -> Bool {
+        guard let bookmark = tab.bookmark else { return false }
+        return map.tabs[bookmark]?.id == tab.id
+    }
+
+    /// Its tabs as the list and the row show them, after the pinned tiles
+    /// and the bar: neither pinned nor open from the bar.
+    public var otherTabs: [TabRecord] {
+        let inBar = Set(barTabs.values.map(\.id))
+        return tabs.filter { !$0.isPinned && !inBar.contains($0.id) }
+    }
+
+    /// Where `tab` goes back to: a pinned tab's pinned address, a bar tab's
+    /// bookmark's; nil for any other tab.
+    public func home(of tab: TabRecord) -> URL? {
+        if let pinned = tab.pinned { return pinned }
+        guard isInBar(tab), let bookmark = tab.bookmark else { return nil }
+        return Bookmarks.find(bookmark, in: bookmarks)?.url
+    }
+
+    /// `home(of:)`, from the space's `barMap` worked out already.
+    public func home(of tab: TabRecord, in map: BarMap) -> URL? {
+        if let pinned = tab.pinned { return pinned }
+        guard isInBar(tab, in: map), let bookmark = tab.bookmark else { return nil }
+        return map.homes[bookmark]
+    }
+
+    /// Tabs whose bookmark is gone from the space altogether let go of it
+    /// for good, as iCloud's tree comes in (SyncPlan) and on loading
+    /// (repair). One only out of the bar keeps it: iCloud can bring a
+    /// bookmark before the folder it moved into, which puts it at the top
+    /// until the folder comes, and the tab is the bar's again then. Until
+    /// it is, `barTabs` leaves it among the others.
+    public mutating func forgetGoneBookmarks() {
+        for t in tabs.indices {
+            guard let id = tabs[t].bookmark, Bookmarks.find(id, in: bookmarks) == nil else { continue }
+            tabs[t].bookmark = nil
+        }
+    }
+
+    /// A pinned or bar tab gone on from its home to another page: another
+    /// site or another path. What a site adds as it loads, a query or a
+    /// fragment (YouTube's ?themeRefresh=1), or https and www., is the same
+    /// page still.
+    public func isAwayFromHome(_ tab: TabRecord) -> Bool {
+        Self.isAway(tab.url, from: home(of: tab))
+    }
+
+    /// `isAwayFromHome`, from the space's `barMap` worked out already.
+    public func isAwayFromHome(_ tab: TabRecord, in map: BarMap) -> Bool {
+        Self.isAway(tab.url, from: home(of: tab, in: map))
+    }
+
+    private static func isAway(_ url: URL?, from home: URL?) -> Bool {
+        guard let home, let url else { return false }
+        func page(_ url: URL) -> String {
+            let host = url.host()?.lowercased() ?? ""
+            var path = url.path()
+            if path.hasSuffix("/") { path.removeLast() }
+            return (host.hasPrefix("www.") ? String(host.dropFirst(4)) : host) + path
+        }
+        return page(url) != page(home)
     }
 }
 
@@ -345,9 +479,12 @@ public struct Workspace: Codable, Equatable, Sendable {
                 }
                 return spaces[s].selected
             }
+            // A tab open from the bookmarks bar goes as a pinned tab's page
+            // does: the bookmark stays, and there is nothing to reopen.
+            let fromBar = spaces[s].isInBar(spaces[s].tabs[index])
             let tab = spaces[s].tabs.remove(at: index)
             // A tab that never went anywhere has nothing to reopen.
-            if tab.url != nil {
+            if tab.url != nil, !fromBar {
                 closed.append(ClosedTab(tab: tab, space: spaces[s].id, index: index))
                 if closed.count > Workspace.closedKept { closed.removeFirst(closed.count - Workspace.closedKept) }
             }
@@ -415,6 +552,7 @@ public struct Workspace: Codable, Equatable, Sendable {
         guard spaces.indices.contains(s) else { return nil }
         last.tab.shown = now
         last.tab.pinned = nil
+        last.tab.bookmark = nil
         let place = max(min(last.index, spaces[s].tabs.count), spaces[s].pinnedCount)
         spaces[s].tabs.insert(last.tab, at: place)
         spaces[s].selected = last.tab.id
@@ -491,7 +629,9 @@ public struct Workspace: Codable, Equatable, Sendable {
               let index = spaces[from].tabs.firstIndex(where: { $0.id == id })
         else { return false }
         spaces[from].splits.removeAll { $0.contains(id) }
-        let tab = spaces[from].tabs.remove(at: index)
+        var tab = spaces[from].tabs.remove(at: index)
+        // A space's bookmarks are its own: in another, it is one of the others.
+        tab.bookmark = nil
         if spaces[from].selected == id {
             let tabs = spaces[from].tabs
             spaces[from].selected = tabs.isEmpty ? nil : tabs[min(index, tabs.count - 1)].id
@@ -555,6 +695,8 @@ public struct Workspace: Codable, Equatable, Sendable {
             spaces[s].splits.removeAll { $0.contains(id) }
             var tab = spaces[s].tabs.remove(at: index)
             tab.pinned = url
+            // From the bar, it leaves the bar's row for the tiles; its bookmark stays.
+            tab.bookmark = nil
             spaces[s].tabs.insert(tab, at: spaces[s].pinnedCount)
             return true
         }
@@ -605,13 +747,16 @@ public struct Workspace: Codable, Equatable, Sendable {
         return false
     }
 
-    /// A pinned tab's page at the address it was pinned with; returns it.
+    /// A pinned tab's page at the address it was pinned with, a bar tab's
+    /// at its bookmark's (Space.home); returns it.
     public mutating func backToPinned(_ id: UUID) -> URL? {
         for s in spaces.indices {
             guard let index = spaces[s].tabs.firstIndex(where: { $0.id == id }) else { continue }
-            guard let pinned = spaces[s].tabs[index].pinned else { return nil }
-            spaces[s].tabs[index].url = pinned
-            return pinned
+            guard let home = spaces[s].home(of: spaces[s].tabs[index]) else { return nil }
+            // The page gone from names itself no more, as closing a pinned tab leaves it.
+            if spaces[s].tabs[index].url != home { spaces[s].tabs[index].title = "" }
+            spaces[s].tabs[index].url = home
+            return home
         }
         return nil
     }
@@ -623,8 +768,8 @@ public struct Workspace: Codable, Equatable, Sendable {
     @discardableResult
     public mutating func split(_ tab: UUID, with other: UUID) -> Bool {
         guard tab != other, let s = spaces.firstIndex(where: { $0.tabs.contains { $0.id == tab } }),
-              let left = spaces[s].tabs.first(where: { $0.id == tab }), !left.isPinned,
-              let right = spaces[s].tabs.first(where: { $0.id == other }), !right.isPinned
+              let left = spaces[s].tabs.first(where: { $0.id == tab }), !left.isPinned, !spaces[s].isInBar(left),
+              let right = spaces[s].tabs.first(where: { $0.id == other }), !right.isPinned, !spaces[s].isInBar(right)
         else { return false }
         spaces[s].splits.removeAll { $0.contains(tab) || $0.contains(other) }
         spaces[s].splits.append(Split(left: tab, right: other))
@@ -633,10 +778,10 @@ public struct Workspace: Codable, Equatable, Sendable {
     }
 
     /// A new tab beside `tab`, on its right, selected so it is the one typed
-    /// into. Returns its id; nil for a pinned tab or none.
+    /// into. Returns its id; nil for a pinned tab, a bar tab, or none.
     @discardableResult
     public mutating func splitWithNewTab(_ tab: UUID, url: URL? = nil, now: Date = Date()) -> UUID? {
-        guard let space = spaceID(of: tab), self.tab(tab)?.isPinned == false,
+        guard let space = spaceID(of: tab), self.space(space)?.otherTabs.contains(where: { $0.id == tab }) == true,
               let new = openTab(url, in: space, after: tab, now: now), split(tab, with: new)
         else { return nil }
         select(new, now: now)
@@ -673,7 +818,7 @@ public struct Workspace: Codable, Equatable, Sendable {
     /// each, no tab in two, and each split's tabs side by side in the row,
     /// left first, so the row shows them as one.
     mutating func tidySplits(_ s: Int) {
-        let ordinary = Set(spaces[s].tabs.filter { !$0.isPinned }.map(\.id))
+        let ordinary = Set(spaces[s].otherTabs.map(\.id))
         var seen: Set<UUID> = []
         spaces[s].splits = spaces[s].splits.filter { split in
             guard split.left != split.right, ordinary.contains(split.left), ordinary.contains(split.right),
@@ -711,6 +856,7 @@ public struct Workspace: Codable, Equatable, Sendable {
     public mutating func removeBookmark(_ id: UUID, in space: UUID) {
         guard let s = spaces.firstIndex(where: { $0.id == space }) else { return }
         Bookmarks.remove(id, from: &spaces[s].bookmarks)
+        spaces[s].forgetGoneBookmarks()
     }
 
     /// A new folder at the end of `parent` (nil: the top level), named as
@@ -724,27 +870,122 @@ public struct Workspace: Codable, Equatable, Sendable {
         return Bookmarks.insert(folder, into: parent, of: &spaces[s].bookmarks) ? folder.id : nil
     }
 
-    /// A bookmark's or a folder's name; an empty name leaves it as it was.
+    /// A bookmark's or a folder's name; an empty name leaves it as it was,
+    /// and the bookmarks bar keeps its own, which is how it is known.
     public mutating func renameBookmark(_ id: UUID, to name: String, in space: UUID) {
         guard let s = spaces.firstIndex(where: { $0.id == space }) else { return }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty, spaces[s].bar?.id != id else { return }
         Bookmarks.update(id, in: &spaces[s].bookmarks) { $0.title = trimmed }
+        // A folder named as the bar where there was none is the bar, and its open tabs leave their splits.
+        tidySplits(s)
     }
 
     /// Moves a bookmark or a folder to the end of `folder` (nil: the top
-    /// level). A folder never goes into itself or into one of its own.
-    public mutating func moveBookmark(_ id: UUID, into folder: UUID?, in space: UUID) {
-        guard let s = spaces.firstIndex(where: { $0.id == space }),
+    /// level), or before `before` in it. A folder never goes into itself or
+    /// into one of its own, and the bookmarks bar stays at the top.
+    public mutating func moveBookmark(_ id: UUID, into folder: UUID?, before: UUID? = nil, in space: UUID) {
+        guard let s = spaces.firstIndex(where: { $0.id == space }), before != id,
               let item = Bookmarks.find(id, in: spaces[s].bookmarks) else { return }
+        if spaces[s].bar?.id == id, folder != nil { return }
         if let folder {
             guard folder != id, Bookmarks.find(folder, in: item.children ?? []) == nil,
                   Bookmarks.find(folder, in: spaces[s].bookmarks)?.isFolder == true else { return }
         }
         var items = spaces[s].bookmarks
         Bookmarks.remove(id, from: &items)
-        guard Bookmarks.insert(item, into: folder, of: &items) else { return }
+        guard Bookmarks.insert(item, into: folder, before: before, of: &items) else { return }
         spaces[s].bookmarks = items
+        // What was moved out of the bar here leaves its tabs among the others; nothing else does.
+        let moved = Set(Self.everything(item).map(\.id))
+        let inBar = Bookmarks.barIDs(in: items)
+        for t in spaces[s].tabs.indices {
+            guard let mark = spaces[s].tabs[t].bookmark, moved.contains(mark), !inBar.contains(mark) else { continue }
+            spaces[s].tabs[t].bookmark = nil
+        }
+        // What was moved into the bar takes its open tabs out of their splits.
+        tidySplits(s)
+    }
+
+    /// A bookmark or folder and everything in it, at any depth.
+    private static func everything(_ item: Bookmark) -> [Bookmark] {
+        [item] + (item.children ?? []).flatMap(everything)
+    }
+
+    // MARK: The bookmarks bar
+
+    /// The bar's bookmark `id` in a tab of its own, selected: the one open
+    /// for it already, or a new one at its address just after the pinned
+    /// tabs. Returns the tab; nil for a folder, or for none in the space's bar.
+    @discardableResult
+    public mutating func openFromBar(_ id: UUID, in space: UUID, now: Date = Date()) -> UUID? {
+        guard let s = spaces.firstIndex(where: { $0.id == space }),
+              Bookmarks.barIDs(in: spaces[s].bookmarks).contains(id),
+              let url = Bookmarks.find(id, in: spaces[s].bookmarks)?.url else { return nil }
+        if let open = spaces[s].barTabs[id] {
+            select(open.id, now: now)
+            return open.id
+        }
+        let tab = TabRecord(url: url, shown: now, bookmark: id)
+        spaces[s].tabs.insert(tab, at: spaces[s].pinnedCount)
+        spaces[s].selected = tab.id
+        tidySplits(s)
+        return tab.id
+    }
+
+    /// A tab into its space's bookmarks bar, made at the top of its
+    /// bookmarks if there is none yet: a bookmark for where it is, at the
+    /// end of `folder` (nil: the bar itself) or before `before` there, and
+    /// the tab in the bar's row from now on, out of its split. A pinned
+    /// tab leaves the tiles for it. Returns the bookmark; nil for a tab gone
+    /// nowhere yet, a folder not in the bar, or no such tab.
+    @discardableResult
+    public mutating func addToBar(_ tab: UUID, into folder: UUID? = nil, before: UUID? = nil) -> UUID? {
+        guard let s = spaces.firstIndex(where: { $0.tabs.contains { $0.id == tab } }),
+              let index = spaces[s].tabs.firstIndex(where: { $0.id == tab }),
+              let url = spaces[s].tabs[index].url else { return nil }
+        let bar: UUID
+        if let made = spaces[s].bar?.id {
+            bar = made
+        } else {
+            let made = Bookmark(folder: Bookmarks.barName, children: [])
+            spaces[s].bookmarks.insert(made, at: 0)
+            bar = made.id
+        }
+        if let folder, folder != bar, !Bookmarks.barIDs(in: spaces[s].bookmarks).contains(folder) { return nil }
+        let record = spaces[s].tabs[index]
+        let bookmark: UUID
+        if spaces[s].isInBar(record), let own = record.bookmark {
+            // Already in the bar: only its place there changes.
+            moveBookmark(own, into: folder ?? bar, before: before, in: spaces[s].id)
+            return own
+        } else {
+            let title = record.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            let made = Bookmark(title: title.isEmpty ? Address.pretty(url) : title, url: url)
+            guard Bookmarks.insert(made, into: folder ?? bar, before: before, of: &spaces[s].bookmarks) else { return nil }
+            bookmark = made.id
+        }
+        spaces[s].splits.removeAll { $0.contains(tab) }
+        var moved = spaces[s].tabs.remove(at: index)
+        moved.pinned = nil
+        moved.bookmark = bookmark
+        spaces[s].tabs.insert(moved, at: spaces[s].pinnedCount)
+        tidySplits(s)
+        return bookmark
+    }
+
+    /// A bar tab out of the bar's row, one of the others from now on, its
+    /// bookmark staying in the bar, as Arc separates a page from its pinned
+    /// tab. False for a tab not open from the bar.
+    @discardableResult
+    public mutating func separateFromBar(_ tab: UUID) -> Bool {
+        for s in spaces.indices {
+            guard let index = spaces[s].tabs.firstIndex(where: { $0.id == tab }) else { continue }
+            guard spaces[s].isInBar(spaces[s].tabs[index]) else { return false }
+            spaces[s].tabs[index].bookmark = nil
+            return true
+        }
+        return false
     }
 
     /// Revalidates destination identity after file reading. A missing space
@@ -766,6 +1007,7 @@ public struct Workspace: Codable, Equatable, Sendable {
         for s in spaces.indices {
             // Pinned tabs at the front, the others after, each in its order.
             spaces[s].tabs = spaces[s].tabs.filter(\.isPinned) + spaces[s].tabs.filter { !$0.isPinned }
+            spaces[s].forgetGoneBookmarks()
             let ids = Set(spaces[s].tabs.map(\.id))
             if let selected = spaces[s].selected, !ids.contains(selected) { spaces[s].selected = nil }
             if spaces[s].selected == nil { spaces[s].selected = spaces[s].tabs.first?.id }

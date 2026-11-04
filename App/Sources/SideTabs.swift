@@ -20,6 +20,7 @@ struct SideTabs: View {
     let window: WindowModel
     let act: (BarAction) -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var openBar: Set<UUID> = []
 
     /// The Mac sidebar's own width, as it first opens; wider only to an
     /// iPhone Duo's fold (Browser.placeSidebar).
@@ -27,9 +28,11 @@ struct SideTabs: View {
 
     var body: some View {
         let space = session.workspace.space(window.spaceID)
+        // The bar's tabs once for all its rows, not by each.
+        let map = space?.barMap
         // Without the pinned tabs this device hides (Settings › Pinned Tabs).
         let row = TabRow(tabs: (space?.tabs ?? []).filter(session.preferences.shows), splits: space?.splits ?? [],
-                         current: window.tabID)
+                         current: window.tabID, barTabs: Set(map?.tabs.values.map(\.id) ?? []))
         let others = session.workspace.spaces.filter { $0.id != window.spaceID }
         VStack(spacing: Side.gap) {
             HStack(spacing: 2) {
@@ -61,6 +64,19 @@ struct SideTabs: View {
             }
             ScrollView {
                 VStack(spacing: 2) {
+                    if let space, let map, let bar = space.bar, !(bar.children ?? []).isEmpty {
+                        let canSplit = BarBookmarkRow.canSplit(window, in: space, map: map)
+                        // The bar's rows a group of their own, as far from the rows under them as the Mac's.
+                        VStack(spacing: 2) {
+                            ForEach(Bookmarks.rows(of: bar.children ?? [], opening: openBar, keeping: Set(map.tabs.keys)), id: \.item.id) { entry in
+                                BarBookmarkRow(window: window, space: space, map: map, canSplit: canSplit, item: entry.item,
+                                               depth: entry.depth, open: openBar.contains(entry.item.id), source: .sidebar, toggle: {
+                                    withAnimation(.bar) { openBar.formSymmetricDifference([entry.item.id]) }
+                                }, act: act)
+                            }
+                        }
+                        .padding(.bottom, 4)
+                    }
                     Button { act(.showTabs) } label: {
                         Label("All Tabs (\(space?.tabs.count ?? 0))", systemImage: "square.on.square")
                             .font(.subheadline)
@@ -88,6 +104,7 @@ struct SideTabs: View {
                     }
                 }
                 .padding(Side.bleed)
+                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(Self.space)).minY } action: { _ in act(.hideTabHover) }
                 .animation(.bar, value: row.others.map(\.id))
             }
             .scrollIndicators(.never)
@@ -109,6 +126,10 @@ struct SideTabs: View {
         .frame(maxHeight: .infinity)
         .ignoresSafeArea(.keyboard)
         .coordinateSpace(.named(Self.space))
+        .onChange(of: window.spaceID) { _, _ in
+            openBar.removeAll()
+            act(.hideTabHover)
+        }
     }
 
     /// The sidebar's own coordinates, its hosting view's: where the
@@ -362,6 +383,9 @@ private struct SidePinnedTab: View {
                 PointerGlow(lean: lean)
                 PinnedIcon(url: url, open: selected, colour: colour, size: Side.tileIcon, lean: lean, lit: glassy,
                            current: selected, fills: true)
+                // Open, as the phone's dock marks it: a dot just under the icon.
+                OpenDot(shown: Pinned.isOpen(tab))
+                    .offset(y: OpenDot.under(icon: Side.tileIcon))
             }
             .frame(maxWidth: .infinity)
             .frame(height: Side.tile)
@@ -381,6 +405,8 @@ private struct SidePinnedTab: View {
         }
         // A press gives a little, as the Mac's tile does.
         .buttonStyle(PressScale())
+        .modifier(TabHoverModifier(id: tab.id, tab: tab.id, title: tab.label, url: tab.url ?? tab.pinned,
+                                   isOpen: Pinned.isOpen(tab), source: .sidebar, act: act))
         .onHover { inside in withAnimation(.easeOut(duration: 0.12)) { hovering = inside } }
         .onContinuousHover { phase in
             withAnimation(.spring(duration: 0.6, bounce: 0)) {
@@ -415,7 +441,7 @@ private struct SideBookmarksButton: View {
                 Image(systemName: "book")
                     .font(.system(size: 12, weight: .semibold))
                     .frame(width: 16)
-                Text("Bookmarks")
+                Text("Other Bookmarks")
                     .font(.subheadline)
                 Spacer(minLength: 0)
             }
@@ -457,11 +483,11 @@ private struct SideBookmarksPanel: View {
                 .accessibilityHidden(true)
             VStack(spacing: 0) {
                 HStack(spacing: 8) {
-                    Text("Bookmarks")
+                    Text("Other Bookmarks")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Palette.ink)
                     Spacer(minLength: 0)
-                    SideClose(label: String(localized: "Close Bookmarks")) { close() }
+                    SideClose(label: String(localized: "Close Other Bookmarks")) { close() }
                         .keyboardShortcut(.cancelAction)
                         .accessibilityFocused($closeFocused)
                 }
@@ -470,8 +496,8 @@ private struct SideBookmarksPanel: View {
                 .frame(height: 40)
                 // As tall as they are, and no taller than the list: past that they scroll.
                 ViewThatFits(in: .vertical) {
-                    rows(space?.bookmarks ?? [], colour: colour)
-                    ScrollView { rows(space?.bookmarks ?? [], colour: colour) }
+                    rows(Bookmarks.others(in: space?.bookmarks ?? []), colour: colour)
+                    ScrollView { rows(Bookmarks.others(in: space?.bookmarks ?? []), colour: colour) }
                         .scrollIndicators(.never)
                 }
             }
@@ -579,6 +605,210 @@ private struct SideBookmark: View {
         }
         .accessibilityLabel(item.isFolder ? String(localized: "\(item.label), folder") : item.label)
         .accessibilityValue(item.isFolder ? (open ? "Open" : "Closed") : "")
+    }
+}
+
+/// A bookmark of the bookmarks bar, as the Mac's (BarRow): a dot left of its
+/// icon while it is open, its icon and name; gone on from its bookmark, a
+/// slash and where it is now. The one on screen raised in glass, a close
+/// button on an open one under the pointer, its card after a moment
+/// (TabHoverCard). A folder in the space's colour, turning to show it is
+/// open. A tab dropped on a row goes into the bar before it, on a folder
+/// into the folder.
+struct BarBookmarkRow: View {
+    let window: WindowModel
+    let space: Space
+    /// The space's bar tabs, worked out once by the list for all its rows.
+    let map: Space.BarMap
+    /// Whether the tab on screen is one of the others, for Open in Split
+    /// View: the same for every row (`canSplit(_:in:map:)`).
+    let canSplit: Bool
+    let item: Bookmark
+    let depth: Int
+    let open: Bool
+    let source: TabHoverSource
+    let toggle: () -> Void
+    let act: (BarAction) -> Void
+    @State private var hovering = false
+
+    /// Whether the tab on screen is one of the others, which a bookmark can
+    /// open beside in a split, for a list to work out once for its rows.
+    static func canSplit(_ window: WindowModel, in space: Space, map: Space.BarMap) -> Bool {
+        space.tabs.contains { $0.id == window.tabID && !$0.isPinned && !space.isInBar($0, in: map) }
+    }
+
+    var body: some View {
+        let tab = map.tabs[item.id]
+        let away = tab.map { space.isAwayFromHome($0, in: map) } ?? false
+        let selected = tab?.id == window.tabID && tab != nil
+        let inPopover = source == .window
+        let shape = inPopover ? Self.popoverRow : AnyShape(RoundedRectangle(cornerRadius: Side.rowCorner, style: .continuous))
+        HStack(spacing: 8) {
+            Button {
+                act(.hideTabHover)
+                if item.isFolder {
+                    toggle()
+                } else {
+                    act(.openFromBar(item.id))
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Group {
+                        if item.isFolder {
+                            Image(systemName: "folder.fill")
+                                .font(.system(size: 12))
+                                .foregroundStyle(space.color.color)
+                        } else {
+                            SiteIconView(url: item.url, size: 16)
+                        }
+                    }
+                    .frame(width: 16, height: 16)
+                    if let tab, away {
+                        // The slash closer to the words than the icon is: "where it is now" is one thing.
+                        HStack(spacing: 5) {
+                            Text(verbatim: "/")
+                                .foregroundStyle(Side.secondary)
+                            Text(tab.label)
+                                .lineLimit(1)
+                        }
+                    } else {
+                        Text(item.label)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                    if item.isFolder {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(Side.secondary)
+                            .rotationEffect(.degrees(open ? 90 : 0))
+                    }
+                }
+                .font(.subheadline.weight(selected ? .semibold : .regular))
+                .foregroundStyle(selected ? Palette.ink : Palette.ink.opacity(0.85))
+                .frame(maxWidth: .infinity, minHeight: Side.row, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(selected ? .isSelected : [])
+            if let tab, hovering {
+                SideClose { act(.close(tab.id)) }
+                    .transition(.opacity)
+            }
+        }
+        .padding(.leading, 10 + CGFloat(depth) * 16)
+        .padding(.trailing, 6)
+        .frame(minHeight: Side.row)
+        // Open: a dot left of the icon, nearer it than the row's edge.
+        .overlay(alignment: .leading) {
+            OpenDot(shown: tab != nil)
+                .padding(.leading, OpenDot.before(lead: 10) + CGFloat(depth) * 16)
+        }
+        .background {
+            if selected, !inPopover {
+                Color.clear.liquidGlass(reacting: false, in: shape, otherwise: Palette.card)
+            } else {
+                // In the popover, already glass, the one on screen shaded as a menu's chosen row.
+                shape.fill(selected ? Side.press : hovering ? Side.hover : .clear)
+            }
+        }
+        .contentShape(shape)
+        .onHover { inside in withAnimation(.easeOut(duration: 0.12)) { hovering = inside } }
+        .modifier(TabHoverModifier(id: item.id, tab: tab?.id, title: tab?.label ?? item.label,
+                                   url: tab?.url ?? item.url, isOpen: tab != nil, source: source, act: act))
+        .contextMenu {
+            if let url = item.url {
+                Button("Open in New Tab", systemImage: "plus.square.on.square") { act(.openInNewTab(url)) }
+                Button("Copy Address", systemImage: "doc.on.doc") { act(.copy(url)) }
+            }
+            if let tab {
+                Button("Back to Pinned Address", systemImage: "arrow.uturn.backward") { act(.backToPinned(tab.id)) }
+                    .disabled(!away)
+                Button("Close", systemImage: "xmark") { act(.close(tab.id)) }
+            }
+            // The tab on screen, when it is one of the others, is never this row's: that one is the bar's.
+            if let url = tab?.url ?? item.url, canSplit {
+                Button("Open in Split View", systemImage: "rectangle.split.2x1") { act(.splitWithPage(url)) }
+            }
+            Button("Remove from Bookmarks Bar", systemImage: "bookmark.slash", role: .destructive) {
+                act(.removeBookmark(item.id))
+            }
+        }
+        .dropDestination(for: TabDrop.self) { drops, _ in
+            guard let drop = drops.first, drop.id != tab?.id else { return false }
+            let folder = item.isFolder ? item.id : Bookmarks.parent(of: item.id, in: space.bookmarks) ?? space.bar?.id
+            act(.addToBar(drop.id, into: folder, before: item.isFolder ? nil : item.id))
+            return true
+        }
+        .animation(.bar, value: selected)
+        .accessibilityElement(children: .contain)
+        .accessibilityValue(item.isFolder ? (open ? "Open" : "Closed") : "")
+    }
+}
+
+extension BarBookmarkRow {
+    /// A row's shape in the popover along the top: its corners as far in
+    /// from the popover's as the row is from its edge, as the system's own
+    /// menus have them, and the sidebar's corners at least.
+    static var popoverRow: AnyShape {
+        if #available(iOS 26.0, *) {
+            return AnyShape(ConcentricRectangle(corners: .concentric(minimum: .fixed(Side.rowCorner)), isUniform: true))
+        }
+        return AnyShape(RoundedRectangle(cornerRadius: Side.rowCorner, style: .continuous))
+    }
+}
+
+/// Reports pointer entry and the item's frame to the window that hosts its card.
+struct TabHoverModifier: ViewModifier {
+    let id: UUID
+    let tab: UUID?
+    let title: String
+    let url: URL?
+    let isOpen: Bool
+    let source: TabHoverSource
+    let act: (BarAction) -> Void
+    @State private var frame = CGRect.zero
+    @State private var anchor = TabHoverAnchor()
+
+    func body(content: Content) -> some View {
+        content
+            .background(TabHoverAnchorView(anchor: anchor).allowsHitTesting(false))
+            .onGeometryChange(for: CGRect.self) { proxy in
+                switch source {
+                case .sidebar: proxy.frame(in: .named(SideTabs.space))
+                case .top: proxy.frame(in: .named(TopTabs.space))
+                case .window: .zero
+                }
+            } action: { frame = $0 }
+            .onHover { inside in
+                if inside {
+                    let rect = source == .window ? anchor.view.map { $0.convert($0.bounds, to: nil) } ?? frame : frame
+                    act(.hoverTab(TabHover(id: id, tab: tab, title: title, url: url, isOpen: isOpen, anchor: rect, source: source)))
+                } else {
+                    act(.leaveTab(id))
+                }
+            }
+            // A touch anywhere puts the card away (Browser.pressed).
+            .onDisappear { act(.leaveTab(id)) }
+    }
+}
+
+/// The view that measures a row inside a system popover in window coordinates.
+private final class TabHoverAnchor {
+    weak var view: UIView?
+}
+
+private struct TabHoverAnchorView: UIViewRepresentable {
+    let anchor: TabHoverAnchor
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.isUserInteractionEnabled = false
+        anchor.view = view
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        anchor.view = uiView
     }
 }
 
@@ -741,7 +971,7 @@ struct SideClose: View {
 /// The sidebar's foot, as the Mac's: the spaces in one piece of glass, each
 /// its icon, the one you are in marked by one disc of its colour that
 /// slides to another as you go there; then Clear (every tab that isn't
-/// pinned closes) and Space Settings. The end of the row along the top too
+/// pinned or in the bookmarks bar closes) and Space Settings. The end of the row along the top too
 /// (TopTabs): the spaces and Space Settings, no Clear, with no room between
 /// them but the spaces' gap.
 struct SideSpaces: View {
@@ -755,7 +985,7 @@ struct SideSpaces: View {
 
     var body: some View {
         let space = session.workspace.space(window.spaceID)
-        let unpinned = space?.tabs.filter { !$0.isPinned }.map(\.id) ?? []
+        let unpinned = space?.otherTabs.map(\.id) ?? []
         HStack(spacing: 2) {
             // With one space there is nowhere to go: its buttons are left out, as on the Mac (a phone's bar keeps them).
             if session.workspace.spaces.count > 1 {
@@ -772,7 +1002,7 @@ struct SideSpaces: View {
             }
             if !inRow {
                 Spacer(minLength: Side.gap)
-                SidePlainIcon("trash", label: String(localized: "Clear: Close Every Tab That Isn’t Pinned"), enabled: !unpinned.isEmpty) {
+                SidePlainIcon("trash", label: String(localized: "Clear: Close Every Tab That Isn’t Pinned or in the Bookmarks Bar"), enabled: !unpinned.isEmpty) {
                     act(.closeTabs(unpinned))
                 }
             }
@@ -895,7 +1125,9 @@ struct TabMenuItems: View {
     var body: some View {
         let selected = tab.id == window.tabID
         let paired = row.paired.contains(tab.id)
-        let ordinary = (Session.shared.workspace.space(window.spaceID)?.tabs ?? []).filter { !$0.isPinned }
+        let space = Session.shared.workspace.space(window.spaceID)
+        let ordinary = space?.otherTabs ?? []
+        let inBar = space?.isInBar(tab) == true
         if selected {
             Section { PageItems(window: window, act: act) }
         } else if let url = tab.isPinned ? tab.url ?? tab.pinned : tab.url {
@@ -914,9 +1146,22 @@ struct TabMenuItems: View {
                 Button("Replace with Current Page", systemImage: "pin") { act(.repin(tab.id)) }
                     .disabled(!tab.isAwayFromPinned)
                 Button("Unpin Tab", systemImage: "pin.slash") { act(.unpin(tab.id)) }
+                if let url = tab.url ?? tab.pinned,
+                   ordinary.contains(where: { $0.id == window.tabID && $0.id != tab.id }) {
+                    Button("Open in Split View", systemImage: "rectangle.split.2x1") { act(.splitWithPage(url)) }
+                }
+            }
+        } else if inBar, let bookmark = tab.bookmark {
+            Section {
+                Button("Back to Pinned Address", systemImage: "arrow.uturn.backward") { act(.backToPinned(tab.id)) }
+                    .disabled(space?.isAwayFromHome(tab) != true)
+                Button("Remove from Bookmarks Bar", systemImage: "bookmark.slash") { act(.removeBookmark(bookmark)) }
             }
         } else {
             Section {
+                if tab.url != nil {
+                    Button("Add to Bookmarks Bar", systemImage: "bookmark") { act(.addToBar(tab.id, into: nil, before: nil)) }
+                }
                 Button("Pin Tab", systemImage: "pin") { act(.pin(tab.id)) }
                     .disabled(tab.url == nil)
                 if paired {
@@ -924,7 +1169,7 @@ struct TabMenuItems: View {
                     Button("Swap Sides", systemImage: "arrow.left.arrow.right") { act(.swapSides(tab.id)) }
                 } else if selected {
                     Button("Split with New Tab", systemImage: "rectangle.split.2x1") { act(.splitWithNewTab) }
-                } else if row.current.map({ !$0.isPinned }) == true {
+                } else if row.current.map({ current in ordinary.contains { $0.id == current.id } }) == true {
                     Button("Open in Split View", systemImage: "rectangle.split.2x1") { act(.splitWith(tab.id)) }
                 }
             }
@@ -937,7 +1182,7 @@ struct TabMenuItems: View {
         }
         Section {
             Button("Close Tab", systemImage: "xmark") { act(.close(tab.id)) }
-            if !tab.isPinned, ordinary.count > 1 {
+            if !tab.isPinned, !inBar, ordinary.count > 1 {
                 Button("Close Other Tabs", systemImage: "xmark.square", role: .destructive) {
                     act(.closeTabs(ordinary.map(\.id).filter { $0 != tab.id }))
                 }

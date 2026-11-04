@@ -716,6 +716,44 @@ enum PinnedRest {
 /// (tileTint) and its light's slow drift; and, for an icon of no colour of
 /// its own (Are.na's, GitHub's, ChatGPT's), by a deeper light under it with
 /// the icon in white on it (`drawnWhite`), as nothing of its own would show.
+/// The mark of a pinned tab or a bar bookmark that is open: a small dot, as
+/// the iPhone's dock has under an open one's icon and the Mac's Dock under
+/// an app that is running. It lies close to the icon it marks, closer than
+/// to anything else, so it reads as the icon's: under a tile's icon (`under`),
+/// or left of a row's. It comes and goes growing from half its size as it
+/// fades, never from nothing.
+struct OpenDot: View {
+    let shown: Bool
+    var size: CGFloat = 4
+
+    /// From the icon's edge to the dot: the iPhone dock's 2 points, and a
+    /// step more under a tile's larger icon.
+    static func gap(for icon: CGFloat) -> CGFloat {
+        icon >= 18 ? 3 : 2
+    }
+
+    /// How far below an icon's centre the dot's centre is, for an icon centred in its tile.
+    static func under(icon: CGFloat, size: CGFloat = 4) -> CGFloat {
+        icon / 2 + gap(for: icon) + size / 2
+    }
+
+    /// From a row's leading edge to the dot, for a row whose icon starts `lead` in.
+    static func before(lead: CGFloat, icon: CGFloat = 16, size: CGFloat = 4) -> CGFloat {
+        lead - gap(for: icon) - size
+    }
+
+    var body: some View {
+        Circle()
+            .fill(Color.primary.opacity(0.55))
+            .frame(width: size, height: size)
+            .scaleEffect(shown ? 1 : 0.5)
+            .opacity(shown ? 1 : 0)
+            .animation(.easeOut(duration: 0.15), value: shown)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+}
+
 struct PinnedIcon: View {
     let url: URL?
     /// On screen, in a window in front: its light drifts.

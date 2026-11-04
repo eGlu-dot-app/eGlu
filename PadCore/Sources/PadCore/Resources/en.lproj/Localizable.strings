@@ -428,7 +428,7 @@
 "Checked: %@. Its features haven't all been tried." = "Checked: %@. Its features haven't all been tried.";
 "starting up" = "starting up";
 "May not work: %@." = "May not work: %@.";
-"Can't read cookies: kept from Google's sign-in." = "Can't read cookies: kept from Google's sign-in.";
+"Can't read cookies until you allow them in its settings." = "Can't read cookies until you allow them in its settings.";
 "Checking…" = "Checking…";
 "Started Fine" = "Started Fine";
 "Some Features Don't Work" = "Some Features Don't Work";
@@ -486,7 +486,7 @@
 "Add items to page menus" = "Add items to page menus";
 "Schedule background tasks" = "Schedule background tasks";
 "Run an extension page in the background" = "Run an extension page in the background";
-"Cookie access is blocked by eGlu" = "Cookie access is blocked by eGlu";
+"Read and change cookies on allowed sites, sign-ins included" = "Read and change cookies on allowed sites, sign-ins included";
 "Request sign-in for the extension" = "Request sign-in for the extension";
 "Capture a tab after you allow it" = "Capture a tab after you allow it";
 "Request screen sharing" = "Request screen sharing";
