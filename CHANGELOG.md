@@ -4,6 +4,7 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+- On the Mac, the windows read a page's state and go back, forward, stop and reload from origin through the page itself, not its WebKit view: the first step in keeping eGlu's interface apart from its engines (`Docs/EngineSplitPlan.md`). Nothing changes in use. A new test target, eGlu Mac Page Tests, tries the Mac's pages against a real WebKit view, in a test copy of the app with a data folder, an identifier and preferences of its own, which refuses to run without them. `Tests/engine-inventory.py` lists what in the Mac app still reaches WebKit or the engines directly (`Docs/EngineInventory.md`).
 - On the Mac, dragging the sidebar's edge resizes it smoothly instead of making the sidebar jump back and forth.
 - On the Mac, playing videos and supported calls open Picture in Picture when you switch tabs or spaces, as they do when you switch apps, and return when you come back to the page. Settings › General › Automatic Picture in Picture turns this off without changing manually opened PiP.
 - Site icons stay available after fully quitting and reopening eGlu, even when the system clears its temporary caches. Existing icons carry over without downloading them again.

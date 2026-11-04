@@ -127,6 +127,19 @@ final class PageView: WKWebView {
     }
 }
 
+/// What WebKit itself reports for a page: the engine's state
+/// (Docs/EngineSplitPlan.md 5.2). Page's own members add the product's
+/// rules, such as going back past a replaced page, on top.
+struct PageState: Equatable {
+    let url: URL?
+    let title: String?
+    let isLoading: Bool
+    let estimatedProgress: Double
+    let canGoBack: Bool
+    let canGoForward: Bool
+    let hasOnlySecureContent: Bool
+}
+
 /// One tab's page while it is live: its web view, the content blocker's
 /// lists and scripts it gets, and everything WebKit tells it.
 ///
@@ -145,6 +158,18 @@ final class Page: NSObject {
     let view: PageView
     private let controller: WKUserContentController
     weak var host: PageHost?
+
+    /// What WebKit reports now, without the tab's replacement history.
+    var state: PageState {
+        PageState(url: view.url, title: view.title, isLoading: view.isLoading,
+                  estimatedProgress: view.estimatedProgress, canGoBack: view.canGoBack,
+                  canGoForward: view.canGoForward, hasOnlySecureContent: view.hasOnlySecureContent)
+    }
+
+    /// Whether Back can use the page's history or the page it replaced.
+    var canGoBack: Bool {
+        view.canGoBack || Session.shared.canGoBackPastReplacement(tab)
+    }
 
     /// The site's adapter, for what its own reader can add to a handoff (a
     /// video's transcript) and how heavy its pages are; none of its bridges.
@@ -450,6 +475,27 @@ final class Page: NSObject {
     }
 
     // MARK: Loading
+
+    /// Back in WebKit, or past a replaced page when its history is empty.
+    func goBack() {
+        if !view.canGoBack, Session.shared.wentBackPastReplacement(tab) { return }
+        view.goBack()
+    }
+
+    /// Forward in the page's own history.
+    func goForward() {
+        view.goForward()
+    }
+
+    /// Stop the load under way.
+    func stopLoading() {
+        view.stopLoading()
+    }
+
+    /// Reload from origin without the page's retry or crash reset.
+    func reloadFromOrigin() {
+        view.reloadFromOrigin()
+    }
 
     func load(_ url: URL) {
         beginNavigation(url)

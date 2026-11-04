@@ -70,11 +70,11 @@ final class PeekPage: ObservableObject, PageHost, Identifiable {
     // What the menu bar's ⌘[, ⌘], ⌘R and ⇧⌘C do while the Peek is up: its page's, not the tab's under it.
 
     func back() {
-        page.view.goBack()
+        page.goBack()
     }
 
     func forward() {
-        page.view.goForward()
+        page.goForward()
     }
 
     /// ⌘R, and Try Again over a page that couldn't load: the address that failed.
@@ -84,7 +84,7 @@ final class PeekPage: ObservableObject, PageHost, Identifiable {
 
     /// The address Copy Link copies: where the page is, or was asked to go.
     var address: URL? {
-        page.view.url ?? url
+        page.state.url ?? url
     }
 
     // MARK: PageHost
@@ -94,9 +94,10 @@ final class PeekPage: ObservableObject, PageHost, Identifiable {
     }
 
     func pageDidChange(_ page: Page) {
-        url = page.view.url ?? page.committed ?? asked
-        canGoBack = page.view.canGoBack
-        loading = page.view.isLoading
+        let state = page.state
+        url = state.url ?? page.committed ?? asked
+        canGoBack = state.canGoBack
+        loading = state.isLoading
         failure = page.failure
     }
 

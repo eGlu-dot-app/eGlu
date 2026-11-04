@@ -302,13 +302,14 @@ final class WindowModel: ObservableObject, PageHost {
     func refresh() {
         let record = tab
         let view = page?.view
+        let state = page?.state
         url = page?.displayURL ?? record?.url
-        title = view?.title.flatMap { $0.isEmpty ? nil : $0 } ?? record?.label ?? ""
-        loading = view?.isLoading ?? false
-        progress = view?.estimatedProgress ?? 0
-        canGoBack = view?.canGoBack ?? false || record.map { Session.shared.canGoBackPastReplacement($0.id) } ?? false
-        canGoForward = view?.canGoForward ?? false
-        secure = page?.failure == nil && url?.scheme == "https" && (view?.hasOnlySecureContent ?? true)
+        title = state?.title.flatMap { $0.isEmpty ? nil : $0 } ?? record?.label ?? ""
+        loading = state?.isLoading ?? false
+        progress = state?.estimatedProgress ?? 0
+        canGoBack = (state?.canGoBack ?? false) || record.map { Session.shared.canGoBackPastReplacement($0.id) } ?? false
+        canGoForward = state?.canGoForward ?? false
+        secure = page?.failure == nil && url?.scheme == "https" && (state?.hasOnlySecureContent ?? true)
         failure = page?.failure
         statusCode = page?.statusCode
         zoom = Double(view?.pageZoom ?? 1)
@@ -576,12 +577,11 @@ final class WindowModel: ObservableObject, PageHost {
     }
 
     func back() {
-        if let page, !page.view.canGoBack, Session.shared.wentBackPastReplacement(page.tab) { return }
-        page?.view.goBack()
+        page?.goBack()
     }
 
     func forward() {
-        page?.view.goForward()
+        page?.goForward()
     }
 
     func reload() {
@@ -593,7 +593,7 @@ final class WindowModel: ObservableObject, PageHost {
     }
 
     func stop() {
-        page?.view.stopLoading()
+        page?.stopLoading()
     }
 
     // MARK: Tabs
@@ -1145,7 +1145,7 @@ final class WindowModel: ObservableObject, PageHost {
         case .console: showInspector(.console)
         case .selectElement: showInspector(.elements)
         case .elementPicture: elementPicture()
-        case .reloadOrigin: toolsPage?.view.reloadFromOrigin()
+        case .reloadOrigin: toolsPage?.reloadFromOrigin()
         case .measure: page?.toggleMeasuring()
         case .developerMode: toggleDeveloperMode()
         case .diagnostics, .siteMode, .linkMenu: break

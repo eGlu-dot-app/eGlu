@@ -13,6 +13,7 @@
 		02C718B0FEB409CDA590385B /* PopupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 506E09CE31A0F0FFCB4A0E57 /* PopupView.swift */; };
 		052D1AC87CFB437D0CF65AB3 /* DockTile.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE90A53C4F0EA2D2E3804F74 /* DockTile.swift */; };
 		08622254D17B7A8A3CCC72E6 /* TypingField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88B3B42DB60A79A268968DBC /* TypingField.swift */; };
+		08F3C6AA45A087FF1759282B /* PageSmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E30CB251854948770DEA0AB5 /* PageSmokeTests.swift */; };
 		0A50200A4E6B22B0E6F47D92 /* WritingHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70C038D7C9366DD4C79FBAC9 /* WritingHandler.swift */; };
 		0AF4507B1489635E6B4EBBD9 /* WorkspaceRecoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 836D811F61B46FE395B73A95 /* WorkspaceRecoveryView.swift */; };
 		0B67D3ACDDB71887A7D22D8E /* ContentBlocker.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6D8D2E159368BB0EB9BE7F1 /* ContentBlocker.swift */; };
@@ -68,6 +69,7 @@
 		2D0CE86180268E0E512FA61F /* HandoffSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = F43D22C7DFFF0F0EF06FEF4B /* HandoffSource.swift */; };
 		2DF48F11329CFB995E85A81D /* DockIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B6C088BE0C2B3DA07EC8FB2 /* DockIcon.swift */; };
 		2E1C6B94FBFDF26679862B7E /* DockIconKeys.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6CE0B7565C0B79E96D0E0D7 /* DockIconKeys.swift */; };
+		2E1EB21C0D68BA0AA15FE82B /* PageTestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 295DCEAC1FDD17F93C31DD32 /* PageTestSupport.swift */; };
 		2E886A8635A785F027238432 /* PasswordWatch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86F3E0156D8382BBB63AE2EF /* PasswordWatch.swift */; };
 		2EC0AAA5A0FAC7446CCBA516 /* Vista.icon in Resources */ = {isa = PBXBuildFile; fileRef = 4518B3683CE6F8557B129178 /* Vista.icon */; };
 		2F9708301FF200B42CADAEBD /* LeavingTheSandbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28B78B32954158F8434D6030 /* LeavingTheSandbox.swift */; };
@@ -200,6 +202,7 @@
 		84F787F441E7CAB113BEC0AB /* Intelligence.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4996B7C50A6BD2F6DF4BC27 /* Intelligence.swift */; };
 		850F19731244A4AB96CEDBEC /* HandoffDocumentSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7928413F1DE4B3B456E6F1BC /* HandoffDocumentSource.swift */; };
 		86458E19D2F96D9BA01EAB54 /* ExtensionBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A6A5A6DB770BCC4BE191C79 /* ExtensionBar.swift */; };
+		880065BDAAACC4524DA8A57F /* PageBackTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9478617D34AE80447D8EEA7 /* PageBackTests.swift */; };
 		882FAEC36F368D20E4EC4426 /* WindowCommandTitles.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4C34059071E098F2FC93365 /* WindowCommandTitles.swift */; };
 		895ADB7BDE966A8088B9C4BE /* Menus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DADDB2DEFC948E6DF9498EF /* Menus.swift */; };
 		8AA086469EF62A7BFFA7EE52 /* ExtensionBlankPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAFD2CD58CB77403F5C8C6E8 /* ExtensionBlankPage.swift */; };
@@ -310,6 +313,7 @@
 		DEDD9F926BF6A0767D149208 /* PictureTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = E97A901FDB05011ABE3AD64C /* PictureTest.swift */; };
 		DF221AF8DE16375EDDFD894D /* Astro.icon in Resources */ = {isa = PBXBuildFile; fileRef = FBAC2A3AFBBF56D7DCA93E4C /* Astro.icon */; };
 		DF6A06F118190BB74FF29D12 /* WritingChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = C616BF3DD906A7B37D7BD28D /* WritingChecker.swift */; };
+		DFB4C56BE491CAEFD634AF2E /* PageStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDA75ABB2561F1385185244F /* PageStateTests.swift */; };
 		E0A5C6D48AD5E040C89E07DA /* ExtensionAuth.swift in Sources */ = {isa = PBXBuildFile; fileRef = 350EB51F36EDA73FD343F885 /* ExtensionAuth.swift */; };
 		E0EF52F8C770EB0E34825FF5 /* MeasurePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 295F884323DB72655D014BD3 /* MeasurePanel.swift */; };
 		E10F72CEC53D6AB2414416D5 /* Pages.swift in Sources */ = {isa = PBXBuildFile; fileRef = E34DC13D7028D0404EE9C142 /* Pages.swift */; };
@@ -320,6 +324,7 @@
 		E37184FA913765B3EFD0C7E9 /* FieldGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACCD104C392A6B5BD6806621 /* FieldGeometry.swift */; };
 		E3E6B21EA4EBFD75EF9171B7 /* SpaceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BA2E267956C8B4010EF676D /* SpaceManager.swift */; };
 		E4A678519C1DF54E423D5F5B /* DeveloperBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E20BDB914E83BD7060BB461 /* DeveloperBar.swift */; };
+		E503E9DB1BCEABDF1691E532 /* StartUpTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAB0CCC004E00F70C4B14BD7 /* StartUpTests.swift */; };
 		E527FB8E5856DFB21CF2AFA1 /* PopupPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52D6871440408A9DB0BC3492 /* PopupPanel.swift */; };
 		E5AEFE9FACC393826A35A278 /* ExtensionAsk.swift in Sources */ = {isa = PBXBuildFile; fileRef = A05DD395DF344F3E7FF53A1E /* ExtensionAsk.swift */; };
 		E6B58069A226AD048285B70B /* Engines in Frameworks */ = {isa = PBXBuildFile; productRef = D5887F344098AB37A9B2F868 /* Engines */; };
@@ -351,6 +356,7 @@
 		F815F81763FBF44CEA2613B9 /* BookmarkImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B74FED0AD192E3766DF8BC9 /* BookmarkImport.swift */; };
 		F83D448965370FCB87E5726F /* HandoffSpeech.swift in Sources */ = {isa = PBXBuildFile; fileRef = 175C837A0864F7FFAB8BA56D /* HandoffSpeech.swift */; };
 		F857A9CDD87673F1D351F26D /* ExtensionTable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FB23F5456C5C95CD3962648 /* ExtensionTable.swift */; };
+		F89C24434B16340F6AD92122 /* PageCommandTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D36C6CE512B1C7506C63C09 /* PageCommandTests.swift */; };
 		F941356CE4511915C41A1653 /* WritingAsked.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AB69345C5CC38C73C7D4690 /* WritingAsked.swift */; };
 		F959FA505153433B9AA50686 /* BookmarkImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B74FED0AD192E3766DF8BC9 /* BookmarkImport.swift */; };
 		F9A6B52D955A1CC93EBD9A11 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 905513BDE88D793B2A06F935 /* SettingsView.swift */; };
@@ -376,6 +382,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = FDF93AA12748F1084E76ABE0;
 			remoteInfo = "eGlu Dock Tile";
+		};
+		8F5B05512CBA681D0FAFE660 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 28C23036FA74CEF06FAF32E3 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 006DFBE71CA87B99F5F3BA1E;
+			remoteInfo = "eGlu Mac";
 		};
 		FFBEA6C037BD9FED67E2069C /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -435,6 +448,7 @@
 		1B70EF23A163A13878E63AC8 /* Globe.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = Globe.icon; sourceTree = "<group>"; };
 		1BE7235512B40B5AB1898B0D /* FieldWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FieldWriter.swift; sourceTree = "<group>"; };
 		1CF36E432C898FB1925707C2 /* About.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = About.swift; sourceTree = "<group>"; };
+		1D36C6CE512B1C7506C63C09 /* PageCommandTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageCommandTests.swift; sourceTree = "<group>"; };
 		1F233DEE77A5F9BCAD75B794 /* WritingSpelling.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WritingSpelling.swift; sourceTree = "<group>"; };
 		1F8E7D1B1FAF141A29D2AA29 /* Sync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sync.swift; sourceTree = "<group>"; };
 		210589C96919CFE141110E25 /* ExtensionUpdates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionUpdates.swift; sourceTree = "<group>"; };
@@ -442,6 +456,7 @@
 		268FEAD7A20DFD6A75D22FA5 /* Controls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Controls.swift; sourceTree = "<group>"; };
 		284C993E4AEB18F66C0AAE47 /* Split.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Split.swift; sourceTree = "<group>"; };
 		28B78B32954158F8434D6030 /* LeavingTheSandbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeavingTheSandbox.swift; sourceTree = "<group>"; };
+		295DCEAC1FDD17F93C31DD32 /* PageTestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageTestSupport.swift; sourceTree = "<group>"; };
 		295F884323DB72655D014BD3 /* MeasurePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeasurePanel.swift; sourceTree = "<group>"; };
 		2A8F5E88372432895BD856FC /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		2B46AEB2B396FC9C15B8C6DE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -454,6 +469,7 @@
 		2F50FC2DEC29500EDEB132F0 /* DefaultBrowser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultBrowser.swift; sourceTree = "<group>"; };
 		2FB6ECB59757E936A3E514FF /* MeasureModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeasureModel.swift; sourceTree = "<group>"; };
 		2FC63C0DE72374C50E6D0ACE /* LaunchState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchState.swift; sourceTree = "<group>"; };
+		31726A2872E8F3D96FA9616C /* eGlu Mac Page Tests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "eGlu Mac Page Tests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		347EDC395F093B60F66EE23C /* EgluApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EgluApp.swift; sourceTree = "<group>"; };
 		350EB51F36EDA73FD343F885 /* ExtensionAuth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionAuth.swift; sourceTree = "<group>"; };
 		38319A4244550866F7A02039 /* AddressText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddressText.swift; sourceTree = "<group>"; };
@@ -565,6 +581,7 @@
 		C667ABE2CB97ACB0FDA06CF1 /* WritingMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WritingMenu.swift; sourceTree = "<group>"; };
 		C70AF6D92F62AEBFE795FE3A /* RecordingIndicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingIndicator.swift; sourceTree = "<group>"; };
 		CA1616264381A958239FB0B1 /* SyncStored.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncStored.swift; sourceTree = "<group>"; };
+		CDA75ABB2561F1385185244F /* PageStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageStateTests.swift; sourceTree = "<group>"; };
 		CDEB5BABE9D909C725D3A5E1 /* ExtensionTabs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionTabs.swift; sourceTree = "<group>"; };
 		CF441F439AE6323E8AA8FD47 /* PageHolder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageHolder.swift; sourceTree = "<group>"; };
 		D090D72F0C6C3A560B1A11B3 /* Welcome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Welcome.swift; sourceTree = "<group>"; };
@@ -575,16 +592,19 @@
 		D89D1D697094FA9C252B1AAA /* ActionToast.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionToast.swift; sourceTree = "<group>"; };
 		DA58432FCB7289B0C712A1F6 /* SiteIcons.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiteIcons.swift; sourceTree = "<group>"; };
 		DA8EF70A3F39EB2FDFED8BAD /* HistoryRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryRecorder.swift; sourceTree = "<group>"; };
+		DAB0CCC004E00F70C4B14BD7 /* StartUpTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartUpTests.swift; sourceTree = "<group>"; };
 		DAFD2CD58CB77403F5C8C6E8 /* ExtensionBlankPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionBlankPage.swift; sourceTree = "<group>"; };
 		DB5B17D6F866BE7985268417 /* BackSwipe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackSwipe.swift; sourceTree = "<group>"; };
 		DDB808F0F91E544C0928D496 /* SessionPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionPreferences.swift; sourceTree = "<group>"; };
 		DDDEBCA9718C0EBE81685E79 /* ExtensionPopup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionPopup.swift; sourceTree = "<group>"; };
 		E2644FD8BDB5567220984DD7 /* PinnedPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinnedPanel.swift; sourceTree = "<group>"; };
+		E30CB251854948770DEA0AB5 /* PageSmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageSmokeTests.swift; sourceTree = "<group>"; };
 		E34DC13D7028D0404EE9C142 /* Pages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Pages.swift; sourceTree = "<group>"; };
 		E37A4F6E7E42E92733517CA9 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		E485660AE45A3F89FFCA8F7B /* HistoryCloud.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryCloud.swift; sourceTree = "<group>"; };
 		E6D8D2E159368BB0EB9BE7F1 /* ContentBlocker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentBlocker.swift; sourceTree = "<group>"; };
 		E8CF2A3A921F7506994D255C /* Pages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Pages.swift; sourceTree = "<group>"; };
+		E9478617D34AE80447D8EEA7 /* PageBackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageBackTests.swift; sourceTree = "<group>"; };
 		E957D114D0006C3C31B505A8 /* AccessibilityAccess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityAccess.swift; sourceTree = "<group>"; };
 		E97A901FDB05011ABE3AD64C /* PictureTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PictureTest.swift; sourceTree = "<group>"; };
 		EAC6D7743FC4ED97C5CF909C /* Signal.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = Signal.icon; sourceTree = "<group>"; };
@@ -786,6 +806,7 @@
 			isa = PBXGroup;
 			children = (
 				1A23DF8DB256F464D8F6D74E /* SiteIconsTests.swift */,
+				EE2FDC4E1BB7CD688730A31A /* MacPage */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -867,6 +888,7 @@
 			children = (
 				82C00BE906347AD4CFD18369 /* eGlu Dock Tile.bundle */,
 				75F696893FA4631D9BC29459 /* eGlu Mac Direct.app */,
+				31726A2872E8F3D96FA9616C /* eGlu Mac Page Tests.xctest */,
 				10496D9AD4F6CDEF628F68D1 /* eGlu Mac.app */,
 				399707CDDDB91841856589D7 /* eGlu.app */,
 				C11B86EA360AE983B440F527 /* Site Icons Tests.xctest */,
@@ -963,6 +985,19 @@
 			path = Measure;
 			sourceTree = "<group>";
 		};
+		EE2FDC4E1BB7CD688730A31A /* MacPage */ = {
+			isa = PBXGroup;
+			children = (
+				E9478617D34AE80447D8EEA7 /* PageBackTests.swift */,
+				1D36C6CE512B1C7506C63C09 /* PageCommandTests.swift */,
+				E30CB251854948770DEA0AB5 /* PageSmokeTests.swift */,
+				CDA75ABB2561F1385185244F /* PageStateTests.swift */,
+				295DCEAC1FDD17F93C31DD32 /* PageTestSupport.swift */,
+				DAB0CCC004E00F70C4B14BD7 /* StartUpTests.swift */,
+			);
+			path = MacPage;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -1054,6 +1089,24 @@
 			productReference = 399707CDDDB91841856589D7 /* eGlu.app */;
 			productType = "com.apple.product-type.application";
 		};
+		E6E265E4D4C2659DE77958E9 /* eGlu Mac Page Tests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = ADB8C634B810F83C55C01A33 /* Build configuration list for PBXNativeTarget "eGlu Mac Page Tests" */;
+			buildPhases = (
+				5B5E142351E2AD49DBCAA9FB /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				F5067C2F482FDA4000C56639 /* PBXTargetDependency */,
+			);
+			name = "eGlu Mac Page Tests";
+			packageProductDependencies = (
+			);
+			productName = "eGlu Mac Page Tests";
+			productReference = 31726A2872E8F3D96FA9616C /* eGlu Mac Page Tests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		FDF93AA12748F1084E76ABE0 /* eGlu Dock Tile */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 1642D3DA50602D531F332C09 /* Build configuration list for PBXNativeTarget "eGlu Dock Tile" */;
@@ -1082,7 +1135,6 @@
 				TargetAttributes = {
 					006DFBE71CA87B99F5F3BA1E = {
 						DevelopmentTeam = "";
-						ProvisioningStyle = Automatic;
 					};
 					2B6BAA258BAAFCFB949DAEEC = {
 						DevelopmentTeam = "";
@@ -1092,9 +1144,12 @@
 						DevelopmentTeam = "";
 						ProvisioningStyle = Automatic;
 					};
+					E6E265E4D4C2659DE77958E9 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Manual;
+					};
 					FDF93AA12748F1084E76ABE0 = {
 						DevelopmentTeam = "";
-						ProvisioningStyle = Automatic;
 					};
 				};
 			};
@@ -1121,6 +1176,7 @@
 				7126FC58004C2B43A2826F45 /* eGlu */,
 				FDF93AA12748F1084E76ABE0 /* eGlu Dock Tile */,
 				454CCA10CF2DEE55F4B798B4 /* Site Icons Tests */,
+				E6E265E4D4C2659DE77958E9 /* eGlu Mac Page Tests */,
 				006DFBE71CA87B99F5F3BA1E /* eGlu Mac */,
 				2B6BAA258BAAFCFB949DAEEC /* eGlu Mac Direct */,
 			);
@@ -1320,6 +1376,19 @@
 				C2C8C12DDCE819558D0C5AA8 /* WritingScript.swift in Sources */,
 				3E35CE7C76ED134361935A2B /* WritingSpelling.swift in Sources */,
 				019BFF0D346FD80F3FA57C85 /* WritingWords.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5B5E142351E2AD49DBCAA9FB /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				880065BDAAACC4524DA8A57F /* PageBackTests.swift in Sources */,
+				F89C24434B16340F6AD92122 /* PageCommandTests.swift in Sources */,
+				08F3C6AA45A087FF1759282B /* PageSmokeTests.swift in Sources */,
+				DFB4C56BE491CAEFD634AF2E /* PageStateTests.swift in Sources */,
+				2E1EB21C0D68BA0AA15FE82B /* PageTestSupport.swift in Sources */,
+				E503E9DB1BCEABDF1691E532 /* StartUpTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1572,6 +1641,11 @@
 			isa = PBXTargetDependency;
 			target = FDF93AA12748F1084E76ABE0 /* eGlu Dock Tile */;
 			targetProxy = 7E4C8B9964CA6B073D77CC6C /* PBXContainerItemProxy */;
+		};
+		F5067C2F482FDA4000C56639 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 006DFBE71CA87B99F5F3BA1E /* eGlu Mac */;
+			targetProxy = 8F5B05512CBA681D0FAFE660 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -1828,6 +1902,209 @@
 			};
 			name = Debug;
 		};
+		4EF4924EEEEC21BD3496232B /* Test */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 42;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Test;
+		};
+		5FF736A9FBD6A2E8C547E596 /* Test */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "net.taehee.safience.site-icons-tests";
+				SDKROOT = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_STRICT_CONCURRENCY = complete;
+			};
+			name = Test;
+		};
+		662E5FDD111DEA9CD56AAD4F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = net.taehee.safience.pagetests.tests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/eGlu.app/Contents/MacOS/eGlu";
+			};
+			name = Release;
+		};
+		6F7911C584EF7C6523C98F83 /* Test */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = net.taehee.safience.pagetests.tests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/eGlu.app/Contents/MacOS/eGlu";
+			};
+			name = Test;
+		};
+		789F820990BE24884544D186 /* Test */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 2CEE898E644183959A0DD1B6 /* Mac.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = eGlu;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = "";
+				EGLU_DATA_ROOT = "$(OBJROOT)/eGluPageTestsData";
+				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_PREVIEWS = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Mac/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MAC_ENTITLEMENTS = Config/eGluMacLocal.entitlements;
+				MAC_PROFILE = "";
+				PRODUCT_BUNDLE_IDENTIFIER = net.taehee.safience.pagetests;
+				PRODUCT_MODULE_NAME = eGluMac;
+				PRODUCT_NAME = eGlu;
+				SDKROOT = macosx;
+			};
+			name = Test;
+		};
+		79FD195F2B747B1E91FC93C0 /* Test */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 2CEE898E644183959A0DD1B6 /* Mac.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = eGlu;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Mac/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MAC_ENTITLEMENTS = Config/eGluMacDirect.entitlements;
+				PRODUCT_MODULE_NAME = eGluMac;
+				PRODUCT_NAME = eGlu;
+				SDKROOT = macosx;
+				SPARKLE_FEED_URL = "https://github.com/eGlu-dot-app/eGlu/releases/latest/download/appcast.xml";
+				SPARKLE_PUBLIC_KEY = "rK6S7D1ycM2mnd6WoTripO25xn0wVuV6ymEeI/+jlrc=";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DIRECT";
+			};
+			name = Test;
+		};
+		7C8E841D0DD666FAC4A86925 /* Test */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 6A93321341B1F29FAC9F67B5 /* DockTile.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Mac/DockTile/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = net.taehee.safience.pagetests.docktile;
+				PRODUCT_NAME = eGluDockTile;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				WRAPPER_EXTENSION = docktileplugin;
+			};
+			name = Test;
+		};
 		8E3C7890BB78F95B641C4A1B /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1906,6 +2183,58 @@
 			};
 			name = Release;
 		};
+		9B31A7B5835B4DF1632AE02F /* Test */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = B8982665E67E921A6858CCB7 /* Signing.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "Astro Designer Engineer Globe Hardcover Punk Signal Vista";
+				ASSETCATALOG_COMPILER_APPICON_NAME = eGlu;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				ENABLE_PREVIEWS = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-weak_framework",
+					FoundationModels,
+				);
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Test;
+		};
+		C1D86596DE523EB2F1850889 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = net.taehee.safience.pagetests.tests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/eGlu.app/Contents/MacOS/eGlu";
+			};
+			name = Debug;
+		};
 		D6862FB9F61474BFEBC41557 /* Release */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 2CEE898E644183959A0DD1B6 /* Mac.xcconfig */;
@@ -1955,6 +2284,7 @@
 			buildConfigurations = (
 				10309FE9FB794AF831EE5760 /* Debug */,
 				18B77A19F2F536714F58EAC3 /* Release */,
+				79FD195F2B747B1E91FC93C0 /* Test */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
@@ -1964,6 +2294,7 @@
 			buildConfigurations = (
 				EB4FDD92846D27A7D49FCD1B /* Debug */,
 				1EBFDDE16D45CA1DD6D94A5B /* Release */,
+				7C8E841D0DD666FAC4A86925 /* Test */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
@@ -1973,6 +2304,7 @@
 			buildConfigurations = (
 				43BAB892E4B54419409BAA8C /* Debug */,
 				D6862FB9F61474BFEBC41557 /* Release */,
+				789F820990BE24884544D186 /* Test */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
@@ -1982,6 +2314,17 @@
 			buildConfigurations = (
 				3A3D7A6593603C46ADFA297A /* Debug */,
 				8F79FBEAE44C74F2F95BF72C /* Release */,
+				4EF4924EEEEC21BD3496232B /* Test */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		ADB8C634B810F83C55C01A33 /* Build configuration list for PBXNativeTarget "eGlu Mac Page Tests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C1D86596DE523EB2F1850889 /* Debug */,
+				662E5FDD111DEA9CD56AAD4F /* Release */,
+				6F7911C584EF7C6523C98F83 /* Test */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
@@ -1991,6 +2334,7 @@
 			buildConfigurations = (
 				8E3C7890BB78F95B641C4A1B /* Debug */,
 				02F5EFEF21E3325D7302654B /* Release */,
+				5FF736A9FBD6A2E8C547E596 /* Test */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
@@ -2000,6 +2344,7 @@
 			buildConfigurations = (
 				34FCA634CCF23F85E14D6903 /* Debug */,
 				1BF31A4644DBF5FC8F520828 /* Release */,
+				9B31A7B5835B4DF1632AE02F /* Test */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

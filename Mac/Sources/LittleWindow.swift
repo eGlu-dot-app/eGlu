@@ -117,11 +117,11 @@ final class LittleWindow: NSObject, ObservableObject, PageHost, NSWindowDelegate
     // MARK: What the header does
 
     func back() {
-        page.view.goBack()
+        page.goBack()
     }
 
     func forward() {
-        page.view.goForward()
+        page.goForward()
     }
 
     /// ⌘R, and Try Again over a page that couldn't load: the address that failed.
@@ -149,7 +149,7 @@ final class LittleWindow: NSObject, ObservableObject, PageHost, NSWindowDelegate
     }
 
     func copyLink() {
-        guard let url = page.view.url ?? url else { return }
+        guard let url = page.state.url ?? url else { return }
         WindowModel.copy(url)
     }
 
@@ -161,7 +161,7 @@ final class LittleWindow: NSObject, ObservableObject, PageHost, NSWindowDelegate
         guard !over, leaving == nil else { return }
         let session = Session.shared
         let target = other ?? space
-        let address = page.view.url ?? url
+        let address = page.state.url ?? url
         let id: UUID?
         if target == space {
             over = true
@@ -169,7 +169,7 @@ final class LittleWindow: NSObject, ObservableObject, PageHost, NSWindowDelegate
             session.pages.adopt(page)
             id = session.change { workspace -> UUID? in
                 guard let id = workspace.openTab(address, in: target, id: page.tab) else { return nil }
-                workspace.record(id, url: nil, title: page.view.title)
+                workspace.record(id, url: nil, title: page.state.title)
                 return id
             }
             if id == nil { session.pages.close(page.tab) } else { page.becameTab() }
@@ -261,14 +261,14 @@ final class LittleWindow: NSObject, ObservableObject, PageHost, NSWindowDelegate
 
     func pageDidChange(_ page: Page) {
         guard !over else { return }
-        let view = page.view
-        url = view.url ?? page.committed ?? url
-        canGoBack = view.canGoBack
-        canGoForward = view.canGoForward
-        loading = view.isLoading
-        progress = view.estimatedProgress
+        let state = page.state
+        url = state.url ?? page.committed ?? url
+        canGoBack = state.canGoBack
+        canGoForward = state.canGoForward
+        loading = state.isLoading
+        progress = state.estimatedProgress
         failure = page.failure
-        let title = view.title ?? ""
+        let title = state.title ?? ""
         window.title = title.isEmpty ? (url?.host() ?? String(localized: "Little Window")) : title
     }
 

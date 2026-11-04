@@ -131,7 +131,7 @@ final class Popup: NSObject, PageHost, NSWindowDelegate {
 
     @objc private func closePopup() { panel.close() }
     @objc private func recoverPage() {
-        if page.googleRefused, page.view.canGoBack { page.view.goBack() } else { page.reload() }
+        if page.googleRefused, page.state.canGoBack { page.goBack() } else { page.reload() }
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -151,14 +151,15 @@ final class Popup: NSObject, PageHost, NSWindowDelegate {
 
     func pageDidChange(_ page: Page) {
         let url = page.displayURL
-        let title = page.view.title ?? ""
+        let state = page.state
+        let title = state.title ?? ""
         panel.title = title.isEmpty ? (url?.host ?? String(localized: "Loading…")) : title
         // An extension's own page (its popup window, ExtensionPopupWindow)
         // is named by its extension, and has no connection to vouch for.
         let owner = page.isExtensionPage ? url?.host().flatMap { id in Extensions.shared.installed.first { $0.id == id }?.name } : nil
         address.stringValue = owner ?? url.map(Destination.pretty) ?? String(localized: "Loading…")
         address.setAccessibilityLabel(url?.absoluteString ?? String(localized: "Loading page"))
-        let secure = url?.scheme == "https" && page.view.hasOnlySecureContent && page.failure == nil
+        let secure = url?.scheme == "https" && state.hasOnlySecureContent && page.failure == nil
         security.image = NSImage(systemSymbolName: secure ? "lock.fill" : "exclamationmark.triangle", accessibilityDescription: nil)
         security.contentTintColor = secure ? .systemGreen : .systemOrange
         security.setAccessibilityLabel(secure ? String(localized: "Secure connection") : String(localized: "Connection is not verified as secure"))
@@ -166,11 +167,11 @@ final class Popup: NSObject, PageHost, NSWindowDelegate {
         let problem = page.googleRefused ? SignIn.fallback : page.failure
             ?? (page.exhausted ? String(localized: "This page stopped after repeated memory problems. Close another tab, then reload.") : nil)
         status.stringValue = problem ?? String(localized: "Loading page…")
-        statusBox.isHidden = problem == nil && !page.view.isLoading
-        progress.isHidden = problem != nil || !page.view.isLoading
-        progress.doubleValue = page.view.estimatedProgress
+        statusBox.isHidden = problem == nil && !state.isLoading
+        progress.isHidden = problem != nil || !state.isLoading
+        progress.doubleValue = state.estimatedProgress
         recovery.isHidden = problem == nil
-        recovery.title = page.googleRefused && page.view.canGoBack ? String(localized: "Go Back") : String(localized: "Reload")
+        recovery.title = page.googleRefused && state.canGoBack ? String(localized: "Go Back") : String(localized: "Reload")
         if let problem, problem != announced {
             announced = problem
             NSAccessibility.post(element: panel, notification: .announcementRequested,

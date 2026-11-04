@@ -223,7 +223,7 @@ struct DeveloperBar: View {
         case .console: inspector(.console)
         case .selectElement: inspector(.elements)
         case .elementPicture: model.elementPicture(of: page)
-        case .reloadOrigin: page.view.reloadFromOrigin()
+        case .reloadOrigin: page.reloadFromOrigin()
         // On the card's own page, as the rest: the page beside's too.
         case .measure: page.toggleMeasuring()
         default: model.perform(command)
