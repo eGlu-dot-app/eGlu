@@ -34,7 +34,8 @@ source = open(args.cursor).read()
 path = re.search(r'\sd="([^"]+)"', source).group(1)
 tokens = re.findall(r"[A-Za-z]|-?\d*\.?\d+(?:e-?\d+)?", path)
 
-# The cursor's straight edges, in order round it.
+# Only the straight edges are kept: the curves are the cursor's rounded
+# corners, and the fill's corners are drawn again from the moved edges.
 edges, point, i = [], None, 0
 while i < len(tokens):
     command = tokens[i]
@@ -65,9 +66,9 @@ def meet(p, r, q, s):
     return add(p, mul(r, cross(sub(q, p), s) / cross(r, s)))
 
 
-# The cursor's sharp corners, where its edges would meet, and from their
-# winding, which side of each edge is inside.
-sharp = [meet(edges[i - 1][0], sub(edges[i - 1][1], edges[i - 1][0]), edges[i][0], sub(edges[i][1], edges[i][0]))
+# The path may run either way round, so its winding decides which side of
+# each edge is inside; the wrong one would grow the cursor, not shrink it.
+sharp =[meet(edges[i - 1][0], sub(edges[i - 1][1], edges[i - 1][0]), edges[i][0], sub(edges[i][1], edges[i][0]))
          for i in range(len(edges))]
 side = 1 if sum(cross(a, b) for a, b in zip(sharp, sharp[1:] + sharp[:1])) > 0 else -1
 
@@ -77,11 +78,12 @@ for a, b in edges:
     inward = (-u[1] * side, u[0] * side)
     moved.append((add(a, mul(inward, D)), u, inward))
 
-out = []  # ("L", point) or ("C", control, control, point)
+out = []
 for i in range(len(edges)):
     (p0, u0, n0), (p1, u1, n1) = moved[i - 1], moved[i]
     if cross(u0, u1) * side > 0:
-        # An outer corner, rounded off by R.
+        # Without the cursor's curves the moved edges meet in a point;
+        # R softens it as the cursor's own corners are.
         corner = meet(p0, u0, p1, u1)
         half = math.acos(max(-1, min(1, -(u0[0] * u1[0] + u0[1] * u1[1])))) / 2
         t = R / math.tan(half)
@@ -90,7 +92,9 @@ for i in range(len(edges)):
         out.append(("L", a))
         out.append(("C", add(a, mul(u0, k)), sub(b, mul(u1, k)), b))
     else:
-        # An inner corner: an arc of D round the cursor's own corner.
+        # In a notch the moved edges don't meet. An arc of D round the
+        # cursor's own corner keeps the white border D wide there too;
+        # carried on to meet in a point, the edges would widen it.
         a0, a1 = math.atan2(n0[1], n0[0]), math.atan2(n1[1], n1[0])
         while a1 - a0 > math.pi: a1 -= 2 * math.pi
         while a1 - a0 < -math.pi: a1 += 2 * math.pi
