@@ -209,12 +209,15 @@ public struct Space: Codable, Identifiable, Equatable, Sendable {
         return Bookmarks.find(bookmark, in: bookmarks)?.url
     }
 
-    /// Tabs whose bookmark has left the bar are its others again; of two
-    /// open for one bookmark, the first keeps it. Wherever its bookmarks
-    /// change: here (Workspace), from iCloud (SyncPlan), on loading (repair).
-    public mutating func tidyBar() {
-        let kept = Set(barTabs.values.map(\.id))
-        for t in tabs.indices where tabs[t].bookmark != nil && !kept.contains(tabs[t].id) {
+    /// Tabs whose bookmark is gone from the space altogether let go of it
+    /// for good, as iCloud's tree comes in (SyncPlan) and on loading
+    /// (repair). One only out of the bar keeps it: iCloud can bring a
+    /// bookmark before the folder it moved into, which puts it at the top
+    /// until the folder comes, and the tab is the bar's again then. Until
+    /// it is, `barTabs` leaves it among the others.
+    public mutating func forgetGoneBookmarks() {
+        for t in tabs.indices {
+            guard let id = tabs[t].bookmark, Bookmarks.find(id, in: bookmarks) == nil else { continue }
             tabs[t].bookmark = nil
         }
     }
@@ -796,7 +799,7 @@ public struct Workspace: Codable, Equatable, Sendable {
     public mutating func removeBookmark(_ id: UUID, in space: UUID) {
         guard let s = spaces.firstIndex(where: { $0.id == space }) else { return }
         Bookmarks.remove(id, from: &spaces[s].bookmarks)
-        tidyBar(s)
+        spaces[s].forgetGoneBookmarks()
     }
 
     /// A new folder at the end of `parent` (nil: the top level), named as
@@ -834,7 +837,18 @@ public struct Workspace: Codable, Equatable, Sendable {
         Bookmarks.remove(id, from: &items)
         guard Bookmarks.insert(item, into: folder, before: before, of: &items) else { return }
         spaces[s].bookmarks = items
-        tidyBar(s)
+        // What was moved out of the bar here leaves its tabs among the others; nothing else does.
+        let moved = Set(Self.everything(item).map(\.id))
+        let inBar = Bookmarks.barIDs(in: items)
+        for t in spaces[s].tabs.indices {
+            guard let mark = spaces[s].tabs[t].bookmark, moved.contains(mark), !inBar.contains(mark) else { continue }
+            spaces[s].tabs[t].bookmark = nil
+        }
+    }
+
+    /// A bookmark or folder and everything in it, at any depth.
+    private static func everything(_ item: Bookmark) -> [Bookmark] {
+        [item] + (item.children ?? []).flatMap(everything)
     }
 
     // MARK: The bookmarks bar
@@ -895,7 +909,6 @@ public struct Workspace: Codable, Equatable, Sendable {
         moved.pinned = nil
         moved.bookmark = bookmark
         spaces[s].tabs.insert(moved, at: spaces[s].pinnedCount)
-        tidyBar(s)
         tidySplits(s)
         return bookmark
     }
@@ -912,10 +925,6 @@ public struct Workspace: Codable, Equatable, Sendable {
             return true
         }
         return false
-    }
-
-    mutating func tidyBar(_ s: Int) {
-        spaces[s].tidyBar()
     }
 
     /// Revalidates destination identity after file reading. A missing space
@@ -937,7 +946,7 @@ public struct Workspace: Codable, Equatable, Sendable {
         for s in spaces.indices {
             // Pinned tabs at the front, the others after, each in its order.
             spaces[s].tabs = spaces[s].tabs.filter(\.isPinned) + spaces[s].tabs.filter { !$0.isPinned }
-            tidyBar(s)
+            spaces[s].forgetGoneBookmarks()
             let ids = Set(spaces[s].tabs.map(\.id))
             if let selected = spaces[s].selected, !ids.contains(selected) { spaces[s].selected = nil }
             if spaces[s].selected == nil { spaces[s].selected = spaces[s].tabs.first?.id }

@@ -189,6 +189,27 @@ final class BookmarksBarTests: XCTestCase {
         XCTAssertTrue(w.spaces[0].otherTabs.contains { $0.id == tab })
     }
 
+    func testABookmarkComingBeforeItsNewFolderKeepsItsTab() throws {
+        var (w, space, slackMark, _, _) = try spaceWithBar()
+        w.spaces[0].cloudID = UUID()
+        let cloud = try XCTUnwrap(w.spaces[0].cloudID?.uuidString)
+        let bar = try XCTUnwrap(w.spaces[0].bar?.id.uuidString)
+        let tab = try XCTUnwrap(w.openFromBar(slackMark, in: space))
+        var mirror = SyncPlan.records(of: w, keeping: SyncMirror())
+        // Moved on another device into a new folder in the bar, the folder not here yet:
+        // the bookmark shows at the top for now, and its tab among the others.
+        let folder = UUID().uuidString
+        mirror.bookmarks[slackMark.uuidString]?.parent = folder
+        SyncPlan.apply(mirror, to: &w)
+        XCTAssertNil(w.spaces[0].barTabs[slackMark])
+        XCTAssertEqual(w.tab(tab)?.bookmark, slackMark, "kept, for when the folder comes")
+        // The folder comes: the tab is the bar's again, and no second one opens.
+        mirror.bookmarks[folder] = SyncBookmark(id: folder, space: cloud, parent: bar, position: 9, title: "Chat", url: nil)
+        SyncPlan.apply(mirror, to: &w)
+        XCTAssertEqual(w.spaces[0].barTabs[slackMark]?.id, tab)
+        XCTAssertEqual(w.openFromBar(slackMark, in: space), tab)
+    }
+
     func testRepairLetsGoOfABookmarkNoLongerInTheBar() throws {
         var (w, space, slackMark, _, _) = try spaceWithBar()
         let tab = try XCTUnwrap(w.openFromBar(slackMark, in: space))
