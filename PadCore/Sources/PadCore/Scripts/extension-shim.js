@@ -1141,9 +1141,12 @@
         const top = (wanted === null || wanted === 0) && typeof tabs.get === "function"
           ? Promise.resolve(tabs.get(tabId)).then((tab) => tab && tab.url, () => null) : Promise.resolve(null);
         const framed = Promise.all([frames, top]).then(([list, url]) => {
-          const urls = list.filter((f) => f.url && f.url.startsWith(ownPlace) && (wanted === null || f.frameId === wanted)).map((f) => f.url);
+          const ours = list.filter((f) => f.url && f.url.startsWith(ownPlace) && (wanted === null || f.frameId === wanted));
+          const urls = ours.map((f) => f.url);
           if (typeof url === "string" && url.startsWith(ownPlace) && !urls.includes(url)) urls.push(url);
           if (!urls.length) return undefined;
+          // A page framed in the tab is one WebKit's copy can reach.
+          const framedPage = ours.some((f) => f.frameId !== 0);
           const envelope = { __egluToFrame: { tabId, urls, message } };
           // A framed page hears the worker from WebKit; a tab's own page
           // doesn't (see relay), so it goes over the pages' channel too.
@@ -1155,15 +1158,18 @@
             // answer, if only with nothing (one in another tab, at once).
             // The first real answer wins; nothing once every page that
             // spoke has answered and the moment to speak has passed.
-            // Embedded pages have no channel, so wait for the native reply too.
-            let claims = 1, open = true, done = false;
+            // A framed page has no channel, so WebKit's reply is waited for
+            // too, but only then: the tab's own page doesn't hear WebKit's
+            // copy, and the extension's pages it isn't for answer that copy
+            // with nothing only after ten seconds (dispatch).
+            let claims = framedPage ? 1 : 0, open = true, done = false;
             const finish = (value) => { if (!done) { done = true; relays.delete(relayed); resolve(value); } };
             const answered = (value) => { if (value !== undefined) finish(value); else if (--claims <= 0 && !open) finish(undefined); };
             relays.set(relayed, {
               answering: () => { claims++; },
               answer: answered,
             });
-            natively.then(answered);
+            natively.then(framedPage ? answered : (value) => { if (value !== undefined) finish(value); });
             setTimeout(() => { open = false; if (claims <= 0) finish(undefined); }, 300);
             setTimeout(() => finish(undefined), 30000);
           });

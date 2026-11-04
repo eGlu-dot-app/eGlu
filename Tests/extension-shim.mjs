@@ -343,6 +343,28 @@ function world({ protocol = 'chrome-extension:', apis = true, times = 1, reply, 
   check('a page\'s answer comes back to the worker', answered === 'from the page' && answering.some((m) => m && m.type === 'ASK'), String(answered));
 }
 
+// The tab's own page answering nothing, while one of the extension's pages
+// framed elsewhere answers WebKit's copy with nothing only later, as a page
+// it isn't for does (ten seconds): no frame in the tab, so that isn't waited for.
+{
+  const id = 'abcdefghijklmnopabcdefghijklmnop';
+  const app = 'chrome-extension://' + id + '/app.html#/login';
+  const tabs = { sendMessage: async () => undefined, get: async (tabId) => ({ id: tabId, url: app }) };
+  const worker = world({ background: true, channel: true, prototype: true, page: '/bg.js',
+    namespaces: { tabs, webNavigation: { getAllFrames: async () => [{ frameId: 0, url: app }] } },
+    reply: (m) => m && m.__egluToFrame ? new Promise((done) => setTimeout(() => done(undefined), 3000)) : undefined });
+  const p = world({ channel: true, prototype: true, page: '/app.html#/login',
+    reply: (m) => m && m.__egluCall && m.__egluCall.method === 'getCurrent' ? { value: { id: 5 } } : undefined });
+  const seen = [];
+  p.run('chrome.runtime.onMessage').addListener((m) => { seen.push(m); });
+  await tick(30);
+  const asked = Date.now();
+  const reply = await worker.run('chrome.tabs').sendMessage(5, { type: 'OPEN' });
+  check('the tab\'s own page answering nothing isn\'t held by WebKit\'s slower copy',
+    seen.some((m) => m && m.type === 'OPEN') && reply === undefined && Date.now() - asked < 1500,
+    String(reply) + ' in ' + (Date.now() - asked) + ' ms');
+}
+
 // A frame in a website has no pages' channel. Its native answer still
 // counts while pages on that channel say they have nothing to answer.
 {
