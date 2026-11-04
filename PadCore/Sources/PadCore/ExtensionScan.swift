@@ -53,6 +53,8 @@ public enum ExtensionScan {
     /// ("sidePanel"), members ("identity.getAuthToken") or web APIs
     /// ("EyeDropper").
     public static func uses(in source: String, file: String, of missing: Set<String>) -> [Use] {
+        // Nothing missing, nothing to find: every use found is of something missing.
+        guard !missing.isEmpty else { return [] }
         let tokens = Lexer.tokens(source)
         var found: [Use] = []
         var testedNames: Set<String> = []

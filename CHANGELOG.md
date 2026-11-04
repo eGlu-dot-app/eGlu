@@ -8,7 +8,7 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 - The sidebar's Bookmarks row is now Other Bookmarks and leaves the Bookmarks bar out, as the bookmarks row along the top (⇧⌘B) now does too. Importing bookmarks puts the file's bookmarks bar (Chrome's, or Safari's Favorites) in the space's Bookmarks bar, and Chrome's Other bookmarks at the top.
 - On the Mac and iPad, resting the pointer on a pinned tile or a Bookmarks bar row shows its whole name, Back to Pinned Address while it is open, and Open in Split View, which opens its page beside the tab on screen.
 - Open pinned tabs and Bookmarks bar tabs have a small dot, as the iPhone's dock has: under a tile's icon, left of a row's. Clear leaves Bookmarks bar tabs open, as it leaves pinned tabs.
-
+- A long history no longer holds up history suggestions: with 10,000 pages, the daily tidying of history and taking in visits from iCloud each took up to a minute, with history in the address bar waiting behind them, and now take under a second. Searches left behind by typing on are dropped, and a page loaded in a tab no longer waits while the tab's saved snapshots are cleared.
 - On the Mac, dragging the sidebar's edge resizes it smoothly instead of making the sidebar jump back and forth.
 - On the Mac, playing videos and supported calls open Picture in Picture when you switch tabs or spaces, as they do when you switch apps, and return when you come back to the page. Settings › General › Automatic Picture in Picture turns this off without changing manually opened PiP.
 - Site icons stay available after fully quitting and reopening eGlu, even when the system clears its temporary caches. Existing icons carry over without downloading them again.

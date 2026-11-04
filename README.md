@@ -400,7 +400,7 @@ There is no server of ours, no analytics and no telemetry. Here is everything eG
 | History: pages gone to, when, their titles and descriptions, searches typed | `history.sqlite` in the app's Application Support folder, kept for as long as Settings › History says | You |
 | The same, if iCloud sync is on | Your private CloudKit database | You |
 | Ad-blocking lists | The filter lists turned on in Settings, as they shipped or as last downloaded, in `Filters/` in the app's Application Support folder, and WebKit's compiled rule lists | You |
-| Sites' icons | The app's Caches folder, one per site: the icon a page names, fetched by the app without cookies, or carried in a Chrome bookmarks file | You. iPadOS may clear it |
+| Sites' icons | `Icons/` in the app's Application Support folder, kept across relaunches and excluded from device backups; former selections in `SiteIcons/`. Existing icons are copied from Caches when read. One per site, fetched without cookies or carried in a Chrome bookmarks file | You |
 | Pictures of frozen tabs, and what it takes to reopen them | The app's Caches folder; never for a sign-in page | You. iPadOS may clear it |
 | Cookies, sign-ins, site data | One WebKit store per space, on the device | The sites that set them |
 | Settings | The app's preferences | You |
