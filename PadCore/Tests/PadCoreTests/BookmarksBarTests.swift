@@ -210,6 +210,27 @@ final class BookmarksBarTests: XCTestCase {
         XCTAssertEqual(w.openFromBar(slackMark, in: space), tab)
     }
 
+    /// Among the others for a while, the tab went into a split; back in the
+    /// bar, it leaves it, as the bar's tabs are never in one.
+    func testATabSyncPutsBackInTheBarLeavesItsSplit() throws {
+        var (w, space, slackMark, _, _) = try spaceWithBar()
+        w.spaces[0].cloudID = UUID()
+        let cloud = try XCTUnwrap(w.spaces[0].cloudID?.uuidString)
+        let bar = try XCTUnwrap(w.spaces[0].bar?.id.uuidString)
+        let tab = try XCTUnwrap(w.openFromBar(slackMark, in: space))
+        var mirror = SyncPlan.records(of: w, keeping: SyncMirror())
+        let folder = UUID().uuidString
+        mirror.bookmarks[slackMark.uuidString]?.parent = folder
+        SyncPlan.apply(mirror, to: &w)
+        let other = try XCTUnwrap(w.spaces[0].otherTabs.first { $0.id != tab }?.id)
+        XCTAssertTrue(w.split(tab, with: other))
+        mirror.bookmarks[folder] = SyncBookmark(id: folder, space: cloud, parent: bar, position: 9, title: "Chat", url: nil)
+        SyncPlan.apply(mirror, to: &w)
+        XCTAssertEqual(w.spaces[0].barTabs[slackMark]?.id, tab)
+        XCTAssertNil(w.split(containing: tab))
+        XCTAssertTrue(w.spaces[0].splits.isEmpty)
+    }
+
     func testRepairLetsGoOfABookmarkNoLongerInTheBar() throws {
         var (w, space, slackMark, _, _) = try spaceWithBar()
         let tab = try XCTUnwrap(w.openFromBar(slackMark, in: space))

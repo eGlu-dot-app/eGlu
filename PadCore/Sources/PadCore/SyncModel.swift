@@ -655,6 +655,8 @@ public enum SyncPlan {
             // its new folder perhaps still to come.
             workspace.spaces[s].forgetGoneBookmarks()
             applied.unpinnedTabs += applyPinned(mirror, to: &workspace.spaces[s], cloud: cloud, now: now)
+            // A tab whose bookmark came back into the bar leaves its split.
+            workspace.tidySplits(s)
         }
         let known = Set(workspace.spaces.compactMap { $0.cloudID?.uuidString })
         for record in mirror.spaces.values.sorted(by: { $0.name < $1.name }) where !known.contains(record.id) && !deleted.contains(record.id) {
@@ -772,6 +774,7 @@ public enum SyncPlan {
             }
             // Theirs come in as pinned tabs; ours that they haven't got stay.
             _ = applyPinnedKeepingOurs(remote, to: &workspace.spaces[s], cloud: match, now: now)
+            workspace.tidySplits(s)
         }
         // iCloud's spaces this device hasn't got.
         var incoming = remote
