@@ -4,6 +4,7 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+- On the Mac, reloading an extension at the same version reads its changed scripts again for compatibility warnings, and messages to an extension's page embedded in a website wait for its reply.
 - On the Mac, adding an extension or opening one for the first time no longer holds the whole browser still while eGlu reads its code: for a password manager's megabytes of scripts that took many seconds, once for each space it was on.
 - On the Mac, an extension's popup is as wide as its page: a long name, as Grammarly's, is cut short in its header and no longer widens the popup past the page beside a band of empty glass.
 - On the Mac, an extension whose scripts connect to its background, as NordPass's do, is no longer marked “Some Features Don't Work”: eGlu's own check runs them on a page in no tab, which can't connect, and now leaves that out.
