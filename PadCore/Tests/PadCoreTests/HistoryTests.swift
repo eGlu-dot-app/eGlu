@@ -537,5 +537,56 @@ final class HistoryTests: XCTestCase {
         let mine = try await history.visits(device: "this", since: now.addingTimeInterval(-7 * 86_400))
         XCTAssertEqual(mine.map(\.title), ["Figma"], "only this device's own")
     }
+
+    func testAPagesLastVisitsAreReadByAnIndexOfItsOwn() async throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("history-\(UUID().uuidString).sqlite")
+        addTeardownBlock { try? FileManager.default.removeItem(at: file) }
+        var db: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(file.path, &db), SQLITE_OK)
+        XCTAssertEqual(sqlite3_exec(db, """
+            CREATE TABLE visits (id TEXT PRIMARY KEY, space TEXT NOT NULL, page TEXT NOT NULL, url TEXT NOT NULL, time REAL NOT NULL,
+                device TEXT NOT NULL, kind TEXT NOT NULL, search TEXT, stamp REAL, sync_epoch TEXT, sync_title TEXT, sync_summary TEXT);
+            CREATE INDEX visits_by_page ON visits(space, page);
+            CREATE TABLE removals (id TEXT PRIMARY KEY, space TEXT, scope TEXT NOT NULL, made REAL NOT NULL, wall REAL);
+            PRAGMA user_version = 4;
+            """, nil, nil, nil), SQLITE_OK)
+        sqlite3_close(db)
+        var history: HistoryStore? = try HistoryStore(url: file)
+        try await history?.record(try visit("https://figma.com/a", title: "Figma"), now: now)
+        history = nil
+        XCTAssertEqual(sqlite3_open(file.path, &db), SQLITE_OK)
+        defer { sqlite3_close(db) }
+        func rows(_ sql: String, column: Int32) -> [String] {
+            var statement: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else { return [] }
+            defer { sqlite3_finalize(statement) }
+            var found: [String] = []
+            while sqlite3_step(statement) == SQLITE_ROW { found.append(String(cString: sqlite3_column_text(statement, column))) }
+            return found
+        }
+        let indexes = rows("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'visits'", column: 0)
+        XCTAssertTrue(indexes.contains("visits_by_page_time"))
+        XCTAssertFalse(indexes.contains("visits_by_page"), "the one by page alone, which it starts with, let go")
+        for sql in ["SELECT time, kind, url FROM visits WHERE space = ?1 AND page = ?2 ORDER BY time DESC LIMIT 10",
+                    "SELECT search FROM visits WHERE space = ?1 AND page = ?2 AND search IS NOT NULL ORDER BY time DESC LIMIT 1"] {
+            let plan = rows("EXPLAIN QUERY PLAN " + sql, column: 3).joined(separator: " ")
+            XCTAssertTrue(plan.contains("visits_by_page_time"), plan)
+            XCTAssertFalse(plan.contains("TEMP B-TREE"), plan)
+        }
+        XCTAssertEqual(rows("PRAGMA user_version", column: 0), ["5"])
+    }
+
+    func testASearchLetGoOfIsNotLookedFor() async throws {
+        let history = try store()
+        try await history.record(try visit("https://figma.com/a", title: "Figma"), now: now)
+        let space = self.space
+        let found = try await Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try await history.search(space: space, query: HistoryQuery(words: "figma"))
+        }.value
+        XCTAssertTrue(found.isEmpty)
+        let wanted = try await history.search(space: space, query: HistoryQuery(words: "figma"))
+        XCTAssertEqual(wanted.count, 1)
+    }
     #endif
 }

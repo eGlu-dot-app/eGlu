@@ -201,9 +201,14 @@ public actor HistoryStore {
     /// of the words in it (anywhere inside, as History.searchable keeps
     /// them), gone to within the query's stretch of time if it names one;
     /// most wanted first. Only pages with a visit the scope lets in, if one is given.
+    /// None for a task cancelled: no error, as no read failed, and those
+    /// asking look for their cancellation after (SuggestionSources, HistoryView).
     public func search(space: UUID, query wanted: HistoryQuery, limit: Int = 30,
                        scope: HistoryScope = HistoryScope()) throws -> [HistoryPage] {
-        guard scope.pages else { return [] }
+        // Asked for while typing, and a letter typed since: those asking
+        // have let go of the answer, so it isn't looked for (each of the
+        // waiting searches would read every page, behind a prune too).
+        guard scope.pages, !Task.isCancelled else { return [] }
         var scope = scope
         scope.from = [scope.from, wanted.from].compactMap { $0 }.max()
         scope.to = [scope.to, wanted.to].compactMap { $0 }.min()
@@ -211,14 +216,16 @@ public actor HistoryStore {
         // A matching page can have newer visits outside this filter. Show
         // the latest matching visit, so Yesterday never displays Today.
         let last = visits.sql.isEmpty ? "p.last" : "(SELECT MAX(v.time) FROM visits v WHERE v.space = p.space AND v.page = p.page\(visits.sql))"
-        var sql = """
-            SELECT p.space, p.page, p.url, p.title, p.summary, \(last) AS matched_last, p.count, p.frecency, p.search
-            FROM pages p JOIN pages_fts f ON f.rowid = p.rowid WHERE p.space = ?
-            """
-        var values: [Value] = visits.values + [.text(space.uuidString)]
         // An address's words are kept apart at its dots, dashes and slashes
         // (words(of:)), so what is typed is taken apart the same way.
         let words = wanted.words.split { !($0.isLetter || $0.isNumber) }.map { History.searchable(String($0)) }
+        // Nothing typed: the pages alone, without their searchable text.
+        let text = words.isEmpty ? "" : " JOIN pages_fts f ON f.rowid = p.rowid"
+        var sql = """
+            SELECT p.space, p.page, p.url, p.title, p.summary, \(last) AS matched_last, p.count, p.frecency, p.search
+            FROM pages p\(text) WHERE p.space = ?
+            """
+        var values: [Value] = visits.values + [.text(space.uuidString)]
         // Three letters or more (NFD's, so two Korean syllables) go through
         // the trigram index; fewer are looked for in every page's text.
         let long = words.filter { $0.unicodeScalars.count >= 3 }
@@ -713,10 +720,17 @@ public actor HistoryStore {
             row = ($0.int(0), $0.text(1), $0.text(2), $0.text(3))
         }
         guard let (id, title, address, summary) = row else { return }
+        let text = (History.searchable(title), History.searchable(Self.words(of: address)), History.searchable(summary))
+        // Written again only when it reads differently: pruning refreshes
+        // every page for its frecency, and most pages' words stay as they were.
+        var held: (String, String, String)?
+        try query("SELECT title, words, summary FROM pages_fts WHERE rowid = ?", [.int(id)]) {
+            held = ($0.text(0), $0.text(1), $0.text(2))
+        }
+        if let held, held == text { return }
         try run("DELETE FROM pages_fts WHERE rowid = ?", [.int(id)])
         try run("INSERT INTO pages_fts(rowid, title, words, summary) VALUES (?, ?, ?, ?)",
-                [.int(id), .text(History.searchable(title)), .text(History.searchable(Self.words(of: address))),
-                 .text(History.searchable(summary))])
+                [.int(id), .text(text.0), .text(text.1), .text(text.2)])
     }
 
     /// An address as words: its host without www., and its path, query and fragment as they read.
@@ -748,7 +762,7 @@ public actor HistoryStore {
                 id TEXT PRIMARY KEY, space TEXT NOT NULL, page TEXT NOT NULL, url TEXT NOT NULL, time REAL NOT NULL,
                 device TEXT NOT NULL, kind TEXT NOT NULL, search TEXT);
             CREATE INDEX IF NOT EXISTS visits_by_time ON visits(space, time);
-            CREATE INDEX IF NOT EXISTS visits_by_page ON visits(space, page);
+            CREATE INDEX IF NOT EXISTS visits_by_page_time ON visits(space, page, time);
             CREATE INDEX IF NOT EXISTS visits_by_device ON visits(device, time);
             CREATE TABLE IF NOT EXISTS pages (
                 space TEXT NOT NULL, page TEXT NOT NULL, url TEXT NOT NULL, title TEXT NOT NULL DEFAULT '',
@@ -767,8 +781,11 @@ public actor HistoryStore {
         // (HistoryVisit.stamp). 3: each clearing's own wall-clock time
         // (HistoryRemoval.wall). Each in one transaction, and only where
         // missing, so a stop halfway can't leave one to be added twice.
-        let version = try Statement(db, "PRAGMA user_version")
-        let at = try version.step() ? Row(statement: version).int(0) : 0
+        // Read and let go of: an index isn't dropped (5) while a statement is open.
+        let at = try {
+            let version = try Statement(db, "PRAGMA user_version")
+            return try version.step() ? Row(statement: version).int(0) : 0
+        }()
         for (number, table, column) in [(2, "visits", "stamp"), (3, "removals", "wall")] where at < number {
             var columns: Set<String> = []
             let info = try Statement(db, "PRAGMA table_info(\(table))")
@@ -786,6 +803,14 @@ public actor HistoryStore {
             let add = ["sync_epoch", "sync_title", "sync_summary"].filter { !columns.contains($0) }
                 .map { "ALTER TABLE visits ADD COLUMN \($0) TEXT;" }.joined(separator: " ")
             try exec(db, "BEGIN; \(add) CREATE INDEX IF NOT EXISTS visits_by_sync_epoch ON visits(sync_epoch, device, space, time); PRAGMA user_version = 4; COMMIT;")
+        }
+        // 5: a page's visits by time (visits_by_page_time, made above), so
+        // a page's last visits are read from its own; without it SQLite
+        // went through the space's every visit for each page (refresh), and
+        // pruning 10,000 pages took half a minute. The index it replaces,
+        // by page alone, is the start of this one.
+        if at < 5 {
+            try exec(db, "BEGIN; DROP INDEX IF EXISTS visits_by_page; PRAGMA user_version = 5; COMMIT;")
         }
     }
 
