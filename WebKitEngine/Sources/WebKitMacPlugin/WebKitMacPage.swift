@@ -40,6 +40,35 @@ public final class WebKitMacPage: WebMacPage {
     }
 
     public var contentView: NSView { webView }
+    public var traits: Set<WebTrait> {
+        var traits: Set<WebTrait> = [.isolatedScripts, .documentPictureInPicture]
+        if ["_pinnedState", "_setRubberBandingEnabled:"].allSatisfy({ webView.responds(to: NSSelectorFromString($0)) }) {
+            traits.insert(.rubberBandControl)
+        }
+        // These two are the plugin's own answers to WebKit's private UI
+        // delegate questions: they say the adapter answers them. Whether this
+        // WebKit asks them cannot be asked of WebKit; it asks every macOS
+        // the app runs on. An extension delegate forwards them to the same adapter.
+        if WebKitUIAdapter.instancesRespond(to: NSSelectorFromString("_webView:didNotHandleWheelEvent:")) {
+            traits.insert(.correlatedUnusedWheelEvents)
+        }
+        if WebKitUIAdapter.instancesRespond(to: NSSelectorFromString("_webView:getContextMenuFromProposedMenu:forElement:userInfo:completionHandler:")) {
+            traits.insert(.contextMenuElement)
+        }
+        if webView.configuration.preferences.responds(to: NSSelectorFromString("_setAllowsPictureInPictureMediaPlayback:")) {
+            traits.insert(.videoPictureInPicture)
+        }
+        return traits
+    }
+    public var swipe: (any WebSwipe)? {
+        traits.contains(.rubberBandControl) ? WebKitPageInteraction(view: webView) : nil
+    }
+    public var coordinates: (any WebPageCoordinates)? { WebKitPageInteraction(view: webView) }
+
+    public func makePicturePage(from request: any WebChildRequest, size: CGSize) -> (any WebPicturePage)? {
+        guard let request = request as? WebKitChildRequest else { return nil }
+        return WebKitPicturePage(request: request, size: size)
+    }
     public var state: PageState {
         PageState(url: webView.url, title: webView.title, isLoading: webView.isLoading,
                   estimatedProgress: webView.estimatedProgress, canGoBack: webView.canGoBack,

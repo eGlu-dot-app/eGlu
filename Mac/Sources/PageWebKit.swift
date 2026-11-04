@@ -1,15 +1,8 @@
 import WebKit
 import WebKitMacPlugin
-import WebEngineAppKit
-import WebEngineCore
-import PadCore
 
 /// The app files that still need WebKit use this until their slices move.
 typealias PageView = WebKitPageView
-
-extension WebKitPageView {
-    var page: Page? { events as? Page }
-}
 
 extension Page {
     /// WebKit returns the same content world for the same name.
@@ -22,25 +15,8 @@ extension Page {
         return page.webView
     }
 
-    func makePageSwipe() -> PageSwipe? {
-        PageSwipe.works(on: view) ? PageSwipe(view: view) : nil
-    }
-
     var extensionIsCapturing: Bool { ExtensionCapture.screen(view) }
     func releaseExtensionCapture() { ExtensionCapture.shared.release(view) }
-
-    func pictureSurface(_ window: PictureWindow) -> any WebEngineSurface {
-        PageWebKitSurface(view: window.view)
-    }
-
-    func makePictureWindow(_ child: any WebChildRequest, request: DocumentPicture.Request,
-                           closingExisting: () -> Void) -> PictureWindow {
-        guard let child = child as? WebKitChildRequest else {
-            preconditionFailure("Page.openPicture requires a WebKitChildRequest")
-        }
-        closingExisting()
-        return PictureWindow(opener: self, configuration: child.configuration, features: child.features, request: request)
-    }
 
     // MARK: An extension's own page, for its recording (ExtensionCapture)
 

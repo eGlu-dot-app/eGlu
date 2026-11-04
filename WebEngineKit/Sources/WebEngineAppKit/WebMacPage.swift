@@ -46,6 +46,11 @@ public struct WebSnapshotOptions: Sendable {
 /// The engine's page and its own view, with product policy supplied by Page.
 @MainActor public protocol WebMacPage: WebRequestLoading {
     var contentView: NSView { get }
+    var traits: Set<WebTrait> { get }
+    var swipe: (any WebSwipe)? { get }
+    var coordinates: (any WebPageCoordinates)? { get }
+    /// Must make the child within the call that handed over the request.
+    func makePicturePage(from request: any WebChildRequest, size: CGSize) -> (any WebPicturePage)?
     var state: PageState { get }
     var isExtensionPage: Bool { get }
     var scripting: any WebPageScripting { get }
@@ -68,4 +73,13 @@ public struct WebSnapshotOptions: Sendable {
     /// Stops loading, detaches delegates and removes the view. Script and
     /// rule removal stay explicit so Page preserves its teardown order.
     func tearDown()
+}
+
+/// Engines without these capabilities keep their own gestures and make no
+/// picture child. Existing hosts need not provide unsupported services.
+extension WebMacPage {
+    public var traits: Set<WebTrait> { [] }
+    public var swipe: (any WebSwipe)? { nil }
+    public var coordinates: (any WebPageCoordinates)? { nil }
+    public func makePicturePage(from request: any WebChildRequest, size: CGSize) -> (any WebPicturePage)? { nil }
 }

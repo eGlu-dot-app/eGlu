@@ -5,27 +5,25 @@
 
 | Section | Count | Files |
 |:---|---:|---:|
-| a. Imports (Mac/) | 25 | 25 |
+| a. Imports (Mac/) | 21 | 21 |
 | a. Imports (Shared/) | 0 | 0 |
-| b. Reach-ins into page view (app) | 34 | 10 |
+| b. Reach-ins into page view (app) | 26 | 9 |
 | b. Reach-ins (tests) | 191 | 20 |
 | b. Reach-ins (Page.swift self-references) | 0 | 0 |
-| c. WebKit types in declarations | 55 | 16 |
+| c. WebKit types in declarations | 44 | 14 |
 | c. Declarations (Extension* files) | 259 | 16 |
-| d. Private WebKit API | 36 | 14 |
+| d. Private WebKit API | 35 | 13 |
 | e. Hidden web views | 13 | 8 |
 | f. Script bridges (app) | 2 | 2 |
 | f. Script bridges (WebKit plugin) | 7 | 3 |
 | f. Script bridges (tests) | 4 | 2 |
-| **Total** | **424** | **46** |
+| **Total** | **400** | **42** |
 
 ## Details
 
 ### a. Imports
 
-#### Mac/ (25 lines in 25 files)
-- `Mac/Sources/ApplePasswords.swift` (1):
-  - L5: `import WebKit`
+#### Mac/ (21 lines in 21 files)
 - `Mac/Sources/ExtensionAnswers.swift` (1):
   - L5: `import WebKit`
 - `Mac/Sources/ExtensionAsk.swift` (1):
@@ -64,30 +62,15 @@
   - L6: `import WebKit`
 - `Mac/Sources/MacPageEngine.swift` (1):
   - L4: `import WebKit`
-- `Mac/Sources/PageSwipe.swift` (1):
-  - L4: `import WebKit`
 - `Mac/Sources/PageWebKit.swift` (1):
   - L1: `import WebKit`
 - `Mac/Sources/Pages.swift` (1):
   - L4: `import WebKit`
-- `Mac/Sources/PictureTest.swift` (1):
-  - L4: `import WebKit`
-- `Mac/Sources/PictureWindow.swift` (1):
-  - L5: `import WebKit`
 
 #### Shared/ (0 lines in 0 files)
 _None._
 
-### b. Reach-ins into a page's web view (34 lines in 10 files)
-- `Mac/Sources/ApplePasswords.swift` (8):
-  - L238: `ApplePasswords.serves(page.view.url), case let .tuple(scheme, host, _) = message.origin,`
-  - L239: `host.lowercased() == page.view.url?.host()?.lowercased(),`
-  - L240: `scheme.lowercased() == page.view.url?.scheme?.lowercased(),`
-  - L301: `guard page.host?.isShowing(page) == true, let host = ApplePasswords.host(of: page.view.url),`
-  - L335: `ApplePasswords.host(of: page.view.url) == host`
-  - L345: `let field = ApplePasswordsOffer.Field(page: page.view.url)`
-  - L357: `if UserDefaults.standard.bool(forKey: "applePasswordsTest"), page.view.url?.host() == "127.0.0.1" { return "127.0.0.1" }`
-  - L400: `ApplePasswords.host(of: page.view.url) == resigned.host`
+### b. Reach-ins into a page's web view (26 lines in 9 files)
 - `Mac/Sources/BrowserView.swift` (4):
   - L433: `guard let page, page.view.url != nil || focused && model.url != nil else { return false }`
   - L448: `if let page, page.view.url != nil || focused && model.url != nil {`
@@ -108,7 +91,7 @@ _None._
 - `Mac/Sources/Extensions.swift` (1):
   - L2027: `if let tab, ExtensionPolicy.grantsOnClick(window.page?.view.url) { context.userGesturePerformed(in: tab) }`
 - `Mac/Sources/PageWebKit.swift` (1):
-  - L20: `preconditionFailure("Page.view requires a WebKitMacPage")`
+  - L13: `preconditionFailure("Page.view requires a WebKitMacPage")`
 - `Mac/Sources/Pages.swift` (6):
   - L55: `if page.view.url == nil, let url = tab.url {`
   - L87: `addresses[page.tab] = page.view.url`
@@ -340,31 +323,18 @@ _None._
 #### Page.swift (self-references, excluded from count: 0 lines)
 _None._
 
-### c. WebKit types in declarations (55 lines in 16 files)
+### c. WebKit types in declarations (44 lines in 14 files)
 - `Mac/Sources/MacPageEngine.swift` (4):
   - L17: `case supplied(WKWebViewConfiguration, extensionPage: Bool)`
   - L29: `func configuration(space: UUID) -> WKWebViewConfiguration`
   - L77: `static func page(configuration: WKWebViewConfiguration, extensionPage: Bool = false) -> WebKitMacPage {`
   - L83: `func configuration(space: UUID) -> WKWebViewConfiguration {`
-- `Mac/Sources/PageSwipe.swift` (2):
-  - L49: `private var from: WKBackForwardListItem?`
-  - L59: `static func works(on view: WKWebView) -> Bool {`
 - `Mac/Sources/PageWebKit.swift` (3):
-  - L16: `static let world = WKContentWorld.world(name: "eGlu")`
-  - L49: `static func extensionPageVisible(_ web: WKWebView) async -> Bool {`
-  - L57: `static func startExtensionRecording(in web: WKWebView, token: String, video: Any) async throws -> Any? {`
+  - L9: `static let world = WKContentWorld.world(name: "eGlu")`
+  - L25: `static func extensionPageVisible(_ web: WKWebView) async -> Bool {`
+  - L33: `static func startExtensionRecording(in web: WKWebView, token: String, video: Any) async throws -> Any? {`
 - `Mac/Sources/Pages.swift` (1):
   - L68: `func adopt(tab: UUID, space: UUID, configuration: WKWebViewConfiguration, extensionPage: Bool = false) -> Page {`
-- `Mac/Sources/PictureWindow.swift` (9):
-  - L28: `final class PictureWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate {`
-  - L30: `let view: WKWebView`
-  - L45: `init(opener: Page, configuration: WKWebViewConfiguration, features: WebWindowFeatures, request: DocumentPicture.Request) {`
-  - L196: `func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,`
-  - L207: `func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,`
-  - L228: `func webViewDidClose(_ webView: WKWebView) {`
-  - L233: `func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {`
-  - L267: `let web: WKWebView`
-  - L347: `private final class PictureView: WKWebView {`
 - `PadCore/Tests/PadCoreTests/ContentBlockingTests.swift` (1):
   - L479: `let store = try XCTUnwrap(WKContentRuleListStore(url: folder))`
 - `PadCore/Tests/PadCoreTests/ScriptAndPolicyTests.swift` (2):
@@ -690,7 +660,7 @@ _None._
   - L2416: `func webExtensionController(_ controller: WKWebExtensionController, sendMessage message: Any, toApplicationWithIdentifier applicationIdentifier: String?,`
   - L2450: `func webExtensionController(_ controller: WKWebExtensionController, connectUsing port: WKWebExtension.MessagePort,`
 
-### d. Private WebKit API (36 lines in 14 files)
+### d. Private WebKit API (35 lines in 13 files)
 - `Mac/Sources/ExtensionAnswers.swift` (4):
   - L32: `let folder = folder.appendingPathComponent("_eglu", isDirectory: true)`
   - L340: `folder.appendingPathComponent(id, isDirectory: true).appendingPathComponent("_eglu", isDirectory: true)`
@@ -717,8 +687,6 @@ _None._
   - L151: `@objc(_webView:requestDisplayCapturePermissionForOrigin:initiatedByFrame:withSystemAudio:decisionHandler:)`
 - `Mac/Sources/Extensions.swift` (1):
   - L1682: `let kept = ["\(version).zip", version, "_eglu"]`
-- `Mac/Sources/PageSwipe.swift` (1):
-  - L60: `["_pinnedState", "_setRubberBandingEnabled:"].allSatisfy { view.responds(to: Selector($0)) }`
 - `Mac/Sources/Window.swift` (1):
   - L184: `@objc(_mouseInGroup:)`
 - `PadCore/Sources/PadCore/Commands.swift` (1):

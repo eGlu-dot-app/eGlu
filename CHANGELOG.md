@@ -4,6 +4,8 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+- On the Mac, the two-finger swipe's private WebKit calls, the picture-in-picture window's page and Apple Passwords' placement on screen go through the WebKit plugin, which says what this WebKit can do; the app keeps the swipe's arrow and rules, the window and the card: the third part of step 12 of keeping eGlu's interface apart from its engines (`Docs/EngineSplitPlan.md`). Nothing changes in use.
+
 - On the Mac, a tab's own web view, with its scripts, the calls into it, its pictures, what it reports and its context menu's WebKit items, lives in the WebKit plugin, and the app's page reaches it only through contracts; the app keeps its rules and its menu changes: the second part of step 12 of keeping eGlu's interface apart from its engines (`Docs/EngineSplitPlan.md`). Nothing changes in use.
 
 - On the Mac, iPhone and iPad, the code both apps share no longer names WebKit: a page's sites' filter scripts are added and the spaces' website stores removed through the WebKit plugin, and on the Mac WebKit's own spell checking steps aside for Harper through it: the first part of step 12 of keeping eGlu's interface apart from its engines (`Docs/EngineSplitPlan.md`). Nothing changes in use.

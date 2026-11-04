@@ -1177,11 +1177,12 @@ final class Page: NSObject {
 
     /// The window picture.js asked for, in place of the one open: one at a time, as in Chrome.
     private func openPicture(_ child: any WebChildRequest,
-                             request: DocumentPicture.Request) -> any WebEngineSurface {
-        let window = makePictureWindow(child, request: request) { picture?.close() }
+                             request: DocumentPicture.Request) -> (any WebEngineSurface)? {
+        picture?.close()
+        guard let window = PictureWindow(opener: self, child: child, request: request) else { return nil }
         window.automatic = enteringPicture
         picture = window
-        return pictureSurface(window)
+        return window.backend
     }
 
     /// The window is gone, however it went. The tab may freeze now, once

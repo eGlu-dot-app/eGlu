@@ -1,7 +1,6 @@
 #if DEBUG
 import AppKit
 import PadCore
-import WebKit
 
 extension Page {
     /// A test build's run of Tests/picture.html, with no one at the keys:
@@ -15,8 +14,8 @@ extension Page {
     private static let pictureTested = NSHashTable<Page>.weakObjects()
 
     func testPictureIfAsked() {
-        guard let report = Self.pictureReport, !Self.pictureTested.contains(self), Self.offersPicture(committed ?? view.url),
-              !HandsOff.covers(view.url), !HandsOff.covers(committed) else { return }
+        guard let report = Self.pictureReport, !Self.pictureTested.contains(self), Self.offersPicture(committed ?? pageURL),
+              !HandsOff.covers(pageURL), !HandsOff.covers(committed) else { return }
         Self.pictureTested.add(self)
         Task { @MainActor [weak self] in
             var lines: [String] = []

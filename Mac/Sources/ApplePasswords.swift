@@ -1,8 +1,9 @@
 import AppKit
+import Security
 import PadCore
 import SwiftUI
+import WebEngineAppKit
 import WebEngineCore
-import WebKit
 
 /// Apple Passwords under the sign-in box, the way Safari offers them,
 /// without the iCloud Passwords extension.
@@ -235,9 +236,9 @@ final class ApplePasswordsHandler {
         // From the document shown now: one being left as the page goes
         // elsewhere speaks for its own site, not the new one's.
         guard let page, message.isMainFrame, message.world == .app, !page.isHandsOff,
-              ApplePasswords.serves(page.view.url), case let .tuple(scheme, host, _) = message.origin,
-              host.lowercased() == page.view.url?.host()?.lowercased(),
-              scheme.lowercased() == page.view.url?.scheme?.lowercased(),
+              ApplePasswords.serves(page.pageURL), case let .tuple(scheme, host, _) = message.origin,
+              host.lowercased() == page.pageURL?.host()?.lowercased(),
+              scheme.lowercased() == page.pageURL?.scheme?.lowercased(),
               let body = message.body.foundation as? [String: Any], let kind = body["kind"] as? String else { return }
         switch kind {
         case "focus":
@@ -298,8 +299,8 @@ final class ApplePasswordsCard: ObservableObject {
 
     /// A sign-in box has the caret: what to show under it.
     func focused(_ page: Page, field: CGRect, password: Bool) {
-        guard page.host?.isShowing(page) == true, let host = ApplePasswords.host(of: page.view.url),
-              let screen = Self.screenRect(of: field, in: page.surface.view, zoom: CGFloat(page.pageZoom * page.magnification))
+        guard page.host?.isShowing(page) == true, let host = ApplePasswords.host(of: page.pageURL),
+              let screen = page.enginePage.coordinates?.screenRect(of: field, zoom: CGFloat(page.pageZoom * page.magnification))
         else { return }
         if showing == .pairing { return }
         let same = self.page === page && self.host == host
@@ -332,7 +333,7 @@ final class ApplePasswordsCard: ObservableObject {
                 }
                 guard let self, !Task.isCancelled, self.page === page, self.host == host,
                       page.host?.isShowing(page) == true, page.surface.view.window != nil,
-                      ApplePasswords.host(of: page.view.url) == host
+                      ApplePasswords.host(of: page.pageURL) == host
                 else { return }
                 let mine = names.filter { ApplePasswordsSession.belongs($0.sites.isEmpty ? [host] : $0.sites, to: host, wide: true) }
                 self.show(mine.isEmpty ? .none : .accounts(mine))
@@ -342,7 +343,7 @@ final class ApplePasswordsCard: ObservableObject {
             // resized, and it moves with the field.
             if same, case .offer(let site) = showing, offerShown == site { return show(.offer(site: site)) }
             let offer = ApplePasswordsOffer(store: .standard)
-            let field = ApplePasswordsOffer.Field(page: page.view.url)
+            let field = ApplePasswordsOffer.Field(page: page.pageURL)
             guard let site = offer.site(for: field, .init(appleOn: false, helper: ApplePasswords.helperHere)) ?? testSite(page) else {
                 return show(.none)
             }
@@ -354,7 +355,7 @@ final class ApplePasswordsCard: ObservableObject {
 
     private func testSite(_ page: Page) -> String? {
         #if DEBUG
-        if UserDefaults.standard.bool(forKey: "applePasswordsTest"), page.view.url?.host() == "127.0.0.1" { return "127.0.0.1" }
+        if UserDefaults.standard.bool(forKey: "applePasswordsTest"), page.pageURL?.host() == "127.0.0.1" { return "127.0.0.1" }
         #endif
         return nil
     }
@@ -397,7 +398,7 @@ final class ApplePasswordsCard: ObservableObject {
             self.resigned = nil
             guard self.showing == .none, let page = resigned.page,
                   page.host?.isShowing(page) == true, page.surface.view.window != nil,
-                  ApplePasswords.host(of: page.view.url) == resigned.host
+                  ApplePasswords.host(of: page.pageURL) == resigned.host
             else { return }
             self.focused(page, field: resigned.field.rect, password: resigned.field.password)
         }
@@ -544,14 +545,6 @@ final class ApplePasswordsCard: ObservableObject {
         } else {
             window.orderFront(nil)
         }
-    }
-
-    /// A rect of the page's (CSS pixels from its top left), on screen.
-    private static func screenRect(of rect: CGRect, in view: NSView, zoom: CGFloat) -> CGRect? {
-        guard let window = view.window else { return nil }
-        let scaled = CGRect(x: rect.minX * zoom, y: rect.minY * zoom, width: rect.width * zoom, height: rect.height * zoom)
-        let local = view.isFlipped ? scaled : CGRect(x: scaled.minX, y: view.bounds.height - scaled.maxY, width: scaled.width, height: scaled.height)
-        return window.convertToScreen(view.convert(local, to: nil))
     }
 }
 
