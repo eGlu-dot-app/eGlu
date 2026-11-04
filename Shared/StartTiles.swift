@@ -40,6 +40,10 @@ nonisolated enum StartMetrics {
 /// The space's symbol on its colour, and its name under it.
 struct SpaceMark: View {
     let space: Space
+    /// Scaled, so at a large text size the page's own name is never smaller
+    /// than the bookmarks and history headings under it.
+    @ScaledMetric(relativeTo: .title) private var nameSize: CGFloat = 24
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         VStack(spacing: 12) {
@@ -49,8 +53,10 @@ struct SpaceMark: View {
                 .frame(width: 52, height: 52)
                 .background(space.color.color, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             Text(space.name)
-                .font(.system(size: 24, weight: .bold))
-                .lineLimit(1)
+                .font(.system(size: nameSize, weight: .bold))
+                // At the accessibility sizes a long name wraps rather than being cut short.
+                .lineLimit(typeSize.isAccessibilitySize ? 3 : 1)
+                .multilineTextAlignment(.center)
         }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
