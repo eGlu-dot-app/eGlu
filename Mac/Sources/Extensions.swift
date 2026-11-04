@@ -1987,7 +1987,7 @@ final class Extensions: NSObject, ObservableObject {
             let records = await controller.dataRecords(ofTypes: types)
             if !records.isEmpty { await controller.removeData(ofTypes: types, from: records) }
             withExtendedLifetime(controller) {}
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { Stores.sweep() }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { Stores.sweep(in: WebKitSpaceStores.shared) }
         }
     }
 

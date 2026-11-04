@@ -1,6 +1,6 @@
 import PadCore
 import WebEngineCore
-import WebKit
+import Foundation
 
 // The half of Page.swift both apps share: the iPad's (App/Sources/Page.swift)
 // and the Mac's (Mac/Sources/Page.swift) call into pages the same way here,
@@ -64,24 +64,23 @@ extension Page {
     func readingForHandoff(limit: Int, into folder: URL, telling: Handoff.Telling? = nil) async -> Handoff.ReadOutcome {
         // The document of an earlier handoff is not this one's: the tab may have gone on to an article since.
         handoffDocument = nil
-        guard !HandsOff.covers(view.url), !HandsOff.covers(committed) else { return .protectedPage() }
+        guard !HandsOff.covers(pageURL), !HandsOff.covers(committed) else { return .protectedPage() }
         if let mimeType, let declared = FileFormat(mimeType: mimeType) {
             // A file in the tab is a document — a PDF, or a text, CSV,
             // JSON or XML page: fetched through the tab's own web view
             // into the job's folder (its sign-ins come with it) and read
             // as a DocumentSource would read it, never through markdown.js.
-            guard let url = view.url ?? committed else { return .failed() }
+            guard let url = pageURL ?? committed else { return .failed() }
             do {
                 let fetched = try await HandoffFetch.fetch(url, with: downloadStarter, into: folder)
-                let source = DocumentSource(file: fetched, name: (view.title ?? fetched.lastPathComponent),
+                let source = DocumentSource(file: fetched, name: (pageTitle ?? fetched.lastPathComponent),
                                             address: url, format: declared)
                 handoffDocument = source
                 return await source.reading(limit: limit, into: folder, telling: telling)
             } catch { return .failed(String(localized: "The file could not be fetched.")) }
         }
         do {
-            let value = try await view.callAsyncJavaScript(Scripts.markdownCall, arguments: ["limit": limit], in: nil,
-                                                           contentWorld: Page.world)
+            let value = try await callInAppWorld(Scripts.markdownCall, arguments: ["limit": limit])
             guard let said = value as? [String: Any], let reading = PageReading(said) else { return .failed() }
             return reading.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .noReadableContent : .content(reading)
         } catch { return .failed() }
@@ -95,12 +94,11 @@ extension Page {
     /// that other page is loaded out of sight, read and let go (Unseen).
     /// Never on a hands-off page. Nil when there is none to be had in time.
     func transcript(limit: Int) async -> Transcript? {
-        guard !HandsOff.covers(view.url), !HandsOff.covers(committed), let call = Scripts.readerCall(for: adapter) else { return nil }
-        let said = try? await view.callAsyncJavaScript(call, arguments: ["limit": limit, "patience": Unseen.patienceHere], in: nil,
-                                                       contentWorld: Page.world)
+        guard !HandsOff.covers(pageURL), !HandsOff.covers(committed), let call = Scripts.readerCall(for: adapter) else { return nil }
+        let said = try? await callInAppWorld(call, arguments: ["limit": limit, "patience": Unseen.patienceHere])
         let here = Transcript.answer(said)
         if case .read(let transcript) = here { return transcript }
-        guard here.looksElsewhere, !Task.isCancelled, let url = adapter.readerPage(for: view.url), !HandsOff.covers(url) else { return nil }
+        guard here.looksElsewhere, !Task.isCancelled, let url = adapter.readerPage(for: pageURL), !HandsOff.covers(url) else { return nil }
         let unseen = Unseen(beside: self, of: adapter)
         return await withTaskCancellationHandler {
             await unseen.transcript(at: url, call: call, limit: limit)
@@ -181,42 +179,5 @@ struct PageStatus {
     mutating func failed() {
         code = nil
         pending = nil
-    }
-}
-
-extension WKUserContentController {
-    /// What a site's filters ask for that WebKit's rules can't do
-    /// (ScriptedFilters): the hiding in the app's own world, where the page
-    /// can't reach it; the scriptlets in the page's, since what they change
-    /// is the page's own. Only for a page prepare() has found is not hands-off.
-    @MainActor
-    func addFilterScripts(for filters: PageRules) {
-        if let script = Scripts.blocker(for: filters) {
-            addUserScript(WKUserScript(source: script, injectionTime: .atDocumentStart,
-                                       forMainFrameOnly: true, in: Page.world))
-        }
-        if let script = Scripts.scriptlets(for: filters) {
-            addUserScript(WKUserScript(source: script, injectionTime: .atDocumentStart,
-                                       forMainFrameOnly: true, in: .page))
-        }
-    }
-}
-
-extension NewTabClick {
-    /// Whether a navigation is a ⌘-click (or ⌘⇧, or a middle click) to open
-    /// in a new tab, from what WebKit says started it and the keys and the
-    /// button each app finds made it.
-    @MainActor
-    static func choice(for action: WKNavigationAction, command: Bool, shift: Bool, middleButton: Bool) -> Choice {
-        let kind: Kind
-        switch action.navigationType {
-        case .linkActivated: kind = .link
-        case .formSubmitted: kind = .form
-        case .other: kind = .script
-        default: kind = .history
-        }
-        return choice(kind: kind, command: command, shift: shift, middleButton: middleButton,
-                      method: action.request.httpMethod, scheme: action.request.url?.scheme,
-                      mainFrame: action.targetFrame?.isMainFrame ?? true)
     }
 }

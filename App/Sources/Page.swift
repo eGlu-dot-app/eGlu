@@ -270,6 +270,13 @@ final class Page: NSObject {
     }
     var stats = Stats()
 
+    var pageURL: URL? { view.url }
+    var pageTitle: String? { view.title }
+
+    func callInAppWorld(_ body: String, arguments: [String: Any]) async throws -> Any? {
+        try await view.callAsyncJavaScript(body, arguments: arguments, in: nil, contentWorld: Page.world)
+    }
+
     func hiddenPage(allowing allows: @escaping @MainActor @Sendable (URL?) -> Bool) -> any WebHiddenPage {
         // Served the site as a computer is, as the page beside it may not be.
         WebKitHiddenPage(beside: view, ruleLists: blocksContent ? ContentBlocker.shared.lists : [], appWorld: Page.world,
@@ -524,7 +531,8 @@ final class Page: NSObject {
                                                   injectionTime: .atDocumentEnd,
                                                   forMainFrameOnly: true, in: Page.world))
         }
-        controller.addFilterScripts(for: filters)
+        controller.addFilterScripts(blocker: Scripts.blocker(for: filters), scriptlets: Scripts.scriptlets(for: filters),
+                                    appWorld: Page.world)
         // Under the iPhone Duo's strip, what can be pressed moved out from under its items.
         if let strip {
             controller.addUserScript(WKUserScript(source: Scripts.strip + "\n" + Scripts.strip(set: strip),

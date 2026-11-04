@@ -1,4 +1,5 @@
 import Foundation
+import WebEngineCore
 import WebKit
 
 /// Each space's cookies, sign-ins and site data, in a WebKit store of its own.
@@ -45,5 +46,20 @@ public enum WebKitStores {
             guard error == nil else { return removed(false) }
             removed(true)
         }
+    }
+}
+
+/// WebKit's stores as the app's `Stores` asks for them.
+@MainActor
+public final class WebKitSpaceStores: WebSpaceStores {
+    public static let shared = WebKitSpaceStores()
+
+    private init() {}
+
+    public func isMade(_ space: UUID) -> Bool { WebKitStores.isMade(space) }
+    public func forget(_ space: UUID) { WebKitStores.forget(space) }
+    public func prepareForRemoval() { WebKitStores.prepareForRemoval() }
+    public func remove(_ space: UUID, removed: @escaping @MainActor (Bool) -> Void) {
+        WebKitStores.remove(space, removed: removed)
     }
 }

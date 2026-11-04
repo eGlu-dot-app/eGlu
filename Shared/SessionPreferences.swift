@@ -24,9 +24,9 @@ extension Session {
         }
         ElsewhereChecker.shared.preferencesChanged()
         // WebKit's own spell checking steps aside while Harper checks, and
-        // comes back as it was once Harper stops (WritingSpelling).
+        // comes back as it was once Harper stops (WebKitSpelling).
         if preferences.writing != old.writing {
-            WritingSpelling.follow(writing: preferences.writing, views: pages.live.values.map(\.view))
+            engine.spellingFollows(writing: preferences.writing, pages: Array(pages.live.values))
         }
         #endif
         return changes

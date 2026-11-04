@@ -37,12 +37,18 @@ protocol MacPageEngine: AnyObject {
     func startContentBlocking()
     /// Starts the extensions enabled in each space.
     func startExtensions(afterLaunch: Bool)
+    /// WebKit's own spell checking follows the writing setting.
+    func spellingFollows(writing: Bool, pages: [Page])
 }
 
 /// The app's WebKit page factory until Page moves into the plugin.
 @MainActor
 final class AppWebKitEngine: MacPageEngine {
     var svgRasterizer: any WebSVGRasterizer { WebKitSVGRaster.shared }
+
+    func spellingFollows(writing: Bool, pages: [Page]) {
+        WebKitSpelling.follow(writing: writing, views: pages.map(\.view))
+    }
 
     func ruleListStore() -> (any WebRuleListStore)? {
         WebKitRuleListStore.makeDefault()
@@ -80,12 +86,12 @@ final class AppWebKitEngine: MacPageEngine {
     }
 
     func eraseStore(space: UUID) {
-        Stores.erase(space)
+        Stores.erase(space, in: WebKitSpaceStores.shared)
     }
 
     /// Removes website stores no space uses.
     func sweepStores() {
-        Stores.sweep()
+        Stores.sweep(in: WebKitSpaceStores.shared)
     }
 
     /// Starts the content blocker's lists and rules.

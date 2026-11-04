@@ -1,7 +1,7 @@
 import Foundation
 import ImageIO
 import PadCore
-import WebKitSupport
+import WebEngineCore
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -15,24 +15,24 @@ enum Stores {
     /// emptied at once; the store itself WebKit won't remove while a view
     /// still holds it, so it is written down and tried again at each launch
     /// until it goes.
-    static func erase(_ space: UUID) {
-        WebKitStores.forget(space)
+    static func erase(_ space: UUID, in stores: any WebSpaceStores) {
+        stores.forget(space)
         var pending = Set(UserDefaults.standard.stringArray(forKey: erasingKey) ?? [])
         pending.insert(space.uuidString)
         UserDefaults.standard.set(pending.sorted(), forKey: erasingKey)
         // A moment later, once the space's views have let go.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { sweep() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { sweep(in: stores) }
     }
 
     /// Removes the stores written down for removal. At launch, before any
     /// view holds one, and after an erase.
-    static func sweep() {
+    static func sweep(in stores: any WebSpaceStores) {
         let pending = UserDefaults.standard.stringArray(forKey: erasingKey) ?? []
         guard !pending.isEmpty else { return }
-        WebKitStores.prepareForRemoval()
+        stores.prepareForRemoval()
         for text in pending {
-            guard let id = UUID(uuidString: text), !WebKitStores.isMade(id) else { continue }
-            WebKitStores.remove(id) { removed in
+            guard let id = UUID(uuidString: text), !stores.isMade(id) else { continue }
+            stores.remove(id) { removed in
                 guard removed else { return }
                 Task { @MainActor in
                     let left = (UserDefaults.standard.stringArray(forKey: erasingKey) ?? []).filter { $0 != text }

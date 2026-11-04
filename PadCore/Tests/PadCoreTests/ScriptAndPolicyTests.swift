@@ -255,11 +255,14 @@ final class PolicyTests: XCTestCase {
     /// On the iPad (App/) and on the Mac (Mac/), each with a Page.swift of its
     /// own; in what both compile (Shared/), only PageShared.swift, the half of
     /// Page.swift the two share. In the WebKit plugin's support code, which
-    /// both link, only two: WebKitSVGRaster.swift calls into a page of the
+    /// both link, WebKitSVGRaster.swift calls into a page of the
     /// app's own, where sites' SVG icons are drawn, and may, so long as that
     /// page is never a site's; WebKitHiddenPage.swift calls the reader of
     /// PageShared.swift's Unseen, in the app's world only, on a site page
-    /// Unseen has asked HandsOff about and whose steps it decides. So may the Mac's
+    /// Unseen has asked HandsOff about and whose steps it decides.
+    /// WebKitFilterScripts.swift adds only the two scripts its owner gives
+    /// it, in their own worlds, at document start in the main frame.
+    /// So may the Mac's
     /// ExtensionBlankPage.swift, an empty page of the app's own at a removed
     /// extension's address, where what it kept is cleared; and its
     /// ExtensionPopup.swift, whose views (an extension's popup and side
@@ -306,8 +309,9 @@ final class PolicyTests: XCTestCase {
         }
         let ownPage = "WebKitSVGRaster.swift"
         let hiddenPage = "WebKitHiddenPage.swift"
+        let filterScripts = "WebKitFilterScripts.swift"
         let support = try sources(in: "WebKitEngine/Sources", ending: ".swift")
-        for (name, text) in support where name != ownPage && name != hiddenPage {
+        for (name, text) in support where name != ownPage && name != hiddenPage && name != filterScripts {
             for call in ["evaluateJavaScript", "callAsyncJavaScript", "addUserScript"] {
                 XCTAssertFalse(text.contains(call), "WebKitEngine's \(name) calls \(call)")
             }
@@ -324,6 +328,31 @@ final class PolicyTests: XCTestCase {
         for call in ["evaluateJavaScript", "addUserScript", "loadFileURL", "loadHTMLString"] {
             XCTAssertFalse(hidden.contains(call), "\(hiddenPage) must not \(call)")
         }
+        let filters = try XCTUnwrap(support.first { $0.0 == filterScripts }?.1, "WebKitEngine has no \(filterScripts)")
+        // Check the whole helper, apart from comments and whitespace: no
+        // other script, world, frame, injection time or page call is allowed.
+        let expectedFilters = """
+            import WebKit
+            extension WKUserContentController {
+                @MainActor
+                public func addFilterScripts(blocker: String?, scriptlets: String?, appWorld: WKContentWorld) {
+                    if let script = blocker {
+                        addUserScript(WKUserScript(source: script, injectionTime: .atDocumentStart,
+                                                   forMainFrameOnly: true, in: appWorld))
+                    }
+                    if let script = scriptlets {
+                        addUserScript(WKUserScript(source: script, injectionTime: .atDocumentStart,
+                                                   forMainFrameOnly: true, in: .page))
+                    }
+                }
+            }
+            """
+        func code(_ text: String) -> [Substring] {
+            text.split(separator: "\n").filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+                .flatMap { $0.split(whereSeparator: \.isWhitespace) }
+        }
+        XCTAssertEqual(code(filters), code(expectedFilters),
+                       "\(filterScripts) must only add the given blocker and scriptlets, in that order and in their worlds")
         let unseen = try XCTUnwrap(try sources(in: "Shared", ending: ".swift").first { $0.0 == sharedPage }?.1)
         XCTAssertTrue(unseen.contains("guard !HandsOff.covers(url), await hidden.begin("),
                       "Unseen must ask HandsOff before its hidden page loads")

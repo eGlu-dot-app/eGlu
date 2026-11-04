@@ -1,6 +1,5 @@
 import AppKit
 import SwiftUI
-import WebKit
 
 /// Reaches the window SwiftUI made, to make it the browser's: no title bar
 /// drawn, the content under where it was, no system tabs (the sidebar has

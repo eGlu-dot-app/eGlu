@@ -172,6 +172,13 @@ final class Page: NSObject {
         }
     }
 
+    var pageURL: URL? { view.url }
+    var pageTitle: String? { view.title }
+
+    func callInAppWorld(_ body: String, arguments: [String: Any]) async throws -> Any? {
+        try await view.callAsyncJavaScript(body, arguments: arguments, in: nil, contentWorld: Page.world)
+    }
+
     func hiddenPage(allowing allows: @escaping @MainActor @Sendable (URL?) -> Bool) -> any WebHiddenPage {
         WebKitHiddenPage(beside: view, ruleLists: blocksContent ? ContentBlocker.shared.lists : [],
                          appWorld: Page.world, allows: allows)
@@ -762,7 +769,8 @@ final class Page: NSObject {
             controller.addUserScript(WKUserScript(source: external, injectionTime: .atDocumentStart,
                                                   forMainFrameOnly: true, in: .page))
         }
-        controller.addFilterScripts(for: filters)
+        controller.addFilterScripts(blocker: Scripts.blocker(for: filters), scriptlets: Scripts.scriptlets(for: filters),
+                                    appWorld: Page.world)
         if store {
             controller.addUserScript(WKUserScript(source: Self.bridged(Scripts.extensionStore, using: channels), injectionTime: .atDocumentEnd,
                                                   forMainFrameOnly: true, in: Page.world))

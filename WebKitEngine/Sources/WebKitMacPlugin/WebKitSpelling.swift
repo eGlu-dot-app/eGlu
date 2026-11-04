@@ -7,7 +7,7 @@ import WebKit
 /// defaults (WebContinuousSpellCheckingEnabled), so one page's switch is
 /// every page's, the ones open now included.
 @MainActor
-enum WritingSpelling {
+public enum WebKitSpelling {
     private static let defaultsKey = "WebContinuousSpellCheckingEnabled"
     /// What it was before Harper took over; nil while Harper is off.
     private static let wasKey = "egluSpellingBeforeWriting"
@@ -18,7 +18,7 @@ enum WritingSpelling {
     /// Checking in pages turned on or off: WebKit's spell checking follows.
     /// Only on the change itself, so a person who turns it back on in Edit ›
     /// Spelling and Grammar keeps it.
-    static func follow(writing: Bool, views: [WKWebView]) {
+    public static func follow(writing: Bool, views: [WKWebView]) {
         let defaults = UserDefaults.standard
         // A page that is open answers for WebKit as it runs; with none, its
         // defaults do, which it reads when the first page opens.

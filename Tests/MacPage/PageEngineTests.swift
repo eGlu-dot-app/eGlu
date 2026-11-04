@@ -220,6 +220,10 @@ final class PageEngineTests: PageTestCase {
 final class SpyEngine: MacPageEngine {
     var svgRasterizer: any WebSVGRasterizer { AppWebKitEngine().svgRasterizer }
 
+    func spellingFollows(writing: Bool, pages: [Page]) {
+        AppWebKitEngine().spellingFollows(writing: writing, pages: pages)
+    }
+
     func ruleListStore() -> (any WebRuleListStore)? { AppWebKitEngine().ruleListStore() }
 
     /// The source a page was asked for with; a supplied configuration is in `Call`.
