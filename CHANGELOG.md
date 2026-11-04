@@ -4,6 +4,8 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+- On the Mac, extensions' tab and window adapters live in `WebKitExtensions` and ask an app-owned browser host for the workspace, live pages and popup windows: the fifth part of step 12 of keeping eGlu's interface apart from its engines (`Docs/EngineSplitPlan.md`). Nothing changes in use.
+
 - On the Mac, the extension runtime's native messaging, workers' sockets, first-seconds checks, its blank page for a removed extension, its probe of WebKit's extension API and the WebKit half of its keyboard shortcuts live in the WebKit plugin's new `WebKitExtensions`, handed what they asked the app for: the fourth part of step 12 of keeping eGlu's interface apart from its engines (`Docs/EngineSplitPlan.md`). Nothing changes in use.
 
 - On the Mac, the two-finger swipe's private WebKit calls, the picture-in-picture window's page and Apple Passwords' placement on screen go through the WebKit plugin, which says what this WebKit can do; the app keeps the swipe's arrow and rules, the window and the card: the third part of step 12 of keeping eGlu's interface apart from its engines (`Docs/EngineSplitPlan.md`). Nothing changes in use.

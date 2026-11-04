@@ -3,6 +3,7 @@ import CryptoKit
 import IOKit.pwr_mgt
 import PadCore
 import WebKit
+import WebKitExtensions
 
 /// What the shim asks of the app (Scripts/extension-shim.js), through
 /// native messaging to "eglu": what it tells of, and the APIs WebKit
@@ -256,7 +257,7 @@ extension Extensions {
                 guard let index = (place as? NSNumber)?.intValue, rows.indices.contains(index) else { return NSNull() }
                 let record = rows[index]
                 let page = Session.shared.pages.live[record.id]
-                let url = ExtensionTab.address(of: page, for: context, else: page?.view.url ?? record.url)
+                let url = ExtensionTab.address(of: page.map { ExtensionHost.shared.snapshot($0) }, for: context, owner: { ExtensionAuth.owner(of: $0) }, else: page?.view.url ?? record.url)
                 // Another extension's page stays blank, as WebKit keeps it (ExtensionTab.sealed).
                 if Self.othersPage(url, for: context) || Self.othersPage(record.url, for: context) { return ["url": "", "title": ""] }
                 var described: [String: Any] = ["url": url?.absoluteString ?? "", "title": page?.view.title ?? record.title]
@@ -611,9 +612,9 @@ extension Extensions {
         // these, as Chrome lists their pages, among its tabs: without them it
         // can't send its own window a word.
         for popup in ExtensionPopupWindow.all(in: space) {
-            guard let url = popup.page?.view.url, url.scheme == Self.scheme, url.host() == id else { continue }
+            guard let url = popup.page?.state.url, url.scheme == Self.scheme, url.host() == id else { continue }
             pages.append(["id": "window-\(ObjectIdentifier(popup).hashValue)", "url": url.absoluteString,
-                          "visible": popup.popup?.window.isVisible == true, "focused": popup.popup?.window.isKeyWindow == true])
+                          "visible": popup.snapshot?.isVisible == true, "focused": popup.snapshot?.isKey == true])
         }
         return pages
     }

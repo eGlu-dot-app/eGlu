@@ -27,12 +27,16 @@ let package = Package(
         // (an async function with no actor of its own still runs off its
         // caller's), until it is written for Swift 6.
         .target(name: "WebKitExtensions", dependencies: [
+            "WebKitMacPlugin",
+            .product(name: "WebEngineAppKit", package: "WebEngineKit"),
             .product(name: "PadCore", package: "PadCore")
         ], swiftSettings: [
             .swiftLanguageMode(.v5)
         ]),
         .testTarget(name: "WebKitExtensionsTests", dependencies: [
-            "WebKitExtensions", .product(name: "PadCore", package: "PadCore")
+            "WebKitExtensions", "WebKitMacPlugin",
+            .product(name: "WebEngineAppKit", package: "WebEngineKit"),
+            .product(name: "PadCore", package: "PadCore")
         ]),
         .testTarget(name: "WebKitSupportTests", dependencies: [
             "WebKitSupport",

@@ -1,7 +1,9 @@
 import AppKit
 import PadCore
+import WebEngineAppKit
 import WebEngineCore
 import WebKit
+import WebKitExtensions
 
 /// Every tab's page: live, or let go until it is opened again.
 ///
@@ -179,5 +181,14 @@ final class Pages {
         }
         source.resume()
         pressure = source
+    }
+}
+
+extension Pages {
+    func adoptExtension(tab: UUID, space: UUID, configuration: any ExtensionPageConfiguration) -> Page {
+        guard let configuration = configuration as? WebKitExtensionPageConfiguration else {
+            preconditionFailure("AppWebKitEngine requires a WebKitExtensionPageConfiguration")
+        }
+        return adopt(tab: tab, space: space, configuration: configuration.configuration, extensionPage: true)
     }
 }

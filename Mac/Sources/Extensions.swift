@@ -198,7 +198,12 @@ final class Extensions: NSObject, ObservableObject {
     var keptAwake: [String: IOPMAssertionID] = [:]
     /// Each loaded context's errors watch, removed when it unloads.
     private var watches: [UUID: [String: NSObjectProtocol]] = [:]
-    let tabs = ExtensionTabs()
+    let tabs = ExtensionTabs(host: ExtensionHost.shared,
+                             enabled: { !Extensions.shared.on(in: $0).isEmpty },
+                             controller: { Extensions.shared.controller(for: $0) },
+                             othersPage: { Extensions.othersPage($0, for: $1) },
+                             refusal: { Extensions.refusal(opening: $0, by: $1) },
+                             heldOwner: { ExtensionAuth.owner(of: $0) })
 
     /// The scheme of extensions' own pages, as Chrome's.
     static let scheme = "chrome-extension"
@@ -2253,16 +2258,12 @@ extension Extensions {
 extension Extensions: WKWebExtensionControllerDelegate {
     func webExtensionController(_ controller: WKWebExtensionController, openWindowsFor extensionContext: WKWebExtensionContext) -> [any WKWebExtensionWindow] {
         guard let space = space(of: controller) else { return [] }
-        return [tabs.window(for: space)] + ExtensionPopupWindow.all(in: space)
+        return tabs.openWindows(in: space)
     }
 
     func webExtensionController(_ controller: WKWebExtensionController, focusedWindowFor extensionContext: WKWebExtensionContext) -> (any WKWebExtensionWindow)? {
         guard let space = space(of: controller) else { return nil }
-        if let popup = ExtensionPopupWindow.key(in: space) { return popup }
-        guard Session.shared.frontWindow?.spaceID == space,
-              Session.shared.frontWindow?.window?.isKeyWindow == true
-        else { return nil }
-        return tabs.window(for: space)
+        return tabs.focusedWindow(in: space)
     }
 
     /// Where an extension may not send a tab: to javascript:, which would
@@ -2301,7 +2302,7 @@ extension Extensions: WKWebExtensionControllerDelegate {
         // them private. Refused, as Chrome refuses an extension not allowed
         // in incognito. (Search)
         if configuration.shouldBePrivate {
-            return completionHandler(nil, Unanswered(why: "Private windows can't be opened by extensions."))
+            return completionHandler(nil, tabs.host.privateWindowRefusal())
         }
         if let refused = configuration.tabURLs.lazy.compactMap({ Self.refusal(opening: $0, by: extensionContext) }).first { return completionHandler(nil, refused) }
         guard let space = space(of: controller) else { return completionHandler(nil, nil) }
@@ -2310,7 +2311,7 @@ extension Extensions: WKWebExtensionControllerDelegate {
         // extension's own page.
         if configuration.windowType == .popup, let url = configuration.tabURLs.first ?? URL(string: "about:blank") {
             guard let made = ExtensionPopupWindow.open(url, for: extensionContext, in: space, controller: controller,
-                                                       frame: configuration.frame, focused: configuration.shouldBeFocused)
+                                                       frame: configuration.frame, focused: configuration.shouldBeFocused, owner: tabs, scheme: Self.scheme)
             else { return completionHandler(nil, Unanswered(why: "Cannot open a popup window at that address.")) }
             return completionHandler(made, nil)
         }
@@ -2319,9 +2320,7 @@ extension Extensions: WKWebExtensionControllerDelegate {
         for url in configuration.tabURLs.prefix(1) {
             _ = tabs.open(url, in: space, active: true, pinned: false, context: extensionContext)
         }
-        if Session.shared.allWindows.contains(where: { $0.spaceID == space }) == false {
-            Session.shared.openWindow?(space)
-        }
+        tabs.host.ensureWindow(in: space)
         completionHandler(tabs.window(for: space), nil)
     }
 

@@ -1,7 +1,9 @@
 import Foundation
 import PadCore
+import WebEngineAppKit
 import WebEngineCore
 import WebKit
+import WebKitExtensions
 import WebKitSupport
 import WebKitMacPlugin
 
@@ -107,5 +109,18 @@ final class AppWebKitEngine: MacPageEngine {
     /// Starts the extensions enabled in each space.
     func startExtensions(afterLaunch: Bool) {
         Extensions.shared.start(afterLaunch: afterLaunch)
+    }
+}
+
+// The host passes the runtime's configuration straight to the app's engine.
+extension MacPageEngine {
+    func makeExtensionPopupPage(space: UUID, configuration: (any ExtensionPageConfiguration)?) -> Page {
+        if let configuration {
+            guard let configuration = configuration as? WebKitExtensionPageConfiguration else {
+                preconditionFailure("AppWebKitEngine requires a WebKitExtensionPageConfiguration")
+            }
+            return makePage(tab: UUID(), space: space, source: .supplied(configuration.configuration, extensionPage: true))
+        }
+        return makePage(tab: UUID(), space: space, source: .space)
     }
 }

@@ -1,6 +1,7 @@
 import AppKit
 import PadCore
 import WebKit
+import WebKitExtensions
 
 /// chrome.identity.launchWebAuthFlow: an extension's sign-in through its
 /// provider's page, in the space the extension asked from. The moment the
