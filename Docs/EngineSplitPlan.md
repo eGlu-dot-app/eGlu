@@ -1,6 +1,6 @@
 # Engine split: implementation plan (eGlu for Mac)
 
-Status: planned on 4 November 2026 at commit 75fcca2, narrowed to the Mac app and validated the same day. Claude wrote the draft. Codex (gpt-6.1-sol) read the repository over two rounds, corrected the draft and sketched the contracts, then validated the Mac plan in two independent runs. Gemini researched what a Chromium engine would face and then checked that research against primary sources. Section 11 records the validation and what it changed. Steps 0 and 1 were built and committed on 4 November 2026 (cf0049e6, 7.3); steps 2 and 3 the same day (6f21a0fc, 7.4); step 4a the same day (8fca31ff, 7.5); step 4b the same day, not yet committed (7.6). The decisions left open are in section 9.
+Status: planned on 4 November 2026 at commit 75fcca2, narrowed to the Mac app and validated the same day. Claude wrote the draft. Codex (gpt-6.1-sol) read the repository over two rounds, corrected the draft and sketched the contracts, then validated the Mac plan in two independent runs. Gemini researched what a Chromium engine would face and then checked that research against primary sources. Section 11 records the validation and what it changed. Steps 0 and 1 were built and committed on 4 November 2026 (cf0049e6, 7.3); steps 2 and 3 the same day (6f21a0fc, 7.4); step 4a the same day (8fca31ff, 7.5); step 4b the same day (0ad0afee, 7.6); step 4c the same day, not yet committed (7.7). The decisions left open are in section 9.
 
 **Scope:** eGlu for Mac only (`Mac/`, and the `Shared/` and PadCore code it compiles). The iPad and iPhone app is out of scope. It still compiles `Shared/` and PadCore, so it must keep building and behaving the same; it adopts nothing new (section 4).
 
@@ -623,7 +623,7 @@ Found on the way, older than this work and not fixed (4a keeps behaviour as it w
 
 ### 7.6 Step 4b (4 November 2026)
 
-Built on top of 8fca31ff, not yet committed. Codex wrote the slice in a worktree of its own from a design Claude gave it, with a line-by-line map of the old callback to the new code; a Claude subagent wrote the hosted tests; Claude merged, fixed, built and tested; `/codex` and Gemini reviewed it.
+Built on top of 8fca31ff and committed as 0ad0afee. Codex wrote the slice in a worktree of its own from a design Claude gave it, with a line-by-line map of the old callback to the new code; a Claude subagent wrote the hosted tests; Claude merged, fixed, built and tested; `/codex` and Gemini reviewed it.
 
 - `WebEngineCore` gains the response contract: `WebResponse` (Foundation's `URLResponse` kept whole, so header lookups and the status read as before; whether it is for the main frame; whether the engine can show its type), `WebResponseDecision` (`allow`, `cancel`, `download`), and `decideResponse` on `WebNavigationPolicy`, with the same synchronous, exactly-once reply as the decision on a navigation.
 - `WebKitNavigationAdapter` decides responses the way it decides navigations: it describes each `WKNavigationResponse`, asks `Page`, answers WebKit once, cancels when there is no policy or no reply, and ignores a late reply. It never passes the response decision on to `Page`. The download callbacks and the lifecycle still go to `Page` unchanged.
@@ -632,6 +632,19 @@ Built on top of 8fca31ff, not yet committed. Codex wrote the slice in a worktree
 - Reviews: `/codex` (codex exec, gpt-6.1-sol, read-only) found nothing. Gemini (gemini-3.8-flash-high; Argon's quota had run out) passed it with two changes, both made as above, and a third concern the new tests cover.
 
 Result: all three schemes build with no new warnings; 21 package tests (8 and 13), three runs each; 52 hosted tests, twice in a row (11 new: `PageResponsePolicyTests`). The test host never had a file of the real data folder open (18 and 16 `lsof` samples, which saw its own scratch files). Not covered: the colour-hint retry on a real website, hosts eGlu leaves alone (`HandsOff`), a real download to disk, a real HTTP status through WebKit, and a `Content-Disposition` with leading spaces (the old check did not trim them either, and still does not).
+
+### 7.7 Step 4c (4 November 2026)
+
+Built on top of 0ad0afee, not yet committed. Codex wrote the slice in a worktree of its own from a design Claude gave it, and compared every moved line with the old code; a Claude subagent wrote the hosted tests; Claude merged, built and tested; `/codex` and Gemini reviewed it.
+
+- `WebEngineCore` gains `WebNavigationEvents`, what happens to the main frame's load, reported in order: started and redirected (with the address the engine shows), committed (with the new address), finished, failed (with `provisional` for a load that never committed) and the content process ending. It also gains `WebLoadError`: the engine sorts a failure as `cancelled`, `interrupted` or `other` and keeps its domain, code and failing address. Navigation and document identifiers wait until a slice needs them; nothing in `Page` used WebKit's `WKNavigation`.
+- `WebKitNavigationAdapter` now implements WebKit's seven lifecycle callbacks and reports each at once to `Page`, which it holds weakly, like the policy. `loadError` sorts WebKit's errors as `Page` did: `NSURLErrorCancelled` is `cancelled`; WebKit's 102 (a policy change interrupted the load) and 204 (a plug-in handles it) are `interrupted`. Only the download callbacks still go to `Page` as WebKit's own.
+- `Page` implements `WebNavigationEvents` with the old bodies, line for line. The commit takes the event's address where it read the web view's (nothing before those reads can change it); the title and the back-forward item are still read from its own view. A failure is quiet unless its kind is `other`, where the old code tested WebKit's domains and codes. The seven WebKit callbacks and `failed(_:)` are gone from `Page`.
+- Reviews: `/codex` (codex exec, gpt-6.1-sol, read-only) found nothing. Gemini (gemini-3.8-flash-high) passed it with no findings.
+
+Result: all three schemes build with no new warnings; 27 package tests (9 and 18), three runs each, the offline WebKit loads among them; 68 hosted tests, twice in a row (16 new: `PageLifecycleTests`). Among the new tests, a page's content process is killed for real, three times: the page reloads in a new process twice and then waits with its message. The test kills only the process WebKit names for the test's own page, after checking that the program is WebKit's content process; WebKit's own testing call for this is refused from the test host. The test host never had a file of the real data folder open (22 and 14 `lsof` samples). Not covered: a server redirect and a real cancelled or interrupted load through WebKit, what a commit closes (picture in picture, a pending dialog), what a finish learns of a website, and the extension check that reads the address being loaded from.
+
+Found on the way, older than this work and not changed: a commit does not clear `exhausted` (only loading and reloading do); a form's failed sending shows the reason without the host, because the load state forgets the failed address before the message is made.
 
 ## 8. What a Chromium plugin would face
 

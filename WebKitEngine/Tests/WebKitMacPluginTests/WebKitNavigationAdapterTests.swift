@@ -200,7 +200,8 @@ final class WebKitNavigationAdapterTests: XCTestCase {
             let (view, original) = try await captureResponse(path)
             let policy = Policy()
             let legacy = LegacyDelegate()
-            let adapter = WebKitNavigationAdapter(view: view, policy: policy, legacy: legacy)
+            let events = NavigationEventsRecorder()
+            let adapter = WebKitNavigationAdapter(view: view, policy: policy, events: events, legacy: legacy)
             defer { adapter.tearDown() }
             var decisions = 0
             policy.response = { response, reply in
@@ -235,7 +236,8 @@ final class WebKitNavigationAdapterTests: XCTestCase {
         let (view, original) = try await captureResponse("html")
         var policy: Policy? = Policy()
         let legacy = LegacyDelegate()
-        let adapter = WebKitNavigationAdapter(view: view, policy: policy!, legacy: legacy)
+        let events = NavigationEventsRecorder()
+        let adapter = WebKitNavigationAdapter(view: view, policy: policy!, events: events, legacy: legacy)
         defer { adapter.tearDown() }
         for expected in [WKNavigationResponsePolicy.allow, .cancel, .download] {
             var events: [String] = []
@@ -313,7 +315,8 @@ final class WebKitNavigationAdapterTests: XCTestCase {
         let view = makeView()
         let policy = Policy()
         let legacy = LegacyDelegate()
-        let adapter = WebKitNavigationAdapter(view: view, policy: policy, legacy: legacy)
+        let events = NavigationEventsRecorder()
+        let adapter = WebKitNavigationAdapter(view: view, policy: policy, events: events, legacy: legacy)
         defer { adapter.tearDown() }
         let responseSelector = NSSelectorFromString("webView:decidePolicyForNavigationResponse:decisionHandler:")
         let variant = NSSelectorFromString("webView:decidePolicyForNavigationResponse:unusedVariant:")
@@ -328,11 +331,12 @@ final class WebKitNavigationAdapterTests: XCTestCase {
         let view = makeView(schemeHandler: ResponseSchemeHandler())
         let policy = Policy()
         let legacy = LegacyDelegate()
-        let adapter = WebKitNavigationAdapter(view: view, policy: policy, legacy: legacy)
+        let events = NavigationEventsRecorder()
+        let adapter = WebKitNavigationAdapter(view: view, policy: policy, events: events, legacy: legacy)
         view.navigationDelegate = adapter
         defer { view.stopLoading(); adapter.tearDown() }
         let done = expectation(description: "main and child frames finished through adapter")
-        legacy.finished = { done.fulfill() }
+        events.onEvent = { if $0 == .finished { done.fulfill() } }
         var frames: [String: Bool] = [:]
         policy.response = { response, reply in
             let path = response.response.url!.lastPathComponent
@@ -428,7 +432,8 @@ final class WebKitNavigationAdapterTests: XCTestCase {
         let action = try XCTUnwrap(captured)
         var policy: Policy? = Policy()
         let legacy = LegacyDelegate()
-        let adapter = WebKitNavigationAdapter(view: view, policy: policy!, legacy: legacy)
+        let events = NavigationEventsRecorder()
+        let adapter = WebKitNavigationAdapter(view: view, policy: policy!, events: events, legacy: legacy)
         defer { adapter.tearDown() }
         for expected in [WKNavigationActionPolicy.allow, .cancel, .download] {
             var events: [String] = []
@@ -463,16 +468,17 @@ final class WebKitNavigationAdapterTests: XCTestCase {
     }
 
     @MainActor
-    func testAdapterLoadsAndForwardsToLegacyAfterAssignment() async {
+    func testAdapterLoadsAndReportsFinishAfterAssignment() async {
         let view = makeView()
         let policy = Policy()
         let legacy = LegacyDelegate()
-        let adapter = WebKitNavigationAdapter(view: view, policy: policy, legacy: legacy)
+        let events = NavigationEventsRecorder()
+        let adapter = WebKitNavigationAdapter(view: view, policy: policy, events: events, legacy: legacy)
         // The legacy is present before assignment, when WebKit caches selectors.
         view.navigationDelegate = adapter
         defer { adapter.tearDown() }
-        let done = expectation(description: "real WebKit handler allowed load and forwarded finish")
-        legacy.finished = { done.fulfill() }
+        let done = expectation(description: "real WebKit handler allowed load and reported finish")
+        events.onEvent = { if $0 == .finished { done.fulfill() } }
         var decisions = 0
         policy.decide = { _, reply in decisions += 1; reply(.allow) }
         let loader: any WebRequestLoading = adapter
@@ -489,7 +495,8 @@ final class WebKitNavigationAdapterTests: XCTestCase {
         let view = makeView()
         let policy = Policy()
         let legacy = LegacyDelegate()
-        let adapter = WebKitNavigationAdapter(view: view, policy: policy, legacy: legacy)
+        let events = NavigationEventsRecorder()
+        let adapter = WebKitNavigationAdapter(view: view, policy: policy, events: events, legacy: legacy)
         view.navigationDelegate = adapter
         let selector = NSSelectorFromString("_webView:didNotHandleWheelEvent:")
         XCTAssertTrue(adapter.responds(to: selector))
@@ -515,16 +522,17 @@ final class WebKitNavigationAdapterTests: XCTestCase {
         let policy = Policy()
         weak var weakView: WKWebView?
         weak var weakLegacy: LegacyDelegate?
+        let events = NavigationEventsRecorder()
         let adapter = autoreleasepool {
             let view = makeView()
             let legacy = LegacyDelegate()
             weakView = view
             weakLegacy = legacy
-            return WebKitNavigationAdapter(view: view, policy: policy, legacy: legacy)
+            return WebKitNavigationAdapter(view: view, policy: policy, events: events, legacy: legacy)
         }
         XCTAssertNil(weakView)
         XCTAssertNil(weakLegacy)
-        XCTAssertFalse(adapter.responds(to: #selector(WKNavigationDelegate.webView(_:didFinish:))))
+        XCTAssertTrue(adapter.responds(to: #selector(WKNavigationDelegate.webView(_:didFinish:))))
         adapter.tearDown()
     }
 }

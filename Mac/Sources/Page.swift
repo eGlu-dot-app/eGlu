@@ -327,7 +327,7 @@ final class Page: NSObject {
         view = PageView(frame: .zero, configuration: config)
         super.init()
         view.page = self
-        navigationAdapter = WebKitNavigationAdapter(view: view, policy: self, legacy: self)
+        navigationAdapter = WebKitNavigationAdapter(view: view, policy: self, events: self, legacy: self)
         view.navigationDelegate = navigationAdapter
         // An extension's page has WebKit's question about recording the
         // screen answered by eGlu's recording channel (ExtensionCapture).
@@ -1485,88 +1485,6 @@ extension Page: WKNavigationDelegate, WKUIDelegate {
         if committed == nil, !view.canGoBack { host?.pageDidClose(self) }
     }
 
-    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
-        loadingFrom = webView.url
-    }
-
-    func webView(_ webView: WKWebView, didReceiveServerRedirectForProvisionalNavigation navigation: WKNavigation!) {
-        loadingFrom = webView.url
-    }
-
-    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
-        loadingFrom = nil
-        askedHere = nil
-        Session.shared.pages.navigationChanged(self, committed: true)
-        cancelPendingDialog()
-        loadState.commit()
-        refusedAppLink = nil
-        // A new document: the old one's picture-in-picture window goes with it,
-        // as in Chrome, and WebKit takes the old document's video out of its own.
-        picture?.close()
-        videoWanted = false
-        videoFloated = false
-        committed = webView.url
-        status.committed(webView.backForwardList.currentItem)
-        googleRefused = SignIn.googleRefused(webView.url)
-        failure = nil
-        sendingFailed = false
-        jsonView = nil
-        refusedElsewhere = 0
-        history.committed(url: webView.url, title: webView.title, entry: webView.backForwardList.currentItem,
-                          space: space, tab: tab)
-        passwordField = false
-        // The old document's card went with it, unannounced.
-        writingCardOpen = false
-        changed()
-    }
-
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        learnIcons()
-        learnAbout()
-        learnJSONView()
-        host?.pageDidChange(self)
-        #if DEBUG
-        testPictureIfAsked()
-        #endif
-    }
-
-    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        failed(error)
-    }
-
-    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        loadingFrom = nil
-        failed(error)
-    }
-
-    /// A load that failed for a reason worth telling: not one that was
-    /// stopped, nor one that became a download.
-    private func failed(_ error: Error) {
-        let error = error as NSError
-        let quiet = (error.domain == NSURLErrorDomain && error.code == NSURLErrorCancelled)
-            || (error.domain == "WebKitErrorDomain" && [102, 204].contains(error.code))
-        guard !quiet else { return }
-        history.failed()
-        let failedURL = error.userInfo[NSURLErrorFailingURLErrorKey] as? URL
-        if askingForPage {
-            loadState.fail(failedURL)
-            status.failed()
-        } else {
-            // A form's sending: the form is still there, filled in, and the
-            // address stays its page's; Try Again goes back to it (retry).
-            loadState.commit()
-        }
-        sendingFailed = !askingForPage
-        let reason = PageLoadFailure.message(domain: error.domain, code: error.code)
-        failure = loadState.failed?.host.map { "\($0): \(reason)" } ?? reason
-        host?.pageDidChange(self)
-        if askingForPage { ExtensionAuth.loadFailed(self) }
-    }
-
-    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
-        processEnded()
-    }
-
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
                  for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
         // A website's window opened on an extension's page: only a page the
@@ -1672,6 +1590,79 @@ extension Page: WKNavigationDelegate, WKUIDelegate {
         } else {
             done(panel.runModal())
         }
+    }
+}
+
+// MARK: Navigation events
+
+extension Page: WebNavigationEvents {
+    func navigationStarted(url: URL?) {
+        loadingFrom = url
+    }
+
+    func navigationRedirected(url: URL?) {
+        loadingFrom = url
+    }
+
+    func navigationCommitted(url: URL?) {
+        loadingFrom = nil
+        askedHere = nil
+        Session.shared.pages.navigationChanged(self, committed: true)
+        cancelPendingDialog()
+        loadState.commit()
+        refusedAppLink = nil
+        // A new document: the old one's picture-in-picture window goes with it,
+        // as in Chrome, and WebKit takes the old document's video out of its own.
+        picture?.close()
+        videoWanted = false
+        videoFloated = false
+        committed = url
+        status.committed(view.backForwardList.currentItem)
+        googleRefused = SignIn.googleRefused(url)
+        failure = nil
+        sendingFailed = false
+        jsonView = nil
+        refusedElsewhere = 0
+        history.committed(url: url, title: view.title, entry: view.backForwardList.currentItem,
+                          space: space, tab: tab)
+        passwordField = false
+        // The old document's card went with it, unannounced.
+        writingCardOpen = false
+        changed()
+    }
+
+    func navigationFinished() {
+        learnIcons()
+        learnAbout()
+        learnJSONView()
+        host?.pageDidChange(self)
+        #if DEBUG
+        testPictureIfAsked()
+        #endif
+    }
+
+    func navigationFailed(_ error: WebLoadError, provisional: Bool) {
+        if provisional { loadingFrom = nil }
+        guard error.kind == .other else { return }
+        history.failed()
+        let failedURL = error.failingURL
+        if askingForPage {
+            loadState.fail(failedURL)
+            status.failed()
+        } else {
+            // A form's sending: the form is still there, filled in, and the
+            // address stays its page's; Try Again goes back to it (retry).
+            loadState.commit()
+        }
+        sendingFailed = !askingForPage
+        let reason = PageLoadFailure.message(domain: error.domain, code: error.code)
+        failure = loadState.failed?.host.map { "\($0): \(reason)" } ?? reason
+        host?.pageDidChange(self)
+        if askingForPage { ExtensionAuth.loadFailed(self) }
+    }
+
+    func contentProcessEnded() {
+        processEnded()
     }
 }
 

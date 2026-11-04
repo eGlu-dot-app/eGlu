@@ -327,6 +327,6 @@ final class PageResponsePolicyTests: PageTestCase {
     /// to a page that loads nothing: when the page's status takes the answer
     /// it was keeping (PageStatus.committed).
     private func commit(_ page: Page) {
-        page.webView(page.view, didCommit: nil)
+        page.navigationCommitted(url: page.view.url)
     }
 }

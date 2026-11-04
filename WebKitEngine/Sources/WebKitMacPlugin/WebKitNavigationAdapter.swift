@@ -1,7 +1,9 @@
 import WebEngineCore
 import WebKit
 
-/// Translates action and response policy. All other delegate selectors still belong to the page.
+/// Owns action and response decisions and the main-frame load lifecycle.
+/// Download callbacks and any other selectors still implemented by the page
+/// go to the legacy delegate.
 ///
 /// It must not outlive its legacy delegate: WebKit remembers which selectors
 /// a delegate answers when it is assigned, and one forwarded to a delegate
@@ -11,13 +13,16 @@ import WebKit
 public final class WebKitNavigationAdapter: NSObject, WKNavigationDelegate, WebRequestLoading {
     private weak var view: WKWebView?
     private weak var policy: (any WebNavigationPolicy)?
+    private weak var events: (any WebNavigationEvents)?
     private weak var legacy: (any WKNavigationDelegate)?
 
     /// Complete construction before assigning the adapter as navigationDelegate:
     /// WebKit caches the selectors the delegate responds to at assignment.
-    public init(view: WKWebView, policy: any WebNavigationPolicy, legacy: any WKNavigationDelegate) {
+    public init(view: WKWebView, policy: any WebNavigationPolicy,
+                events: any WebNavigationEvents, legacy: any WKNavigationDelegate) {
         self.view = view
         self.policy = policy
+        self.events = events
         self.legacy = legacy
         super.init()
     }
@@ -37,6 +42,8 @@ public final class WebKitNavigationAdapter: NSObject, WKNavigationDelegate, WebR
     }
 
     public override func forwardingTarget(for selector: Selector!) -> Any? {
+        // Implemented selectors belong to the adapter, never the legacy delegate.
+        if super.responds(to: selector) { return super.forwardingTarget(for: selector) }
         guard Thread.isMainThread else { return super.forwardingTarget(for: selector) }
         let target = MainActor.assumeIsolated { () -> (any WKNavigationDelegate)? in
             // As in responds(to:): a decision is never the legacy delegate's.
@@ -178,6 +185,50 @@ public final class WebKitNavigationAdapter: NSObject, WKNavigationDelegate, WebR
         }
     }
 
+    public func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        events?.navigationStarted(url: webView.url)
+    }
+
+    public func webView(_ webView: WKWebView, didReceiveServerRedirectForProvisionalNavigation navigation: WKNavigation!) {
+        events?.navigationRedirected(url: webView.url)
+    }
+
+    public func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        events?.navigationCommitted(url: webView.url)
+    }
+
+    public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        events?.navigationFinished()
+    }
+
+    public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        events?.navigationFailed(Self.loadError(error), provisional: false)
+    }
+
+    public func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        events?.navigationFailed(Self.loadError(error), provisional: true)
+    }
+
+    public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        events?.contentProcessEnded()
+    }
+
+    /// A load that failed for a reason worth telling: not one that was
+    /// stopped, nor one that became a download.
+    static func loadError(_ error: Error) -> WebLoadError {
+        let e = error as NSError
+        let kind: WebLoadError.Kind
+        if e.domain == NSURLErrorDomain && e.code == NSURLErrorCancelled {
+            kind = .cancelled
+        } else if e.domain == "WebKitErrorDomain" && [102, 204].contains(e.code) {
+            kind = .interrupted
+        } else {
+            kind = .other
+        }
+        return WebLoadError(kind: kind, domain: e.domain, code: e.code,
+                            failingURL: e.userInfo[NSURLErrorFailingURLErrorKey] as? URL)
+    }
+
     public func load(_ request: URLRequest) {
         view?.load(request)
     }
@@ -186,6 +237,7 @@ public final class WebKitNavigationAdapter: NSObject, WKNavigationDelegate, WebR
         if view?.navigationDelegate === self { view?.navigationDelegate = nil }
         view = nil
         policy = nil
+        events = nil
         legacy = nil
     }
 }

@@ -8,14 +8,14 @@
 | a. Imports (Mac/) | 44 | 42 |
 | a. Imports (Shared/) | 12 | 11 |
 | b. Reach-ins into page view (app) | 57 | 16 |
-| b. Reach-ins (tests) | 69 | 10 |
+| b. Reach-ins (tests) | 82 | 11 |
 | b. Reach-ins (Page.swift self-references) | 1 | 1 |
-| c. WebKit types in declarations | 154 | 31 |
+| c. WebKit types in declarations | 148 | 32 |
 | c. Declarations (Extension* files) | 258 | 16 |
-| d. Private WebKit API | 33 | 13 |
+| d. Private WebKit API | 34 | 14 |
 | e. Hidden web views | 19 | 11 |
 | f. Script bridges | 7 | 7 |
-| **Total** | **584** | **71** |
+| **Total** | **579** | **72** |
 
 ## Details
 
@@ -209,7 +209,7 @@
   - L70: `page.view.superview?.addSubview(view, positioned: .below, relativeTo: page.view)`
   - L77: `page.view.superview?.insertSubview(view, belowSubview: page.view)`
 
-#### Tests (69 lines in 10 files)
+#### Tests (82 lines in 11 files)
 - `Tests/Crashes/CrashRegressionTests.swift` (5):
   - L94: `page.view.frame = CGRect(x: 0, y: 0, width: 320, height: 480)`
   - L95: `container.view.addSubview(page.view)`
@@ -230,6 +230,20 @@
 - `Tests/MacPage/PageEngineTests.swift` (2):
   - L122: `XCTAssertTrue(page.view.configuration.websiteDataStore === configuration.websiteDataStore,`
   - L141: `XCTAssertTrue(page.view.configuration.websiteDataStore === Stores.store(for: space),`
+- `Tests/MacPage/PageLifecycleTests.swift` (13):
+  - L93: `XCTAssertNil(page.view.url, "the test's commit loaded something")`
+  - L254: `let form = try XCTUnwrap(page.view.url)`
+  - L274: `XCTAssertFalse(page.view.isLoading, "Try Again loaded the form's page again, which would empty it")`
+  - L275: `XCTAssertEqual(page.view.url, form)`
+  - L328: `XCTAssertFalse(page.view.isLoading, "the page loaded again by itself after its budget was used")`
+  - L356: `let loaded = try XCTUnwrap(page.view.url)`
+  - L398: `let before = try XCTUnwrap(page.view.url)`
+  - L404: `page.view.loadFileURL(missing, allowingReadAccessTo: folder)`
+  - L442: `XCTAssertFalse(page.view.isLoading, "the page loaded again by itself after its budget was used")`
+  - L545: `_ = try await page.view.evaluateJavaScript("document.title = 'Changed'; 1")`
+  - L563: `guard page.view.responds(to: NSSelectorFromString(key)),`
+  - L564: `let number = page.view.value(forKey: key) as? NSNumber, number.int32Value > 1 else { return nil }`
+  - L597: `func pageDidChange(_ page: Page) { told.append(page.view.isLoading) }`
 - `Tests/MacPage/PageNavigationPolicyTests.swift` (14):
   - L45: `XCTAssertNil(page.view.url)`
   - L135: `XCTAssertNil(page.view.url, "the answers went to WebKit")`
@@ -252,7 +266,7 @@
   - L221: `XCTAssertEqual(page.view.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]), .darkAqua,`
   - L244: `XCTAssertNil(page.view.url, "the page was loaded again")`
   - L245: `XCTAssertFalse(page.view.isLoading, "the page was loaded again")`
-  - L330: `page.webView(page.view, didCommit: nil)`
+  - L330: `page.navigationCommitted(url: page.view.url)`
 - `Tests/MacPage/PageSmokeTests.swift` (5):
   - L11: `XCTAssertEqual(page.view.title, "One")`
   - L12: `XCTAssertFalse(page.view.canGoBack)`
@@ -292,9 +306,9 @@
 
 #### Page.swift (self-references, excluded from count: 1 lines)
 - `Mac/Sources/Page.swift` (1):
-  - L1601: `return openPeek(navigationAction.request.url, configuration: configuration).page.view`
+  - L1519: `return openPeek(navigationAction.request.url, configuration: configuration).page.view`
 
-### c. WebKit types in declarations (154 lines in 31 files)
+### c. WebKit types in declarations (148 lines in 32 files)
 - `Mac/Sources/ApplePasswords.swift` (3):
   - L226: `final class ApplePasswordsHandler: NSObject, WKScriptMessageHandler {`
   - L233: `nonisolated func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {`
@@ -307,7 +321,7 @@
   - L13: `case supplied(WKWebViewConfiguration, extensionPage: Bool)`
   - L22: `func configuration(space: UUID) -> WKWebViewConfiguration`
   - L50: `func configuration(space: UUID) -> WKWebViewConfiguration {`
-- `Mac/Sources/Page.swift` (34):
+- `Mac/Sources/Page.swift` (27):
   - L25: `func page(_ page: Page, open configuration: WKWebViewConfiguration, for action: WKNavigationAction,`
   - L42: `final class PageView: WKWebView {`
   - L66: `let newTab = menu.items.first(where: { $0.identifier?.rawValue == "WKMenuItemIdentifierOpenLinkInNewWindow" }) {`
@@ -329,19 +343,12 @@
   - L1473: `func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {`
   - L1477: `func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) {`
   - L1483: `private func downloading(_ download: WKDownload) {`
-  - L1488: `func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {`
-  - L1492: `func webView(_ webView: WKWebView, didReceiveServerRedirectForProvisionalNavigation navigation: WKNavigation!) {`
-  - L1496: `func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {`
-  - L1523: `func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {`
-  - L1533: `func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {`
-  - L1537: `func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {`
-  - L1566: `func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {`
-  - L1570: `func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,`
-  - L1611: `func webViewDidClose(_ webView: WKWebView) {`
-  - L1615: `func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String,`
-  - L1624: `func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String,`
-  - L1634: `func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String, defaultText: String?,`
-  - L1661: `func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters,`
+  - L1488: `func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,`
+  - L1529: `func webViewDidClose(_ webView: WKWebView) {`
+  - L1533: `func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String,`
+  - L1542: `func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String,`
+  - L1552: `func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String, defaultText: String?,`
+  - L1579: `func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters,`
 - `Mac/Sources/PageSwipe.swift` (2):
   - L49: `private var from: WKBackForwardListItem?`
   - L59: `static func works(on view: WKWebView) -> Bool {`
@@ -475,6 +482,8 @@
   - L210: `let configuration: WKWebViewConfiguration?`
   - L219: `var supplied: WKWebViewConfiguration?`
   - L236: `func configuration(space: UUID) -> WKWebViewConfiguration {`
+- `Tests/MacPage/PageLifecycleTests.swift` (1):
+  - L599: `func page(_ page: Page, open configuration: WKWebViewConfiguration, for action: WKNavigationAction,`
 - `Tests/MacPage/PageNavigationPolicyTests.swift` (1):
   - L393: `func page(_ page: Page, open configuration: WKWebViewConfiguration, for action: WKNavigationAction,`
 - `Tests/MacPage/PageTestSupport.swift` (2):
@@ -757,7 +766,7 @@
   - L2287: `func webExtensionController(_ controller: WKWebExtensionController, sendMessage message: Any, toApplicationWithIdentifier applicationIdentifier: String?,`
   - L2321: `func webExtensionController(_ controller: WKWebExtensionController, connectUsing port: WKWebExtension.MessagePort,`
 
-### d. Private WebKit API (33 lines in 13 files)
+### d. Private WebKit API (34 lines in 14 files)
 - `Mac/Sources/ExtensionAnswers.swift` (4):
   - L32: `let folder = folder.appendingPathComponent("_eglu", isDirectory: true)`
   - L340: `folder.appendingPathComponent(id, isDirectory: true).appendingPathComponent("_eglu", isDirectory: true)`
@@ -804,6 +813,8 @@
   - L48: `"mc_cid", "mc_eid", "mkt_tok", "_hsenc", "_hsmi", "_kx", "vero_id", "oly_anon_id", "oly_enc_id", "ml_subscriber",`
   - L51: `"_ga", "_gl", "pk_campaign", "pk_kwd", "pk_keyword", "pk_source", "pk_medium", "pk_content", "pk_cid",`
   - L63: `(["tiktok.com"], ["_r", "_t", "is_from_webapp", "sender_device", "sender_web_id", "share_app_id", "share_link_id",`
+- `Tests/MacPage/PageLifecycleTests.swift` (1):
+  - L562: `let key = "_webProcessIdentifier"`
 
 ### e. Hidden web views (19 lines in 11 files)
 - `Mac/Sources/ExtensionAuth.swift` (1):
