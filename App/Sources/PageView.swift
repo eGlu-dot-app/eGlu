@@ -36,8 +36,11 @@ final class PageView: WKWebView {
     /// the view doesn't hear the keyboard move: only its frame
     /// changes. It still hears that the keyboard is up, and shows the field
     /// being typed in, in the view as it then is.
-    override init(frame: CGRect, configuration: WKWebViewConfiguration) {
+    /// A pop-up's view (`keyboardByWindow` false), which no window cuts
+    /// short above the keyboard, leaves the keyboard to WebKit instead.
+    init(frame: CGRect, configuration: WKWebViewConfiguration, keyboardByWindow: Bool) {
         super.init(frame: frame, configuration: configuration)
+        guard keyboardByWindow else { return }
         for name in [UIResponder.keyboardWillShowNotification, UIResponder.keyboardWillHideNotification,
                      UIResponder.keyboardWillChangeFrameNotification, UIResponder.keyboardDidChangeFrameNotification] {
             NotificationCenter.default.removeObserver(self, name: name, object: nil)

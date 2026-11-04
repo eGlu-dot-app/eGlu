@@ -270,14 +270,16 @@ final class Page: NSObject {
     /// one in the space's store otherwise. Either way the page gets a script
     /// controller of its own, so the scripts swapped for one page (none at
     /// all on a hands-off host) never touch another's.
-    init(tab: UUID, space: UUID, configuration: WKWebViewConfiguration? = nil) {
+    /// `keyboardByWindow`: the window lays the page out above the keyboard
+    /// (Browser.pageRoom); a pop-up's doesn't, and leaves it to WebKit (PageView).
+    init(tab: UUID, space: UUID, configuration: WKWebViewConfiguration? = nil, keyboardByWindow: Bool = true) {
         self.tab = tab
         self.space = space
         let config = configuration ?? Page.configuration(space: space)
         let controller = WKUserContentController()
         config.userContentController = controller
         self.controller = controller
-        view = PageView(frame: .zero, configuration: config)
+        view = PageView(frame: .zero, configuration: config, keyboardByWindow: keyboardByWindow)
         super.init()
         view.page = self
         view.navigationDelegate = self
@@ -622,6 +624,9 @@ final class Page: NSObject {
     /// Looked for now, and again when the page has its new height (it gets
     /// it a moment after its view does); moved only if it doesn't show, and
     /// by its caret where it is taller than half the view (an editor).
+    /// Not yet: the caret of a tall textarea, which the page's selection
+    /// doesn't place; a field in a frame; an editor in a panel that scrolls
+    /// by itself or is fixed, which a scroll of the page doesn't move.
     func revealFocus() {
         guard editing, !isHandsOff, !HandsOff.covers(view.url) else { return }
         view.callAsyncJavaScript(Self.revealScript, arguments: [:], in: nil, in: Page.world) { _ in }
