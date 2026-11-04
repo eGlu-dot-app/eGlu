@@ -231,6 +231,22 @@ final class BookmarksBarTests: XCTestCase {
         XCTAssertTrue(w.spaces[0].splits.isEmpty)
     }
 
+    /// The same, the bookmark moved back into the bar here.
+    func testATabMovedBackInTheBarHereLeavesItsSplit() throws {
+        var (w, space, slackMark, _, _) = try spaceWithBar()
+        w.spaces[0].cloudID = UUID()
+        let bar = try XCTUnwrap(w.spaces[0].bar?.id)
+        let tab = try XCTUnwrap(w.openFromBar(slackMark, in: space))
+        var mirror = SyncPlan.records(of: w, keeping: SyncMirror())
+        mirror.bookmarks[slackMark.uuidString]?.parent = UUID().uuidString
+        SyncPlan.apply(mirror, to: &w)
+        let other = try XCTUnwrap(w.spaces[0].otherTabs.first { $0.id != tab }?.id)
+        XCTAssertTrue(w.split(tab, with: other))
+        w.moveBookmark(slackMark, into: bar, in: space)
+        XCTAssertEqual(w.spaces[0].barTabs[slackMark]?.id, tab)
+        XCTAssertTrue(w.spaces[0].splits.isEmpty)
+    }
+
     func testRepairLetsGoOfABookmarkNoLongerInTheBar() throws {
         var (w, space, slackMark, _, _) = try spaceWithBar()
         let tab = try XCTUnwrap(w.openFromBar(slackMark, in: space))

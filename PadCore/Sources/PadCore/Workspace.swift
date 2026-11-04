@@ -877,6 +877,8 @@ public struct Workspace: Codable, Equatable, Sendable {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, spaces[s].bar?.id != id else { return }
         Bookmarks.update(id, in: &spaces[s].bookmarks) { $0.title = trimmed }
+        // A folder named as the bar where there was none is the bar, and its open tabs leave their splits.
+        tidySplits(s)
     }
 
     /// Moves a bookmark or a folder to the end of `folder` (nil: the top
@@ -901,6 +903,8 @@ public struct Workspace: Codable, Equatable, Sendable {
             guard let mark = spaces[s].tabs[t].bookmark, moved.contains(mark), !inBar.contains(mark) else { continue }
             spaces[s].tabs[t].bookmark = nil
         }
+        // What was moved into the bar takes its open tabs out of their splits.
+        tidySplits(s)
     }
 
     /// A bookmark or folder and everything in it, at any depth.
