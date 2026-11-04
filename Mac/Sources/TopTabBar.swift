@@ -5,7 +5,8 @@ import SwiftUI
 /// The tabs along the top, for whoever chose them there over the sidebar
 /// (Settings › General › Tabs): one row on the window's ground, level with
 /// the window's own buttons, as the iPad's row is (TopTabs). Back, forward,
-/// reload and the bookmarks bar's button; the space's pinned tabs as small tiles; its other tabs,
+/// reload and the other bookmarks' button; the space's pinned tabs as small tiles, and its
+/// bookmarks bar behind a button beside them (BarButton); its other tabs,
 /// sharing what room there is (TabWidths), the one on screen raised in
 /// glass, wider, and the address, as Safari's compact tabs are: where the
 /// page is, a click on it opening the command bar on its address, and its …
@@ -23,7 +24,8 @@ struct TopTabBar: View {
     var body: some View {
         let space = session.workspace.space(model.spaceID)
         let pinned = space?.tabs.filter { $0.isPinned && session.preferences.shows($0) } ?? []
-        let others = space?.tabs.filter { !$0.isPinned } ?? []
+        let others = space?.otherTabs ?? []
+        let bar = space?.bar.flatMap { ($0.children ?? []).isEmpty ? nil : $0 }
         HStack(spacing: Metrics.gap) {
             WindowButtons()
                 .frame(width: WindowButtons.width, height: WindowButtons.side)
@@ -38,22 +40,25 @@ struct TopTabBar: View {
                 }
                 let barShown = session.preferences.bookmarksBar
                 PlainIcon(barShown ? "star.square.on.square.fill" : "star.square.on.square",
-                          help: barShown ? String(localized: "Hide Bookmarks Bar (⇧⌘B)") : String(localized: "Show Bookmarks Bar (⇧⌘B)")) {
+                          help: barShown ? String(localized: "Hide Other Bookmarks (⇧⌘B)") : String(localized: "Show Other Bookmarks (⇧⌘B)")) {
                     withAnimation(.bar) { session.preferences.bookmarksBar.toggle() }
                 }
             }
-            // The pinned tabs stay put while the others scroll beside them.
-            if !pinned.isEmpty {
+            // The pinned tabs stay put while the others scroll beside them, the bar's behind its button.
+            if !pinned.isEmpty || bar != nil {
                 // Past their share of the row, the unopened and the longest unseen go behind a button.
                 let split = PinnedOverflow.split(pinned, current: model.tabID,
                                                  live: Set(pinned.map(\.id).filter(session.pages.isLive)),
-                                                 room: width, tile: Metrics.control + 4, gap: 4)
+                                                 room: width - (bar == nil ? 0 : Metrics.control + 8), tile: Metrics.control + 4, gap: 4)
                 HStack(spacing: 4) {
                     ForEach(split.shown) { tab in
                         PinnedTile(model: model, tab: tab, look: .topRow)
                     }
                     if !split.hidden.isEmpty {
                         PinnedOverflowTile(model: model, tabs: split.hidden)
+                    }
+                    if let space, let bar {
+                        BarButton(model: model, space: space, bar: bar)
                     }
                 }
                 .animation(.bar, value: split.shown.map(\.id))
@@ -121,6 +126,111 @@ struct TopTabBar: View {
     }
 }
 
+/// The bookmarks bar along the top: a bookmark beside the pinned tiles, on
+/// glass while one of the bar's tabs is on screen, with a dot under it
+/// while any is open, which brings out the bar's rows under it (BarPanel).
+private struct BarButton: View {
+    @ObservedObject var model: WindowModel
+    let space: Space
+    let bar: Bookmark
+    @State private var hovering = false
+    /// Where the button is in the window, for the rows to come out under it.
+    @State private var frame = CGRect.zero
+
+    var body: some View {
+        let tabs = space.barTabs
+        let current = tabs.values.contains { $0.id == model.tabID }
+        let shape = RoundedRectangle(cornerRadius: 9, style: .continuous)
+        Button {
+            withAnimation(.bar) { model.barPanelButton = model.barPanelButton == nil ? frame : nil }
+        } label: {
+            Image(systemName: current ? "bookmark.fill" : "bookmark")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(Color.primary.opacity(0.8))
+                .frame(width: Metrics.control + 4, height: Metrics.control)
+                // As under the pinned tiles beside it: the glyph is as tall as their icons.
+                .overlay {
+                    OpenDot(shown: !tabs.isEmpty, size: 3)
+                        .offset(y: OpenDot.under(icon: 16, size: 3))
+                }
+                .background {
+                    if current {
+                        shape.fill(.clear).glassEffect(.regular, in: shape)
+                    } else {
+                        Highlight(hovering: hovering, shape: shape)
+                    }
+                }
+                .contentShape(shape)
+        }
+        .buttonStyle(TilePress())
+        .onHover { hovering = $0 }
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(BrowserView.place)) } action: { frame = $0 }
+        .help("Bookmarks Bar")
+        .accessibilityLabel("Bookmarks Bar")
+        .accessibilityValue(tabs.isEmpty ? "" : String(localized: "\(tabs.count) open"))
+        #if DEBUG
+        // `-barPopover YES`: the bar's rows out at once, for a picture.
+        .task(id: frame) {
+            guard frame != .zero, UserDefaults.standard.bool(forKey: "barPopover"), model.barPanelButton == nil else { return }
+            try? await Task.sleep(for: .seconds(1))
+            model.barPanelButton = frame
+        }
+        #endif
+    }
+}
+
+/// The bookmarks bar's rows along the top, out under its button over the
+/// page: a pane of Liquid Glass lifted by a soft shadow, as the sidebar's
+/// other bookmarks are (BookmarksPanel), its corners as far from the rows'
+/// as the rows are from its edge, and the rows as the sidebar has them
+/// (BarList). A bookmark chosen, a click anywhere else, Escape or another
+/// space puts it away.
+struct BarPanel: View {
+    @ObservedObject var model: WindowModel
+    @ObservedObject private var session = Session.shared
+    @Environment(\.colorScheme) private var scheme
+
+    /// From the pane's edge to its rows.
+    static let inset: CGFloat = 6
+
+    var body: some View {
+        let card = RoundedRectangle(cornerRadius: Metrics.rowCorner + Self.inset, style: .continuous)
+        if let space = session.workspace.space(model.spaceID), let bar = space.bar {
+            // As tall as its rows, and no taller than the window gives it: past that they scroll.
+            ViewThatFits(in: .vertical) {
+                rows(space, bar)
+                ScrollView { rows(space, bar) }
+                    .scrollIndicators(.never)
+            }
+            .frame(width: 280)
+            // Clipped first: rows scrolled to an end would show past the corners.
+            .clipShape(card)
+            .glassEffect(.regular, in: card)
+            .shadow(color: .black.opacity(scheme == .dark ? 0.4 : 0.14), radius: 24, y: 10)
+            // For the window's watch on clicks: one off this puts it away (WindowModel.clickedAway).
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(BrowserView.place)) } action: { model.barPanelFrame = $0 }
+            .background {
+                Button("Close Bookmarks Bar") { close() }
+                    .keyboardShortcut(.cancelAction)
+                    .opacity(0)
+                    .accessibilityHidden(true)
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Bookmarks Bar")
+            .accessibilityAction(.escape) { close() }
+        }
+    }
+
+    private func rows(_ space: Space, _ bar: Bookmark) -> some View {
+        BarList(model: model, space: space, bar: bar, chose: close)
+            .padding(Self.inset)
+    }
+
+    private func close() {
+        withAnimation(.bar) { model.barPanelButton = nil }
+    }
+}
+
 /// The pinned tabs past their share of the row (PinnedOverflow), behind a
 /// tile that says how many: each in its menu, by its icon and name.
 private struct PinnedOverflowTile: View {
@@ -164,16 +274,17 @@ private struct PinnedOverflowTile: View {
     }
 }
 
-/// The space's bookmarks in a row under the tabs, for whoever keeps the
-/// tabs along the top and turned it on (Preferences.bookmarksBar): each its
-/// icon and name; a folder, a menu of what it holds. A click opens one
-/// here, a ⌘-click in a new tab.
+/// The space's other bookmarks, all but the bar, in a row under the tabs,
+/// for whoever keeps the tabs along the top and turned it on
+/// (Preferences.bookmarksBar): each its icon and name; a folder, a menu of
+/// what it holds. A click opens one here, a ⌘-click in a new tab. The bar's
+/// own are behind its button beside the pinned tiles (BarButton).
 struct BookmarksBar: View {
     @ObservedObject var model: WindowModel
     @ObservedObject private var session = Session.shared
 
     var body: some View {
-        let bookmarks = session.workspace.space(model.spaceID)?.bookmarks ?? []
+        let bookmarks = Bookmarks.others(in: session.workspace.space(model.spaceID)?.bookmarks ?? [])
         ScrollView(.horizontal) {
             HStack(spacing: 2) {
                 if bookmarks.isEmpty {
