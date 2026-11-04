@@ -212,8 +212,8 @@ final class Page: NSObject {
         didSet { if footBand != oldValue { sampleFootSoon() } }
     }
     /// The iPhone Duo's strip over the page, while the page runs on under it
-    /// to the window's edge (Browser.placeUnderStrip): strip.js moves what
-    /// can be pressed out from under the strip's items. Nil, and the page is
+    /// to the window's edge (Browser.placeUnderStrip): strip.js places what
+    /// can be pressed clear of the strip. Nil, and the page is
     /// left as it lays itself out. The scroll bar keeps beside the strip by
     /// itself: UIKit insets it by the safe area, which the strip is.
     var strip: DuoLayout.Strip? {
