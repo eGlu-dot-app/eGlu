@@ -153,6 +153,7 @@ final class Page: NSObject {
     private let channels: any WebMessageChannels
     private let services: any WebFind & WebZoom & WebMediaCapture & WebUserAgent & WebPrinting & WebDeveloperTools & WebBackForward & WebRestoration & WebDownloadStarting
     private let controller: WKUserContentController
+    private let ruleListTarget: any WebRuleListTarget
     weak var host: PageHost?
 
     /// What WebKit reports now, without the tab's replacement history.
@@ -348,6 +349,7 @@ final class Page: NSObject {
         let controller = extensionPage ? config.userContentController : WKUserContentController()
         config.userContentController = controller
         self.controller = controller
+        ruleListTarget = WebKitRuleListTarget(controller: controller)
         channels = WebKitMessageChannels(controller: controller, appWorld: Page.world)
         let view = PageView(frame: .zero, configuration: config)
         self.view = view
@@ -450,7 +452,7 @@ final class Page: NSObject {
         swipe?.stop()
         swipe = nil
         controller.removeAllUserScripts()
-        blocking.remove(from: controller)
+        blocking.remove(from: ruleListTarget)
         if isExtensionPage { ExtensionCapture.shared.release(view) }
         view.stopLoading()
         navigationAdapter.tearDown()
@@ -710,7 +712,7 @@ final class Page: NSObject {
     private func prepare(for url: URL?) {
         preparedFor = url
         let handsOff = HandsOff.covers(url)
-        blocking.apply(for: url, to: controller)
+        blocking.apply(for: url, to: ruleListTarget)
         adapter = Adapters.adapter(for: url)
         let filters = blocksContent ? ContentBlocker.shared.scriptedRules(for: url) : PageRules()
         let store = StoreButton.isStore(url)
@@ -832,7 +834,7 @@ final class Page: NSObject {
 
     /// The content blocker has new lists: this page's next load has them.
     func blockingChanged() {
-        blocking.apply(for: committed ?? view.url, to: controller)
+        blocking.apply(for: committed ?? view.url, to: ruleListTarget)
     }
 
     /// After Settings changed: from the next page. Writing, turned off here

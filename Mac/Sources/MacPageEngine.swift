@@ -21,6 +21,8 @@ enum MacPageSource {
 @MainActor
 protocol MacPageEngine: AnyObject {
     var svgRasterizer: any WebSVGRasterizer { get }
+    /// The engine's compiled content-blocking lists.
+    func ruleListStore() -> (any WebRuleListStore)?
     /// A page for the tab, space and configuration source.
     func makePage(tab: UUID, space: UUID, source: MacPageSource) -> Page
     /// A new configuration in the space's store.
@@ -41,6 +43,10 @@ protocol MacPageEngine: AnyObject {
 @MainActor
 final class AppWebKitEngine: MacPageEngine {
     var svgRasterizer: any WebSVGRasterizer { WebKitSVGRaster.shared }
+
+    func ruleListStore() -> (any WebRuleListStore)? {
+        WebKitRuleListStore.makeDefault()
+    }
 
     /// A supplied configuration stays supplied, including an extension's controller.
     func makePage(tab: UUID, space: UUID, source: MacPageSource) -> Page {

@@ -13,7 +13,7 @@ public final class WebKitHiddenPage: NSObject, WKNavigationDelegate, WebHiddenPa
 
     /// `customUserAgent` is the agent the app gives it, if any: the iPad's
     /// asks to be served the site as a computer is.
-    public init(beside view: WKWebView, ruleLists: [WKContentRuleList], appWorld: WKContentWorld,
+    public init(beside view: WKWebView, ruleLists: [any WebRuleList], appWorld: WKContentWorld,
                 customUserAgent: String? = nil, allows: @escaping @MainActor (URL?) -> Bool) {
         self.appWorld = appWorld
         self.allows = allows
@@ -33,7 +33,12 @@ public final class WebKitHiddenPage: NSObject, WKNavigationDelegate, WebHiddenPa
         config.allowsAirPlayForMediaPlayback = false
         config.preferences.javaScriptCanOpenWindowsAutomatically = false
         let controller = WKUserContentController()
-        for list in ruleLists { controller.add(list) }
+        for list in ruleLists {
+            guard let list = list as? WebKitRuleList else {
+                preconditionFailure("WebKitHiddenPage requires a WebKitRuleList")
+            }
+            controller.add(list.list)
+        }
         config.userContentController = controller
         self.view = WKWebView(frame: view.frame, configuration: config)
         super.init()

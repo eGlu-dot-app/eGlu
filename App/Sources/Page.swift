@@ -78,6 +78,7 @@ final class Page: NSObject {
     let downloadStarter: any WebDownloadStarting
     let view: PageView
     private let controller: WKUserContentController
+    private let ruleListTarget: any WebRuleListTarget
     weak var host: PageHost?
     /// Watches the find bar until it has gone (find()).
     private var findWatch: Timer?
@@ -289,6 +290,7 @@ final class Page: NSObject {
         let controller = WKUserContentController()
         config.userContentController = controller
         self.controller = controller
+        ruleListTarget = WebKitRuleListTarget(controller: controller)
         view = PageView(frame: .zero, configuration: config, keyboardByWindow: keyboardByWindow)
         downloadStarter = WebKitDownloadStarter(view: view)
         super.init()
@@ -407,7 +409,7 @@ final class Page: NSObject {
         dropWheels()
         zoom = nil
         controller.removeAllUserScripts()
-        blocking.remove(from: controller)
+        blocking.remove(from: ruleListTarget)
         controller.removeScriptMessageHandler(forName: Page.handlerName, contentWorld: Page.world)
         controller.removeScriptMessageHandler(forName: WritingHandler.name, contentWorld: Page.world)
         controller.removeScriptMessageHandler(forName: MeasureHandler.name, contentWorld: Page.world)
@@ -478,7 +480,7 @@ final class Page: NSObject {
     /// decisions, so the document starts with the right ones.
     private func prepare(for url: URL?) {
         let handsOff = HandsOff.covers(url)
-        blocking.apply(for: url, to: controller)
+        blocking.apply(for: url, to: ruleListTarget)
         adapter = Adapters.adapter(for: url)
         bridges = Session.shared.preferences.bridges(for: adapter)
         if handsOff {
@@ -570,7 +572,7 @@ final class Page: NSObject {
 
     /// The content blocker has new lists: this page's next load has them.
     func blockingChanged() {
-        blocking.apply(for: committed ?? view.url, to: controller)
+        blocking.apply(for: committed ?? view.url, to: ruleListTarget)
     }
 
     /// Whether English in this page's fields is checked, for Settings ›

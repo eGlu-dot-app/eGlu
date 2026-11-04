@@ -124,20 +124,19 @@ struct PageBlocking {
     /// WebKit blocks with them from the next load. Never on a hands-off
     /// host, where nothing of the app's may touch the page.
     @MainActor
-    mutating func apply(for url: URL?, to controller: WKUserContentController) {
+    mutating func apply(for url: URL?, to target: any WebRuleListTarget) {
         let on = !HandsOff.covers(url) && Session.shared.preferences.blocksContent(onHost: url?.host)
         let lists = on ? ContentBlocker.shared.lists : []
-        let ids = lists.compactMap(\.identifier)
+        let ids = lists.map(\.identifier)
         guard ids != identifiers else { return }
-        controller.removeAllContentRuleLists()
-        for list in lists { controller.add(list) }
+        target.replaceAll(with: lists)
         identifiers = ids
     }
 
     /// The page is closing: its lists go with it.
     @MainActor
-    mutating func remove(from controller: WKUserContentController) {
-        controller.removeAllContentRuleLists()
+    mutating func remove(from target: any WebRuleListTarget) {
+        target.replaceAll(with: [])
         identifiers = []
     }
 }

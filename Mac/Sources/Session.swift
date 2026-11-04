@@ -642,3 +642,9 @@ extension Downloads {
         Session.shared.engine.downloadStarter(space: space)
     }
 }
+
+extension ContentBlocker {
+    static func makeRuleStore() -> (any WebRuleListStore)? {
+        Session.shared.engine.ruleListStore()
+    }
+}

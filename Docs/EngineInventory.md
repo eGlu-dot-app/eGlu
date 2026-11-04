@@ -6,18 +6,18 @@
 | Section | Count | Files |
 |:---|---:|---:|
 | a. Imports (Mac/) | 34 | 34 |
-| a. Imports (Shared/) | 5 | 5 |
+| a. Imports (Shared/) | 4 | 4 |
 | b. Reach-ins into page view (app) | 33 | 9 |
-| b. Reach-ins (tests) | 163 | 18 |
+| b. Reach-ins (tests) | 170 | 19 |
 | b. Reach-ins (Page.swift self-references) | 0 | 0 |
-| c. WebKit types in declarations | 63 | 16 |
+| c. WebKit types in declarations | 60 | 16 |
 | c. Declarations (Extension* files) | 259 | 16 |
 | d. Private WebKit API | 37 | 15 |
 | e. Hidden web views | 13 | 8 |
 | f. Script bridges (app) | 2 | 2 |
 | f. Script bridges (WebKit plugin) | 6 | 2 |
 | f. Script bridges (tests) | 3 | 1 |
-| **Total** | **446** | **55** |
+| **Total** | **442** | **55** |
 
 ## Details
 
@@ -93,9 +93,7 @@
 - `Mac/Sources/Writing/WritingSpelling.swift` (1):
   - L2: `import WebKit`
 
-#### Shared/ (5 lines in 5 files)
-- `Shared/ContentBlocker.swift` (1):
-  - L3: `import WebKit`
+#### Shared/ (4 lines in 4 files)
 - `Shared/HandoffDocumentSource.swift` (1):
   - L3: `import Engines`
 - `Shared/PageShared.swift` (1):
@@ -149,7 +147,7 @@
   - L1018: `canHandoffFiles && page?.view.url != nil && page?.isHandsOff == false`
   - L1054: `guard let page, self.page === page, !page.isHandsOff, page.view.url != nil else { return }`
 
-#### Tests (163 lines in 18 files)
+#### Tests (170 lines in 19 files)
 - `Tests/Crashes/CrashRegressionTests.swift` (5):
   - L94: `page.view.frame = CGRect(x: 0, y: 0, width: 320, height: 480)`
   - L95: `container.view.addSubview(page.view)`
@@ -191,6 +189,14 @@
   - L273: `return try await page.view.evaluateJavaScript(script) as? Bool`
 - `Tests/MacPage/PageCommandTests.swift` (1):
   - L37: `_ = try await page.view.evaluateJavaScript("document.title = 'Changed'; 1")`
+- `Tests/MacPage/PageContentRulesTests.swift` (7):
+  - L61: `XCTAssertTrue(page.view.configuration.userContentController === controller,`
+  - L122: `page.view.frame = parent.bounds`
+  - L123: `parent.addSubview(page.view)`
+  - L127: `let hiding = WebKitHiddenPage(beside: page.view, ruleLists: [list], appWorld: Page.world,`
+  - L133: `let plain = WebKitHiddenPage(beside: page.view, ruleLists: [], appWorld: Page.world,`
+  - L180: `page.view.loadHTMLString(Self.adHTML(title), baseURL: nil)`
+  - L186: `try await page.view.callAsyncJavaScript(Self.displayCall, arguments: [:], in: nil, contentWorld: .page) as? String`
 - `Tests/MacPage/PageDownloadAndFileTests.swift` (6):
   - L62: `XCTAssertEqual(page.view.url?.resolvingSymlinksInPath(), file.resolvingSymlinksInPath())`
   - L66: `let text = try await page.view.evaluateJavaScript("document.querySelector('p').textContent") as? String`
@@ -335,22 +341,22 @@
 #### Page.swift (self-references, excluded from count: 0 lines)
 _None._
 
-### c. WebKit types in declarations (63 lines in 16 files)
+### c. WebKit types in declarations (60 lines in 16 files)
 - `Mac/Sources/MacPageEngine.swift` (3):
   - L17: `case supplied(WKWebViewConfiguration, extensionPage: Bool)`
-  - L27: `func configuration(space: UUID) -> WKWebViewConfiguration`
-  - L66: `func configuration(space: UUID) -> WKWebViewConfiguration {`
+  - L29: `func configuration(space: UUID) -> WKWebViewConfiguration`
+  - L72: `func configuration(space: UUID) -> WKWebViewConfiguration {`
 - `Mac/Sources/Page.swift` (10):
   - L42: `final class PageView: WKWebView {`
   - L66: `let newTab = menu.items.first(where: { $0.identifier?.rawValue == "WKMenuItemIdentifierOpenLinkInNewWindow" }) {`
   - L144: `static let world = WKContentWorld.world(name: "eGlu")`
   - L155: `private let controller: WKUserContentController`
-  - L342: `init(tab: UUID, space: UUID, configuration: WKWebViewConfiguration, extensionPage: Bool = false) {`
-  - L348: `let controller = extensionPage ? config.userContentController : WKUserContentController()`
-  - L574: `static func extensionPageVisible(_ web: WKWebView) async -> Bool {`
-  - L582: `static func startExtensionRecording(in web: WKWebView, token: String, video: Any) async throws -> Any? {`
-  - L949: `let configuration = WKSnapshotConfiguration()`
-  - L976: `let configuration = WKSnapshotConfiguration()`
+  - L343: `init(tab: UUID, space: UUID, configuration: WKWebViewConfiguration, extensionPage: Bool = false) {`
+  - L349: `let controller = extensionPage ? config.userContentController : WKUserContentController()`
+  - L576: `static func extensionPageVisible(_ web: WKWebView) async -> Bool {`
+  - L584: `static func startExtensionRecording(in web: WKWebView, token: String, video: Any) async throws -> Any? {`
+  - L951: `let configuration = WKSnapshotConfiguration()`
+  - L978: `let configuration = WKSnapshotConfiguration()`
 - `Mac/Sources/PageSwipe.swift` (2):
   - L49: `private var from: WKBackForwardListItem?`
   - L59: `static func works(on view: WKWebView) -> Bool {`
@@ -370,17 +376,9 @@ _None._
   - L21: `static func follow(writing: Bool, views: [WKWebView]) {`
 - `PadCore/Tests/PadCoreTests/ContentBlockingTests.swift` (1):
   - L479: `let store = try XCTUnwrap(WKContentRuleListStore(url: folder))`
-- `Shared/ContentBlocker.swift` (5):
-  - L28: `private(set) var lists: [WKContentRuleList] = []`
-  - L52: `private let store = WKContentRuleListStore.default()`
-  - L242: `var found: [WKContentRuleList] = []`
-  - L327: `var compiled: [WKContentRuleList] = []`
-  - L332: `let list = await withCheckedContinuation { (done: CheckedContinuation<WKContentRuleList?, Never>) in`
-- `Shared/PageShared.swift` (4):
-  - L127: `mutating func apply(for url: URL?, to controller: WKUserContentController) {`
-  - L139: `mutating func remove(from controller: WKUserContentController) {`
-  - L188: `extension WKUserContentController {`
-  - L211: `static func choice(for action: WKNavigationAction, command: Bool, shift: Bool, middleButton: Bool) -> Choice {`
+- `Shared/PageShared.swift` (2):
+  - L187: `extension WKUserContentController {`
+  - L210: `static func choice(for action: WKNavigationAction, command: Bool, shift: Bool, middleButton: Bool) -> Choice {`
 - `Tests/Crashes/CrashRegressionTests.swift` (7):
   - L93: `let page = session.pages.adopt(tab: tab.id, space: space.id, configuration: WKWebViewConfiguration())`
   - L133: `let web = WKWebView(frame: CGRect(x: 0, y: 0, width: 320, height: 480))`
@@ -393,6 +391,11 @@ _None._
   - L51: `private final class NeverAnswers: NSObject, WKURLSchemeHandler {`
   - L55: `func webView(_ webView: WKWebView, start urlSchemeTask: any WKURLSchemeTask) {`
   - L59: `func webView(_ webView: WKWebView, stop urlSchemeTask: any WKURLSchemeTask) {}`
+- `Tests/MacPage/PageContentRulesTests.swift` (4):
+  - L53: `let raw = try kept("store", of: blockerStore, as: WKContentRuleListStore.self)`
+  - L58: `let controller = try kept("controller", of: page, as: WKUserContentController.self)`
+  - L162: `let raw = try XCTUnwrap(WKContentRuleListStore(url: folder), "no store at the test's folder", file: file, line: line)`
+  - L194: `let view = try kept("view", of: hidden, as: WKWebView.self, file: file, line: line)`
 - `Tests/MacPage/PageDownloadAndFileTests.swift` (5):
   - L310: `let download: WKDownload`
   - L401: `var download: WKDownload?`
@@ -400,9 +403,9 @@ _None._
   - L413: `func webView(_ webView: WKWebView, start urlSchemeTask: any WKURLSchemeTask) {}`
   - L414: `func webView(_ webView: WKWebView, stop urlSchemeTask: any WKURLSchemeTask) {}`
 - `Tests/MacPage/PageEngineTests.swift` (3):
-  - L237: `let configuration: WKWebViewConfiguration?`
-  - L248: `var supplied: WKWebViewConfiguration?`
-  - L277: `func configuration(space: UUID) -> WKWebViewConfiguration {`
+  - L239: `let configuration: WKWebViewConfiguration?`
+  - L250: `var supplied: WKWebViewConfiguration?`
+  - L279: `func configuration(space: UUID) -> WKWebViewConfiguration {`
 - `Tests/MacPage/PageHiddenTests.swift` (5):
   - L145: `let view = try kept("held", of: starter, as: WKWebView.self)`
   - L153: `let otherView = try kept("held", of: other, as: WKWebView.self)`

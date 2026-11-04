@@ -404,3 +404,9 @@ extension Downloads {
         WebKitDownloadStarter(store: WebKitStores.store(for: space))
     }
 }
+
+extension ContentBlocker {
+    static func makeRuleStore() -> (any WebRuleListStore)? {
+        WebKitRuleListStore.makeDefault()
+    }
+}

@@ -4,6 +4,7 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+- On the Mac, iPhone and iPad, the content blocker's rule lists are compiled, found and removed, and given to pages, by the WebKit plugin's support code; the app still makes the rules and decides which pages get them: step 10 of keeping eGlu's interface apart from its engines (`Docs/EngineSplitPlan.md`). Nothing changes in use.
 - On the Mac, iPhone and iPad, sites' SVG icons are drawn, downloads kept and tried again, Handoff's files fetched and a video's transcript read out of sight through the WebKit plugin's support code rather than web views of the app's own; on the Mac the recording pill holds any kind of view: step 9 of keeping eGlu's interface apart from its engines (`Docs/EngineSplitPlan.md`). Nothing changes in use.
 
 - On the Mac, iPhone and iPad, each space's website data store is made and removed by the WebKit plugin's support code rather than the app's own; history and the developer bar's status tell a page's entries apart by the engine's own objects; and on the Mac a frozen tab's place in its history comes back through the WebKit plugin: step 8 of keeping eGlu's interface apart from its engines (`Docs/EngineSplitPlan.md`). Nothing changes in use.
