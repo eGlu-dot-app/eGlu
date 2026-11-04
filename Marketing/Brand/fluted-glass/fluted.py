@@ -45,14 +45,15 @@ EDGE_HOLD = 2.0  # Untouched pixels inside the silhouette boundary.
 EDGE_FADE = 10.0  # Additional glass fade width near the silhouette.
 
 # Background light is part of the refracted scene, with no central hot spot.
-LIGHT_CORNER = (0.90, 0.92, 0.94)  # The white at the edges, before the vignette.
-LIGHT_MID = (0.96, 0.97, 0.98)  # The white between.
-LIGHT_GLOW = (1.00, 1.00, 1.00)  # The brightest white, behind the globe.
-GLOW_TOP = (0.40, 0.78, 1.00)  # Light mode: the blurred blue behind the globe, at its top (the dark globe's light blue).
+LIGHT_CORNER = (0.99, 0.95, 0.84)  # The ivory at the edges, before the vignette: white plastic faded by the sun.
+LIGHT_MID = (1.00, 0.97, 0.89)  # The ivory between.
+LIGHT_GLOW = (1.00, 0.99, 0.94)  # The palest ivory, behind the globe.
+GLOW_TOP = (0.36, 0.76, 1.00)  # Light mode: the blurred blue behind the globe, at its top (the dark globe's light blue).
 GLOW_BOTTOM = (0.10, 0.48, 0.98)  # The blurred blue at its bottom (the dark globe's deep blue).
-GLOW_STRENGTH = 0.9  # How strongly the blurred blue covers the white.
-GLOW_SIZE = 1.50  # Size of the blurred blue against the globe's rim.
+GLOW_STRENGTH = 1.0  # How strongly the blurred blue covers the ivory.
+GLOW_SIZE = 1.25  # Size of the blurred blue against the globe's rim.
 GLOW_BLUR = 135.0  # Blur radius (Gaussian sigma) of the blue.
+MIX_LIFT = 2.5  # OKLab lightness added for each unit of chroma the blue and the ivory lose where they mix, so they meet in white, not grey.
 AXIS_B = 304.75  # Vertical globe semi-axis.
 DARK_CORNER = (0.07, 0.08, 0.09)  # Deepest dark blue-grey at the bottom right.
 DARK_GLOW = (0.15, 0.17, 0.19)  # Brightest dark blue-grey at the top left.
@@ -61,7 +62,8 @@ BACKGROUND_VERTICAL = 0.68  # Top-to-bottom contribution to the light falloff.
 BACKGROUND_RADIAL = 0.85  # Light mode: share of the light that gathers round a point, against the share that falls from the top left.
 LIGHT_X = 440.0  # The x the gathered light is centred on.
 LIGHT_Y = 400.0  # The y the gathered light is centred on.
-VIGNETTE_LIGHT = 0.30  # How much the light background darkens towards its corners.
+VIGNETTE_LIGHT = 0.55  # How far the light background turns towards aged ivory at its corners.
+VIGNETTE_IVORY = (0.98, 0.91, 0.74)  # The aged ivory, as an old CRT's case yellows: it reaches the corners through the blue.
 VIGNETTE_DARK = 0.20  # How far the dark background lifts towards white at its corners.
 VIGNETTE_WHITE = (0.80, 0.86, 0.90)  # The milky white the dark background lifts towards.
 VIGNETTE_INNER = 0.25  # Distance from the centre, as a share of the half-diagonal, where the light vignette begins.
@@ -130,6 +132,41 @@ def srgb(rgb):
     return np.where(rgb <= 0.0031308, rgb * 12.92, 1.055 * rgb ** (1 / 2.4) - 0.055)
 
 
+# Björn Ottosson's OKLab, from and to linear sRGB.
+TO_LMS = np.array([[0.4122214708, 0.5363325363, 0.0514459929],
+                   [0.2119034982, 0.6806995451, 0.1073969566],
+                   [0.0883024619, 0.2817188376, 0.6299787005]])
+LMS_TO_LAB = np.array([[0.2104542553, 0.7936177850, -0.0040720468],
+                       [1.9779984951, -2.4285922050, 0.4505937099],
+                       [0.0259040371, 0.7827717662, -0.8086757660]])
+
+
+def oklab(rgb):
+    return np.cbrt(np.asarray(rgb) @ TO_LMS.T) @ LMS_TO_LAB.T
+
+
+def from_oklab(lab):
+    return np.clip((lab @ np.linalg.inv(LMS_TO_LAB).T) ** 3 @ np.linalg.inv(TO_LMS).T, 0, 1)
+
+
+def mix(a, b, t, p):
+    """a to b by t, in OKLab, made lighter by the chroma the mix loses.
+
+    Mixed as light, blue and ivory cancel to a dull grey where they meet.
+    OKLCH keeps their chroma, but the shorter turn of hue from sky blue to
+    ivory runs through mint green and the longer through lilac and pink. In
+    OKLab the chroma still drops where the two cancel; giving it back as
+    lightness fades the blue through white to ivory. Two creams lose none
+    and are not lifted, so the ivory doesn't clip to lemon at the corners.
+    """
+    a, b, t = oklab(a), oklab(b), np.asarray(t, dtype=np.float32)
+    lab = a + t[..., None] * (b - a)
+    chroma = lambda lab: np.hypot(lab[..., 1], lab[..., 2])
+    lost = chroma(a) + t * (chroma(b) - chroma(a)) - chroma(lab)
+    lab[..., 0] += p.mix_lift * lost
+    return from_oklab(lab)
+
+
 def sample(plane, x, y):
     return map_coordinates(plane, (y, x), order=1, mode="nearest", prefilter=False)
 
@@ -187,14 +224,19 @@ def progressive_blur(rgba, p):
 
 
 def vignette(rgb, x, y, appearance, p):
-    """Light: darker towards the corners. Dark: lifted towards a milky white there."""
+    """Light: turned towards aged ivory at the corners. Dark: lifted towards a milky white there.
+
+    The blue covers nearly the whole square, so the ivory ground alone shows
+    only at its foot; drawn over the blue here, it reaches every corner. A
+    darker corner, as before, would turn ivory and blue together to grey.
+    """
     centre = 511.5
     distance = np.sqrt(((x - centre) / centre) ** 2 + ((y - centre) / centre) ** 2) / np.sqrt(2)
     inner = p.vignette_dark_inner if appearance == "Dark" else p.vignette_inner
-    edge = smoothstep(inner, p.vignette_outer, distance)[..., None]
+    edge = smoothstep(inner, p.vignette_outer, distance)
     if appearance == "Dark":
-        return rgb + p.vignette_dark * edge * (linear(np.array(p.vignette_white)) - rgb)
-    return rgb * (1 - p.vignette_light * edge)
+        return rgb + p.vignette_dark * edge[..., None] * (linear(np.array(p.vignette_white)) - rgb)
+    return mix(rgb, linear(np.array(p.vignette_ivory)), p.vignette_light * edge, p)
 
 
 def background(x, y, appearance, p):
@@ -216,7 +258,7 @@ def background(x, y, appearance, p):
         cover = gaussian_filter(inside.astype(np.float32), p.glow_blur) * p.glow_strength
         t = np.clip((y - (p.center_y - p.axis_b)) / (2 * p.axis_b), 0, 1)[..., None]
         blue = linear(np.array(p.glow_top)) * (1 - t) + linear(np.array(p.glow_bottom)) * t
-        rgb = rgb * (1 - cover[..., None]) + blue * cover[..., None]
+        rgb = mix(rgb, blue, cover, p)
     return vignette(rgb, x, y, appearance, p).astype(np.float32)
 
 
@@ -449,14 +491,14 @@ def arguments():
     if p.vignette_outer <= max(p.vignette_inner, p.vignette_dark_inner) or p.blur_end <= p.blur_start:
         parser.error("Vignette and blur ends must exceed their starts")
     for name in ("weight", "depth", "edge_hold", "grain", "scatter_radius", "lenticular_frost", "reeded_frost", "colour_smooth",
-                 "blur_right", "blur_left", "blur_curve", "vignette_light", "vignette_dark"):
+                 "blur_right", "blur_left", "blur_curve", "vignette_light", "vignette_dark", "mix_lift"):
         if getattr(p, name) < 0:
             parser.error(f"--{name.replace('_', '-')} cannot be negative")
     for name in ("strength", "frosting", "scatter", "milkiness", "specular", "bulge"):
         value = getattr(p, name)
         if value is not None and name != "strength" and value < 0:
             parser.error(f"--{name} cannot be negative")
-    for name in ("scatter", "milkiness", "lenticular_scatter", "reeded_scatter", "lenticular_milk", "reeded_milk", "dark_highlights", "graded_min", "rib_contrast"):
+    for name in ("scatter", "milkiness", "lenticular_scatter", "reeded_scatter", "lenticular_milk", "reeded_milk", "dark_highlights", "graded_min", "rib_contrast", "vignette_light"):
         value = getattr(p, name)
         if value is not None and not 0 <= value <= 1:
             parser.error(f"--{name.replace('_', '-')} must be between 0 and 1")
