@@ -1,11 +1,11 @@
 {
+  "features" : [
+    "refractivity"
+  ],
   "fill-specializations" : [
     {
       "value" : {
-        "linear-gradient" : [
-          "display-p3:0.36000,0.76000,1.00000,1.00000",
-          "display-p3:0.06000,0.45000,0.96000,1.00000"
-        ]
+        "solid" : "display-p3:1.00000,1.00000,1.00000,1.00000"
       }
     },
     {
@@ -17,7 +17,7 @@
   ],
   "groups" : [
     {
-      "blur-material" : 0.5,
+      "blur-material" : 0.3,
       "layers" : [
         {
           "fill-specializations" : [
@@ -34,32 +34,41 @@
       "lighting" : "individual",
       "name" : "Cursor",
       "position" : { "scale" : 1.219, "translation-in-points" : [ 4.3, -49.7 ] },
+      "refractivity" : { "depth" : 0.5, "enabled" : true, "strength" : 0.8 },
       "shadow" : { "kind" : "neutral", "opacity" : 0.45 },
       "specular" : true,
-      "translucency" : { "enabled" : true, "value" : 0.15 }
+      "translucency" : { "enabled" : true, "value" : 0.7 }
     },
     {
-      "blur-material" : 0.5,
       "layers" : [
         {
-          "fill-specializations" : [
-            { "value" : { "solid" : "display-p3:1.00000,1.00000,1.00000,1.00000" } },
-            { "appearance" : "dark", "value" : { "linear-gradient" : [ "display-p3:0.40000,0.78000,1.00000,1.00000", "display-p3:0.10000,0.48000,0.98000,1.00000" ] } },
-            { "appearance" : "tinted", "value" : { "solid" : "srgb:1.00000,1.00000,1.00000,1.00000" } }
+          "glass" : false,
+          "hidden-specializations" : [
+            { "appearance" : "dark", "value" : true },
+            { "appearance" : "tinted", "value" : true }
           ],
-          "glass" : true,
-          "image-name" : "e.svg",
-          "name" : "e",
-          "opacity" : 0.92,
+          "image-name" : "glass-light.png",
+          "name" : "glass light",
+          "position" : { "scale" : 1, "translation-in-points" : [ 0, 0 ] }
+        },
+        {
+          "glass" : false,
+          "hidden-specializations" : [
+            { "value" : true },
+            { "appearance" : "dark", "value" : false },
+            { "appearance" : "tinted", "value" : false }
+          ],
+          "image-name" : "glass-dark.png",
+          "name" : "glass dark",
           "position" : { "scale" : 1, "translation-in-points" : [ 0, 0 ] }
         }
       ],
       "lighting" : "individual",
-      "name" : "Globe e",
-      "position" : { "scale" : 1.219, "translation-in-points" : [ 4.3, -49.7 ] },
-      "shadow" : { "kind" : "neutral", "opacity" : 0.25 },
-      "specular" : true,
-      "translucency" : { "enabled" : true, "value" : 0.3 }
+      "name" : "Fluted glass",
+      "position" : { "scale" : 1, "translation-in-points" : [ 0, 0 ] },
+      "shadow" : { "kind" : "none", "opacity" : 0 },
+      "specular" : false,
+      "translucency" : { "enabled" : false, "value" : 0 }
     }
   ],
   "supported-platforms" : {

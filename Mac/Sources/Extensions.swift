@@ -14,8 +14,8 @@ import WebKit
 /// extension's files are kept once, for every space.
 ///
 /// Google's sign-in stays out of every extension's reach (ExtensionPolicy):
-/// each context denies its hosts and the `cookies` permission, whatever the
-/// extension asked for.
+/// each context denies its hosts, whatever the extension asked for, and the
+/// `cookies` permission until the person allows it for that extension.
 @MainActor
 final class Extensions: NSObject, ObservableObject {
     static let shared = Extensions()
@@ -32,6 +32,10 @@ final class Extensions: NSObject, ObservableObject {
     /// What a check found that hasn't been read yet, by "space/id": the
     /// puzzle button's dot.
     @Published private(set) var unseen: Set<String> = []
+    /// Those whose manifest offers cookies as an optional permission, by
+    /// id: read from each package at launch, as it loads and as it is kept,
+    /// so its settings give the cookie switch while it is on in no space.
+    @Published private(set) var offersCookies: Set<String> = []
     @Published private(set) var justInstalled: JustInstalled?
     /// Each extension's icon, read once.
     private var icons: [String: NSImage] = [:]
@@ -83,6 +87,9 @@ final class Extensions: NSObject, ObservableObject {
         /// The version whose warnings the person said look wrong (This
         /// Looks Wrong): not shown for it, and back with an update.
         var looksWrong: String?
+        /// The person let it read cookies (its settings, or its own
+        /// request): kept through updates, on this Mac only.
+        var readsCookies: Bool?
     }
 
     /// The list has opened for the one just installed: not again.
@@ -113,6 +120,13 @@ final class Extensions: NSObject, ObservableObject {
     private var checked: [String: (version: String, result: ExtensionTrial.Checked)] = [:]
     /// The version being tried, by id.
     private var checking: [String: String] = [:]
+    /// What reading each extension's code found (notes), by id, for the
+    /// version and the APIs missing it was read against; and the reading
+    /// under way. A password manager's scripts run to megabytes, and read
+    /// on the main thread, once a space, they held the browser for
+    /// seconds as it loaded.
+    private var scanned: [String: (key: String, notes: [String])] = [:]
+    private var scanning: [String: (key: String, attempt: UUID)] = [:]
     /// The errors already put in the records, by "space/id": a short
     /// fingerprint of each, never its words, until the context unloads.
     private var recorded: [String: Set<String>] = [:]
@@ -143,6 +157,41 @@ final class Extensions: NSObject, ObservableObject {
     }
 
     func asksForNativeOnlyOptionally(_ id: String) -> Bool { nativeOptional.contains(id) }
+
+    /// Whether it asks for cookies, outright or as an optional permission:
+    /// a choice its settings give. Once allowed, the choice shows even
+    /// before its manifest is read (on in no space), so it can be taken back.
+    func asksForCookies(_ item: Installed) -> Bool {
+        item.granted?.contains("cookies") == true || item.readsCookies == true || offersCookies.contains(item.id)
+    }
+
+    private func note(_ manifest: ExtensionManifest?, of id: String) {
+        guard let manifest else { return }
+        if manifest.optionalPermissions.contains("cookies") { offersCookies.insert(id) } else { offersCookies.remove(id) }
+    }
+
+    /// Whether the person let it read cookies: not until they do.
+    func readsCookies(_ id: String) -> Bool {
+        installed.first { $0.id == id }?.readsCookies == true
+    }
+
+    /// Lets it read cookies, or takes that back, in every space it is on
+    /// in. There it starts again, unless it just asked for them itself, so
+    /// its worker starts knowing what it may do: Grammarly tries its
+    /// cookies as it starts.
+    func setReadsCookies(_ id: String, _ on: Bool, restarting: Bool = true) {
+        guard let index = installed.firstIndex(where: { $0.id == id }), (installed[index].readsCookies == true) != on else { return }
+        installed[index].readsCookies = on
+        saveList()
+        for (space, loaded) in contexts {
+            guard let context = loaded[id] else { continue }
+            Self.holdCookies(context, letting: on)
+            update(id, in: space) { $0.cookiesKeptBack = !on && self.manifests[id]?.permissions.contains("cookies") == true }
+            // Started again on the same context, which keeps what it was
+            // granted while it ran and its open pages working.
+            if restarting { restart(id, in: space, because: on ? "cookies allowed" : "cookies taken back") }
+        }
+    }
     /// Keep-awake assertions an extension asked for (power), by "space/id".
     var keptAwake: [String: IOPMAssertionID] = [:]
     /// Each loaded context's errors watch, removed when it unloads.
@@ -359,17 +408,19 @@ final class Extensions: NSObject, ObservableObject {
     /// Names kept by older releases may be an ID or an unresolved message.
     /// Read packages after the first frame, off the main actor, including
     /// extensions disabled in every space. A missing package keeps its name.
+    /// Whether each offers cookies is read with it.
     private func refreshInstalledNames() async {
         let candidates = installed.map { (id: $0.id, version: $0.version, name: $0.name) }
         var changed = false
         for candidate in candidates {
             let file = Self.package(candidate.id, candidate.version)
-            let name = await Task.detached(priority: .utility) {
+            let (name, manifest) = await Task.detached(priority: .utility) { () -> (String, ExtensionManifest?) in
                 guard let archive = try? Data(contentsOf: file),
                       let data = ZipFile.file(in: archive, matching: { $0 == "manifest.json" }),
-                      let manifest = try? ExtensionManifest(json: data) else { return candidate.name }
-                return manifest.displayName(in: archive, fallback: candidate.name)
+                      let manifest = try? ExtensionManifest(json: data) else { return (candidate.name, nil) }
+                return (manifest.displayName(in: archive, fallback: candidate.name), manifest)
             }.value
+            if installed.contains(where: { $0.id == candidate.id && $0.version == candidate.version }) { note(manifest, of: candidate.id) }
             guard let index = installed.firstIndex(where: { $0.id == candidate.id && $0.version == candidate.version }),
                   installed[index].name == candidate.name, installed[index].name != name else { continue }
             installed[index].name = name
@@ -517,7 +568,8 @@ final class Extensions: NSObject, ObservableObject {
             context.baseURL = URL(string: "\(Self.scheme)://\(item.id)/")!
             context.isInspectable = true
             context.inspectionName = item.name
-            allow(context, package, access: item.siteAccess)
+            // The cookie choice as it is now: it may have changed while the package was read.
+            allow(context, package, access: item.siteAccess, cookies: now.readsCookies == true)
             watch(context, item, in: space)
             try controller(for: space).load(context)
             // Its commands' keys: the person's, or none (ExtensionKeys).
@@ -539,6 +591,7 @@ final class Extensions: NSObject, ObservableObject {
             #endif
         }
         record(seen, item.id, in: space)
+        if contexts[space]?[item.id] != nil { readCode(of: item) }
         if seen.start == .checking, let context = contexts[space]?[item.id] {
             startBackground(of: context, item, in: space)
         }
@@ -582,9 +635,19 @@ final class Extensions: NSObject, ObservableObject {
     @discardableResult
     func revive(_ id: String, in space: UUID, because reason: String) -> Bool {
         let key = "\(space.uuidString)/\(id)"
-        guard let context = contexts[space]?[id], let controller = controllers[space],
+        guard contexts[space]?[id] != nil, controllers[space] != nil,
               Date().timeIntervalSince(revived[key] ?? .distantPast) > 60 else { return false }
         revived[key] = Date()
+        return restart(id, in: space, because: reason)
+    }
+
+    /// Unloaded and loaded again, the same context, and its worker started:
+    /// what it was granted while it ran (permissions.request) stays, and its
+    /// open pages keep working, as they would not with a new context.
+    @discardableResult
+    private func restart(_ id: String, in space: UUID, because reason: String) -> Bool {
+        let key = "\(space.uuidString)/\(id)"
+        guard let context = contexts[space]?[id], let controller = controllers[space] else { return false }
         Self.workersChanged()
         NSLog("eGlu: restarting extension \(id): \(reason)")
         #if DEBUG
@@ -611,21 +674,29 @@ final class Extensions: NSObject, ObservableObject {
         return true
     }
 
-    /// What the extension may do: what it asked for, less what no extension
-    /// gets; its sites when the person chose all of them; never Google's
-    /// sign-in.
-    private func allow(_ context: WKWebExtensionContext, _ package: WKWebExtension, access: Installed.SiteAccess) {
-        for permission in package.requestedPermissions where !ExtensionPolicy.deniedPermissions.contains(permission.rawValue) {
+    /// What the extension may do: what it asked for, less cookies unless
+    /// the person allowed them; its sites when the person chose all of
+    /// them; never Google's sign-in.
+    private func allow(_ context: WKWebExtensionContext, _ package: WKWebExtension, access: Installed.SiteAccess, cookies: Bool) {
+        for permission in package.requestedPermissions where !ExtensionPolicy.heldPermissions.contains(permission.rawValue) {
             context.setPermissionStatus(.grantedExplicitly, for: permission)
         }
-        for name in ExtensionPolicy.deniedPermissions {
-            context.setPermissionStatus(.deniedExplicitly, for: WKWebExtension.Permission(rawValue: name))
-        }
+        Self.holdCookies(context, letting: cookies)
         Self.letRulesRedirect(context, package)
         if access == .allSites {
             for pattern in Self.sites(of: package) { context.setPermissionStatus(.grantedExplicitly, for: pattern) }
         }
         Self.fence(context)
+    }
+
+    /// Cookies denied, or granted when the person let this extension have
+    /// them and it asks for them, outright or as an optional permission.
+    /// Granted, it reads them on the sites it may read, Google's sign-in
+    /// cookies included (set for .google.com): the person was told so.
+    static func holdCookies(_ context: WKWebExtensionContext, letting cookies: Bool) {
+        let package = context.webExtension
+        let asked = package.requestedPermissions.union(package.optionalPermissions).contains(.cookies)
+        context.setPermissionStatus(cookies && asked ? .grantedExplicitly : .deniedExplicitly, for: .cookies)
     }
 
     /// Chrome lets "declarativeNetRequest" redirect a request or change its
@@ -722,10 +793,15 @@ final class Extensions: NSObject, ObservableObject {
             nativeOptional.remove(id)
         }
         manifests[id] = manifest
-        seen.cookiesKeptBack = manifest.permissions.contains("cookies")
+        note(manifest, of: id)
+        seen.cookiesKeptBack = manifest.permissions.contains("cookies") && !readsCookies(id)
         let missing = missing(for: manifest, package)
         lacking[id] = missing
-        seen.mayNotWork = Self.notes(in: archive, manifest, missing: missing)
+        // Read away from the main thread once it has loaded (readCode).
+        if let version = installed.first(where: { $0.id == id })?.version, let done = scanned[id],
+           done.key == Self.scanKey(version, missing) {
+            seen.mayNotWork = done.notes
+        }
         // On the list of those tried by hand, for its version.
         if let item = installed.first(where: { $0.id == id }), item.source == .store,
            let tried = ExtensionTried.shipped.entry(for: id, version: item.version) {
@@ -762,8 +838,41 @@ final class Extensions: NSObject, ObservableObject {
         return missing
     }
 
+    private static func scanKey(_ version: String, _ missing: Set<String>) -> String {
+        version + "|" + missing.sorted().joined(separator: ",")
+    }
+
+    /// Its code read for what it reaches for (notes), off the main thread,
+    /// once for its version and what it lacks; what was found goes to every
+    /// space it is loaded in.
+    private func readCode(of item: Installed) {
+        guard let manifest = manifests[item.id], let missing = lacking[item.id] else { return }
+        let key = Self.scanKey(item.version, missing)
+        let found = { [weak self] (notes: [String]) in
+            guard let self else { return }
+            for space in self.contexts.keys where self.contexts[space]?[item.id] != nil {
+                self.update(item.id, in: space) { $0.mayNotWork = notes }
+            }
+        }
+        if let done = scanned[item.id], done.key == key { return found(done.notes) }
+        guard scanning[item.id]?.key != key else { return }
+        let attempt = UUID()
+        scanning[item.id] = (key, attempt)
+        let file = Self.package(item.id, item.version)
+        Task {
+            let notes = await Task.detached(priority: .utility) {
+                (try? Data(contentsOf: file)).map { Self.notes(in: $0, manifest, missing: missing) } ?? []
+            }.value
+            // Updated, or read against a newer table, meanwhile: that reading wins.
+            guard scanning[item.id]?.attempt == attempt else { return }
+            scanning[item.id] = nil
+            scanned[item.id] = (key, notes)
+            found(notes)
+        }
+    }
+
     /// What its code reaches for, untested, that nothing here answers.
-    private static func notes(in archive: Data, _ manifest: ExtensionManifest, missing: Set<String>) -> [String] {
+    nonisolated private static func notes(in archive: Data, _ manifest: ExtensionManifest, missing: Set<String>) -> [String] {
         var notes: [String] = []
         for file in manifest.files.map(ExtensionPreparation.normalized) where file.hasSuffix(".js") {
             guard let source = ZipFile.file(in: archive, matching: { ExtensionPreparation.normalized($0) == file }) else { continue }
@@ -779,13 +888,12 @@ final class Extensions: NSObject, ObservableObject {
         guard ExtensionTable.shared.table == nil, await ExtensionTable.shared.measured() != nil else { return }
         for item in installed {
             guard let space = contexts.first(where: { $0.value[item.id] != nil })?.key, let context = contexts[space]?[item.id],
-                  let manifest = manifests[item.id], let archive = try? Data(contentsOf: Self.package(item.id, item.version))
+                  let manifest = manifests[item.id]
             else { continue }
             let missing = missing(for: manifest, context.webExtension)
             lacking[item.id] = missing
-            let notes = Self.notes(in: archive, manifest, missing: missing)
+            readCode(of: item)
             for space in contexts.keys where contexts[space]?[item.id] != nil {
-                update(item.id, in: space) { $0.mayNotWork = notes }
                 // Its errors so far, read again against what it lacks now.
                 if let context = contexts[space]?[item.id] { errorsChanged(context, item.id, in: space) }
             }
@@ -1409,7 +1517,8 @@ final class Extensions: NSObject, ObservableObject {
             defer { busy = nil }
             do {
                 let crx = try await download(id)
-                let archive = try CRXFile.archive(of: crx, id: id, fromStore: true)
+                // Its signature checked over every byte: off the main thread.
+                let archive = try await Task.detached(priority: .userInitiated) { try CRXFile.archive(of: crx, id: id, fromStore: true) }.value
                 try await offer(archive, id: id, source: .store, in: window, space: space, startingAccess: access)
             } catch {
                 tell(error, in: window)
@@ -1508,9 +1617,11 @@ final class Extensions: NSObject, ObservableObject {
     @discardableResult
     func keep(_ archive: Data, id: String, name: String, version: String, source: Installed.Source,
                       access: Installed.SiteAccess, spaces: [UUID], granted: [String]?, folder: String? = nil) throws -> Task<Bool, Never> {
-        // A new package, even at the same version (Reload): its pages tried
-        // afresh, and its worker too at the next launch.
+        // A new package, even at the same version (Reload): its code read
+        // and pages tried afresh, and its worker too at the next launch.
         forgetCheck(id)
+        scanned[id] = nil
+        scanning[id] = nil
         // And its icon read again, which a new version may have changed.
         icons[id] = nil
         iconless.remove(id)
@@ -1518,10 +1629,12 @@ final class Extensions: NSObject, ObservableObject {
         let file = Self.package(id, version)
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         try archive.write(to: file, options: .atomic)
-        let resolvedName = ZipFile.file(in: archive, matching: { $0 == "manifest.json" })
-            .flatMap { try? ExtensionManifest(json: $0) }?.displayName(in: archive, fallback: name) ?? name
+        let manifest = ZipFile.file(in: archive, matching: { $0 == "manifest.json" }).flatMap { try? ExtensionManifest(json: $0) }
+        let resolvedName = manifest?.displayName(in: archive, fallback: name) ?? name
+        note(manifest, of: id)
+        // Its cookies, as the person chose them for the version there was.
         let item = Installed(id: id, name: resolvedName, version: version, source: source, siteAccess: access, spaces: spaces,
-                             granted: granted, folder: folder)
+                             granted: granted, folder: folder, readsCookies: installed.first { $0.id == id }?.readsCookies)
         // A newer version of one already here: the same id, so the same
         // developer's key. An unsigned one has a random id of its own and
         // never takes another's place.
@@ -2049,6 +2162,16 @@ extension Extensions {
             if defaults.bool(forKey: "checkUpdatesNow") {
                 lines.append("updates \(await checkForUpdates(now: true))")
             }
+            // Cookies allowed, as its settings' switch allows them: it starts
+            // again with them, and its pages are loaded again.
+            if defaults.bool(forKey: "extensionCookiesTest"), let id = installed.first?.id {
+                setReadsCookies(id, true)
+                note("cookies allowed")
+                try? await Task.sleep(for: .seconds(4))
+                for page in opened { session.pages.live[page.tab]?.reload() }
+                try? await Task.sleep(for: .seconds(max(11, defaults.integer(forKey: "extensionWait"))))
+                lines += await report(spaces, opened).map { "cookies " + $0 }
+            }
             // Removed from the first space, its data there cleared, and on
             // again: its pages there start afresh, the other space's don't.
             if defaults.bool(forKey: "extensionRemoveTest"), let id = installed.first?.id, let first = spaces.first {
@@ -2214,17 +2337,22 @@ extension Extensions: WKWebExtensionControllerDelegate {
     func webExtensionController(_ controller: WKWebExtensionController, promptForPermissions permissions: Set<WKWebExtension.Permission>,
                                 in tab: (any WKWebExtensionTab)?, for extensionContext: WKWebExtensionContext,
                                 completionHandler: @escaping (Set<WKWebExtension.Permission>, Date?) -> Void) {
-        let asked = permissions.filter { !ExtensionPolicy.deniedPermissions.contains($0.rawValue) }
+        // Cookies too, as Chrome asks for them: a yes is the person's
+        // choice for the extension, in every space (setReadsCookies).
+        let asked = permissions
         guard !asked.isEmpty else { return completionHandler([], nil) }
         guard let sourceSpace = space(of: controller),
               let owner = permissionWindow(in: sourceSpace, tab: tab) else { return completionHandler([], nil) }
         let summary = ExtensionAccessSummary(permissions: asked.map(\.rawValue), sites: [])
         let title = String(localized: "\u{201C}\(extensionContext.webExtension.displayName ?? String(localized: "An extension"))\u{201D} wants more access")
+        let id = extensionContext.uniqueIdentifier
         Task {
-            let yes = await askForMore(title: title, from: extensionContext, in: sourceSpace, window: owner) {
-                ExtensionAccessGroups(summary: summary, everything: true)
+            let yes = await askForMore(title: title, from: extensionContext, in: sourceSpace, window: owner,
+                                       note: summary.cookies ? ExtensionAccessGroups.cookiesNote : nil) {
+                ExtensionAccessGroups(summary: summary, everything: true, grantsCookies: true)
             }
             completionHandler(yes ? asked : [], nil)
+            if yes, summary.cookies { setReadsCookies(id, true, restarting: false) }
         }
     }
 

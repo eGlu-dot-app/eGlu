@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en" data-color-mode="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GitHub signed in, header first</title>
+<!--
+  The signed-in GitHub dashboard as the iPhone Duo showed it on 3 Nov 2026:
+  GitHub's AppHeader at the very top of the page (hamburger, logo,
+  "Dashboard"; search, inbox with its dot, avatar), built from the same
+  kind of unregistered custom elements, which lay out inline, then the
+  Copilot composer, its chips and the pull requests, over a feed that
+  keeps changing. ?late=avatar puts the avatar in 1.2 s after the load,
+  as a deferred panel does; ?late=header the whole end of the bar.
+-->
+<style>
+  :root { color-scheme: dark; --fg: #f0f6fc; --muted: #9198a1; --border: #3d444d; --bg: #0d1117; --inset: #151b23; --accent: #4493f8; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  .AppHeader { background: #010409; border-bottom: 1px solid var(--border); }
+  .AppHeader-globalBar { display: flex; gap: 12px; padding: 16px; }
+  .AppHeader-globalBar-start { display: flex; flex: 1 1 auto; gap: 8px; align-items: center; min-width: 0; }
+  .AppHeader-globalBar-end { display: flex; flex: 1 1 auto; justify-content: flex-end; gap: 8px; align-items: center; }
+  .AppHeader-button { position: relative; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--muted); }
+  .AppHeader-button--hasIndicator::before { content: ""; position: absolute; top: -4px; right: -4px; width: 10px; height: 10px; border: 2px solid #010409; border-radius: 50%; background: var(--accent); }
+  .AppHeader-logo { display: grid; place-items: center; width: 32px; height: 32px; color: var(--fg); }
+  .AppHeader-context { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .AppHeader-context a { color: var(--fg); text-decoration: none; }
+  .AppHeader-search { display: flex; }
+  .AppHeader-CopilotChat, .AppHeader-actions { display: none; }
+  .AppHeader-user button { padding: 0; border: 0; background: none; }
+  .avatar { display: block; width: 32px; height: 32px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #e8d6b9, #8a6f4d); }
+  svg { width: 16px; height: 16px; fill: currentColor; }
+  main { padding: 16px; }
+  .context { display: flex; align-items: center; gap: 12px; padding: 16px 0; border-bottom: 1px solid var(--border); margin: 0 -16px 0; padding-left: 16px; }
+  .context .avatar { width: 40px; height: 40px; }
+  .context small { display: block; color: var(--muted); }
+  .preview { display: flex; justify-content: flex-end; align-items: center; gap: 4px; margin-top: 24px; }
+  .Label { border: 1px solid #2ea043; color: #3fb950; border-radius: 999px; padding: 0 8px; font-size: 12px; }
+  .preview button { border: 0; background: none; color: var(--muted); }
+  h1 { font-size: 24px; margin: 16px 0; }
+  .composer { border: 1px solid var(--border); border-radius: 12px; background: var(--inset); padding: 12px; }
+  .composer textarea { width: 100%; min-height: 48px; border: 0; background: transparent; color: var(--fg); font: inherit; resize: none; }
+  .composer-row { display: flex; align-items: center; gap: 12px; }
+  .composer-row .grow { flex: 1; }
+  .composer-row button, .tools button { border: 0; background: none; color: var(--muted); font: inherit; white-space: nowrap; }
+  .tools { display: flex; gap: 8px; margin-top: 8px; }
+  .tools button { border: 1px solid var(--border); border-radius: 6px; width: 32px; height: 32px; }
+  .chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 16px 0; }
+  .chips button { border: 1px solid var(--border); border-radius: 999px; background: none; color: var(--fg); padding: 6px 12px; font: inherit; }
+  .section-head { display: flex; align-items: center; justify-content: space-between; margin-top: 24px; }
+  .section-head h2 { font-size: 16px; margin: 0; color: var(--muted); }
+  .section-head a { color: var(--accent); text-decoration: none; }
+  .section-head .end { display: flex; gap: 12px; align-items: center; }
+  .feed { list-style: none; padding: 0; margin: 8px 0; border: 1px solid var(--border); border-radius: 6px; }
+  .feed li { display: flex; gap: 8px; align-items: center; padding: 8px 12px; border-top: 1px solid var(--border); }
+  .feed li:first-child { border-top: 0; }
+  .feed li a { color: var(--fg); text-decoration: none; flex: 1; min-width: 0; }
+  .feed relative-time { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .feed li button { border: 0; background: none; color: var(--muted); }
+</style>
+</head>
+<body>
+<header class="AppHeader" role="banner">
+  <div class="AppHeader-globalBar js-global-bar">
+    <div class="AppHeader-globalBar-start">
+      <deferred-side-panel data-url="/_side-panels/global">
+        <include-fragment>
+          <button class="AppHeader-button" aria-label="Open global navigation menu"><svg viewBox="0 0 16 16"><path d="M1 2.75A.75.75 0 0 1 1.75 2h12.5a.75.75 0 0 1 0 1.5H1.75A.75.75 0 0 1 1 2.75Zm0 5A.75.75 0 0 1 1.75 7h12.5a.75.75 0 0 1 0 1.5H1.75A.75.75 0 0 1 1 7.75ZM1.75 12h12.5a.75.75 0 0 1 0 1.5H1.75a.75.75 0 0 1 0-1.5Z"/></svg></button>
+        </include-fragment>
+      </deferred-side-panel>
+      <a class="AppHeader-logo" href="#" aria-label="Homepage"><svg viewBox="0 0 16 16" style="width:32px;height:32px"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a>
+      <div class="AppHeader-context"><a href="#">Dashboard</a></div>
+    </div>
+    <div class="AppHeader-globalBar-end">
+      <div class="AppHeader-search">
+        <qbsearch-input><div class="search-input"><button class="AppHeader-button" aria-label="Search or jump to…"><svg viewBox="0 0 16 16"><path d="M10.68 11.74a6 6 0 0 1-7.922-8.982 6 6 0 0 1 8.982 7.922l3.04 3.04a.749.749 0 1 1-1.06 1.06l-3.04-3.04ZM11.5 7a4.499 4.499 0 1 0-8.997 0A4.499 4.499 0 0 0 11.5 7Z"/></svg></button></div></qbsearch-input>
+      </div>
+      <div class="AppHeader-CopilotChat"><react-partial-anchor><button class="AppHeader-button" aria-label="Chat with Copilot">C</button></react-partial-anchor></div>
+      <div class="AppHeader-actions"><react-partial-anchor><button class="AppHeader-button" aria-label="Create something new">+</button></react-partial-anchor></div>
+      <notification-indicator data-channel="x"><a id="AppHeader-notifications-button" href="#" class="AppHeader-button AppHeader-button--hasIndicator" aria-label="You have unread notifications"><svg viewBox="0 0 16 16"><path d="M2.8 2.06A1.75 1.75 0 0 1 4.41 1h7.18c.7 0 1.333.417 1.61 1.06l2.74 6.395c.04.093.06.194.06.295v4.5A1.75 1.75 0 0 1 14.25 15H1.75A1.75 1.75 0 0 1 0 13.25v-4.5c0-.101.02-.202.06-.295Zm1.61.44a.25.25 0 0 0-.23.152L1.887 8H4.75a.75.75 0 0 1 .6.3L6.625 10h2.75l1.275-1.7a.75.75 0 0 1 .6-.3h2.863L11.82 2.652a.25.25 0 0 0-.23-.152Z"/></svg></a></notification-indicator>
+      <div class="AppHeader-user" id="user-slot">
+        <deferred-side-panel data-url="/_side-panels/user">
+          <include-fragment>
+            <react-partial-anchor><button aria-label="Open user navigation menu"><span class="avatar"></span></button></react-partial-anchor>
+          </include-fragment>
+        </deferred-side-panel>
+      </div>
+    </div>
+  </div>
+</header>
+<main>
+  <div class="context"><span class="avatar"></span><div><strong>taehee-pd</strong><small>Your personal account</small></div></div>
+  <div class="preview"><span class="Label">Preview</span><button aria-label="Dashboard options">▾</button></div>
+  <h1>Good evening, taehee-pd!</h1>
+  <div class="composer">
+    <textarea aria-label="Ask Copilot" placeholder="Ask Copilot"></textarea>
+    <div class="composer-row"><button>Auto ▾</button><button class="grow" style="text-align:left">Optimized for: Balance ▾</button><button aria-label="Context">◎</button><button aria-label="Send">➤</button></div>
+    <div class="tools"><button aria-label="Comment">▢</button><button aria-label="Repository">▤</button><button aria-label="Add">+</button></div>
+  </div>
+  <div class="chips"><button>Debug</button><button>Agent</button><button>Create issue</button><button>Write code ▾</button><button>Git ▾</button></div>
+  <div class="section-head"><h2>Pull requests</h2><div class="end"><a href="#">View all</a><button aria-label="Filter" style="border:0;background:none;color:var(--muted)">☰</button></div></div>
+  <ul class="feed" id="feed"></ul>
+</main>
+<script>
+  const feed = document.getElementById('feed');
+  for (let i = 0; i < 120; i++) {
+    const li = document.createElement('li');
+    li.innerHTML = `<a href="#">eGlu-dot-app/eGlu #${200 - i}: Keep the strip's buttons clear of the page, part ${i + 1}</a><relative-time data-ago="${i * 7 + 2}">${i * 7 + 2} minutes ago</relative-time><button aria-label="More">⋯</button>`;
+    feed.append(li);
+  }
+  // GitHub's times tick over by themselves.
+  setInterval(() => {
+    for (const time of feed.querySelectorAll('relative-time')) {
+      const ago = Number(time.dataset.ago) + 1;
+      time.dataset.ago = ago;
+      time.textContent = `${ago} minutes ago`;
+    }
+  }, 1000);
+  const late = new URLSearchParams(location.search).get('late');
+  if (late) {
+    const slot = late === 'header' ? document.querySelector('.AppHeader-globalBar-end') : document.getElementById('user-slot');
+    const kept = slot.innerHTML;
+    slot.innerHTML = '';
+    addEventListener('load', () => setTimeout(() => { slot.innerHTML = kept; }, 1200));
+  }
+</script>
+</body>
+</html>

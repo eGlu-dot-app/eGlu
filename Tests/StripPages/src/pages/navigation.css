@@ -1,0 +1,100 @@
+.navigation-fixtures { --nv-bg: #fff; --nv-fg: #202124; --nv-line: #d6dbe1; color: var(--nv-fg); background: #edf0f4; font: 14px/1.55 Arial, sans-serif; }
+.navigation-fixtures * { box-sizing: border-box; }
+.navigation-fixtures a { color: inherit; text-decoration: none; }
+.navigation-fixtures button { font: inherit; color: inherit; cursor: pointer; }
+.navigation-fixtures svg { flex-shrink: 0; }
+.nv-intro { padding: 110px 16px 24px; background: white; }
+.nv-intro h1 { font-size: 25px; font-weight: 700; margin: 12px 0; }
+.nv-intro a, .nv-end a { color: #1261bd; text-decoration: underline; }
+.nv-intro output { display: block; margin-top: 12px; font-family: monospace; }
+.nv-family { border-top: 6px solid #a9b8cc; }
+.nv-sample-label { padding: 20px 16px 8px; background: #e2e8ef; color: #1d2d43; }
+.nv-sample-label h2 { font-size: 19px; font-weight: 700; }
+.nv-sample { position: relative; color: var(--nv-fg); background: var(--nv-bg); padding-bottom: 60px; }
+.nv-dark { --nv-bg: #161b22; --nv-fg: #e6edf3; --nv-line: #454b53; color-scheme: dark; }
+.nv-mode-label { padding: 12px 16px 4px; color: inherit; font: 12px monospace; }
+.nv-bar { width: 100%; min-height: 64px; padding: 12px 16px; background: var(--nv-bg); border-block: 1px solid var(--nv-line); }
+.nv-sticky { position: sticky; top: 0; z-index: 12; }
+.nv-fixed { position: fixed; top: 0; left: 0; right: 0; z-index: 25; color: #181818; }
+.nv-fixed[hidden] { display: none; }
+.nv-between { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.nv-left, .nv-right { display: flex; align-items: center; gap: 8px; }
+.nv-left { min-width: 0; }
+.nv-left strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.nv-right { flex-shrink: 0; }
+.nv-icon { display: inline-flex; justify-content: center; align-items: center; padding: 6px; width: 32px; height: 32px; flex: 0 0 32px; border: 1px solid transparent; background: transparent; border-radius: 6px; }
+.nv-icon svg { width: 19px; height: 19px; }
+.nv-icon:hover, .nv-div-click:hover { background: #8883; }
+.nv-avatar { border-radius: 50%; background: linear-gradient(140deg, #a8cdd0, #dfc7a9); color: #16323d !important; font: bold 11px Arial, sans-serif !important; border: 1px solid #78989e; }
+.nv-github .nv-icon:not(.nv-avatar) { border-color: var(--nv-line); }
+.nv-brand { display: flex; flex-shrink: 0; }
+.nv-inbox { position: relative; }
+.nv-blue-dot { position: absolute; right: -2px; top: -3px; width: 9px; height: 9px; border: 1px solid var(--nv-bg); background: #218bff; border-radius: 50%; }
+.nv-auto { display: flex; align-items: center; gap: 12px; }
+.nv-auto > .nv-right { margin-left: auto; }
+.nv-youtube { display: flex; align-items: center; gap: 3px; white-space: nowrap; letter-spacing: -.8px; }
+.nv-play { background: #f00; color: white; border-radius: 6px; font-size: 13px; padding: 0 7px; letter-spacing: 0; }
+.nv-create { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; border: 0; border-radius: 20px; padding: 6px 10px; background: #8882; font-size: 12px !important; }
+.nv-count { position: absolute; right: -1px; top: -2px; color: white; background: #c00; border: 1px solid var(--nv-bg); border-radius: 12px; min-width: 15px; font-size: 10px; line-height: 14px; text-align: center; }
+.nv-grid { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; }
+.nv-mail { background: #eef3fc; color: #252a33; }
+.nv-dark .nv-mail { background: #20242c; color: #e1e4ea; }
+.nv-gmail { font: 700 23px Arial, sans-serif; color: #c84237; }
+.nv-search-pill { display: flex; align-items: center; gap: 7px; min-width: 0; width: 100%; background: #dfe8f7; border-radius: 24px; padding: 9px 10px; color: #253953; }
+.nv-search-pill input { min-width: 0; width: 100%; font: 12px Arial, sans-serif; background: transparent; border: 0; outline: 0; }
+.nv-gmail-actions { gap: 3px; }
+.nv-amazon { background: #131921; color: #fff; min-height: 72px; }
+.nv-amazon-logo { font-size: 24px; font-weight: 700; letter-spacing: -1.2px; border-bottom: 3px solid #ff9900; line-height: 1.2; display: inline-block; }
+.nv-amazon-logo span { font-size: 11px; font-weight: 400; letter-spacing: 0; }
+.nv-delivery { display: inline-block; margin-left: 12px; line-height: 1.2; font-size: 10px; }
+.nv-absolute { position: relative; padding-right: 214px; }
+.nv-absolute.nv-sticky { position: sticky; }
+.nv-absolute > .nv-right { position: absolute; right: 16px; top: 16px; }
+.nv-account { border: 0; background: transparent; font-size: 10px !important; text-align: left; }
+.nv-cart { position: relative; display: flex; align-items: flex-end; gap: 2px; border: 0; background: none; padding: 8px 2px 0; }
+.nv-cart svg { width: 29px; height: 29px; }
+.nv-cart b { font-size: 12px; }
+.nv-cart-count { position: absolute; top: -5px; left: 13px; color: #ffb14e; font-weight: 700; font-size: 14px; }
+.nv-float { display: flow-root; }
+.nv-float > .nv-left { display: inline-flex; max-width: 68%; }
+.nv-float > .nv-right { float: right; }
+.nv-news-logo { font: bold 20px/1.15 Georgia, serif; }
+.nv-subscribe { border: 1px solid #405b7a; background: #335d7d; color: #fff !important; border-radius: 3px; font-size: 11px !important; padding: 7px 9px; }
+.nv-wrap { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.nv-wrap > .nv-right { width: 40%; max-width: 220px; flex: 0 1 40%; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.nv-two-row, .nv-tabs, .nv-naver { padding: 0; }
+.nv-utility { display: flex; justify-content: space-between; gap: 10px; padding: 5px 16px; font-size: 10px; border-bottom: 1px solid var(--nv-line); }
+.nv-utility button { margin-left: auto; text-decoration: underline; border: 0; background: none; }
+.nv-main-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 16px; }
+.nv-repo-tabs { display: flex; overflow-x: auto; gap: 20px; white-space: nowrap; padding: 10px 16px; border-top: 1px solid var(--nv-line); scrollbar-width: thin; }
+.nv-repo-tabs span { display: inline-block; padding: 0 6px; border-radius: 10px; background: #8883; font-size: 11px; }
+.nv-compacting { min-height: 88px; padding-block: 24px; transition: min-height .2s, padding .2s; }
+.nv-compacting.compact { min-height: 48px; padding-block: 6px; }
+.nv-compacting.compact .nv-news-logo { font-size: 17px; }
+.nv-backdrop { background: #f7f7f7b8; -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5); }
+.nv-dark .nv-backdrop:not(.nv-fixed) { background: #15171ab8; }
+.nv-apple-actions { gap: 20px; }
+.nv-apple-actions a[role=button] { display: block; padding: 6px; line-height: 1; }
+.nv-apple-actions a svg { width: 19px; height: 19px; }
+.nv-apple-store { font-size: 12px; }
+.nv-fixed-hide { font-size: 10px !important; border: 1px solid #bbb; border-radius: 4px; padding: 4px; background: #ffffffc9; }
+.nv-amazon-actions { position: relative; }
+.nv-div-click { cursor: pointer; position: relative; display: flex; align-items: center; gap: 3px; padding: 8px 0; font-size: 11px; }
+.nv-div-click .nv-cart-count { top: -6px; left: 10px; }
+.nv-naver-utility { display: flex; align-items: center; justify-content: space-between; padding: 9px 16px; }
+.nv-naver-utility > a { font-size: 20px; color: #03a851; font-weight: 900; }
+.nv-naver-search { display: flex; align-items: center; width: calc(100% - 32px); margin: 0 16px 14px; border: 2px solid #03c75a; border-radius: 28px; padding: 8px 12px; gap: 12px; }
+.nv-naver-n { color: #03a851; font-size: 24px; font-weight: 900; }
+.nv-naver-search input { flex: 1; min-width: 0; background: none; border: 0; color: inherit; }
+.nv-naver-search button { display: flex; padding: 0; border: 0; background: transparent; color: #03a851; }
+.nv-running { padding-top: 14px; }
+.nv-landscape { height: 130px; width: 100%; background: radial-gradient(ellipse at 80% 90%, #477b69 0 28%, transparent 29%), linear-gradient(155deg, #bdd5ee 0 48%, #8bb29b 49% 75%, #4b7769 76%); }
+.nv-dark .nv-landscape { filter: brightness(.6); }
+.nv-running p { margin: 18px 16px; }
+.nv-end { padding: 24px 16px; }
+@media (max-width: 390px) {
+  .nv-delivery { display: none; }
+  .nv-grid { gap: 5px; }
+  .nv-gmail-actions { gap: 0; }
+  .nv-news-logo { font-size: 17px; }
+}

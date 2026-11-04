@@ -36,6 +36,12 @@ enum BarAction {
     case suggestion(Suggestion)
     case open(URL)
     case openInNewTab(URL)
+    case openFromBar(UUID)
+    case addToBar(UUID, into: UUID?, before: UUID?)
+    /// A pointer over a pinned tile or a bookmarks bar row, in its host's coordinates.
+    case hoverTab(TabHover)
+    case leaveTab(UUID)
+    case hideTabHover
     case back
     case forward
     case reload
@@ -52,6 +58,7 @@ enum BarAction {
     /// A tab beside the one on screen; a new one; apart again; sides swapped.
     case splitWith(UUID)
     case splitWithNewTab
+    case splitWithPage(URL)
     case separate(UUID)
     /// An address to the clipboard, with a toast to say so (ActionToast).
     case copy(URL)
@@ -70,6 +77,77 @@ enum BarAction {
     case inspectFromMac
 }
 
+/// Where a pinned tile or bar row was measured for the window's hover card.
+enum TabHoverSource: Equatable {
+    case sidebar, top, window
+}
+
+/// The page under the pointer and the row or tile the card opens beside.
+struct TabHover: Equatable {
+    let id: UUID
+    let tab: UUID?
+    let title: String
+    let url: URL?
+    let isOpen: Bool
+    let anchor: CGRect
+    let source: TabHoverSource
+}
+
+/// A pinned page's full title and the actions available from its hover card.
+struct TabHoverCard: View {
+    let item: TabHover
+    let canSplit: Bool
+    let hovering: (Bool) -> Void
+    let act: (BarAction) -> Void
+
+    var body: some View {
+        let actions = (item.isOpen && item.tab != nil) || (canSplit && item.url != nil)
+        // The glyphs' 32-point cells carry 8 points of air round them: the gaps
+        // above and below the row are drawn smaller by that, so what shows is even.
+        VStack(alignment: .leading, spacing: 4) {
+            Text(item.title)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Palette.ink)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if actions {
+                HStack(spacing: 0) {
+                    if item.isOpen, let tab = item.tab {
+                        button("arrow.uturn.backward", label: String(localized: "Back to Pinned Address")) {
+                            act(.backToPinned(tab))
+                        }
+                    }
+                    if canSplit, let url = item.url {
+                        button("rectangle.split.2x1", label: String(localized: "Open in Split View")) {
+                            act(.splitWithPage(url))
+                        }
+                    }
+                }
+                // The glyphs, not their 32-point cells, in line with the title.
+                .padding(.leading, -8)
+            }
+        }
+        .padding([.horizontal, .top], 14)
+        .padding(.bottom, actions ? 6 : 14)
+        .frame(width: 260, alignment: .leading)
+        .floatingGlass(cornerRadius: 18, tint: nil)
+        .shadow(color: .black.opacity(0.14), radius: 16, y: 6)
+        .onHover(perform: hovering)
+    }
+
+    private func button(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(Palette.ink)
+                .frame(width: 32, height: 32)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
+}
+
 /// The row along the top, as the Mac's (TopTabs), as Safari's compact
 /// layout: back, forward and reload, the pinned tabs as tiles and the other
 /// tabs sharing the row, the one on screen the address; a tap on it types a
@@ -85,6 +163,7 @@ struct TopBar: View {
     var body: some View {
         TopTabs(session: session, window: window, act: act)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .coordinateSpace(.named(TopTabs.space))
             .overlay(alignment: .bottom) { LoadingLine(window: window) }
             .ignoresSafeArea(.keyboard)
     }
@@ -103,7 +182,7 @@ struct BookmarksStrip: View {
     static let height: CGFloat = 40
 
     var body: some View {
-        let bookmarks = session.workspace.space(window.spaceID)?.bookmarks ?? []
+        let bookmarks = Bookmarks.others(in: session.workspace.space(window.spaceID)?.bookmarks ?? [])
         ScrollView(.horizontal) {
             HStack(spacing: 2) {
                 if bookmarks.isEmpty {

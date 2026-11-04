@@ -106,7 +106,7 @@ struct BrowserCommands: Commands {
                 session.preferences.tabsPlacement = session.preferences.tabsPlacement == .top ? .sidebar : .top
             }
             // The bar is under the tabs along the top; the sidebar has its own Bookmarks section.
-            Button(session.preferences.bookmarksBar ? String(localized: "Hide Bookmarks Bar") : String(localized: "Show Bookmarks Bar")) {
+            Button(session.preferences.bookmarksBar ? String(localized: "Hide Other Bookmarks") : String(localized: "Show Other Bookmarks")) {
                 withAnimation(.bar) { session.preferences.bookmarksBar.toggle() }
             }
             .keyboardShortcut("b", modifiers: [.command, .shift])

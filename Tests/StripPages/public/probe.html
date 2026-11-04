@@ -1,0 +1,49 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Engine probe</title>
+<style>body{font:14px/1.4 -apple-system,sans-serif;margin:12px}pre{white-space:pre-wrap;font-size:12px}
+#space{height:3000px}.box{width:80px;height:40px;background:#c33;margin:600px 0 0 200px}.moved{transform:translateY(300px)}</style></head>
+<body>
+<h3>WebKit probe for the strip</h3>
+<pre id="out">running…</pre>
+<div id="space"><div class="box" id="a"></div><div class="moved"><div class="box" id="b"></div></div></div>
+<script>
+const out = [];
+const log = (k, v) => out.push(k + ': ' + v);
+const show = () => { document.getElementById('out').textContent = out.join('\n'); };
+try {
+  log('UA', navigator.userAgent);
+  log('ScrollTimeline', typeof ScrollTimeline);
+  log('ViewTimeline', typeof ViewTimeline);
+  log('css scroll()', CSS.supports('animation-timeline: scroll()'));
+  log('css view()', CSS.supports('animation-timeline: view()'));
+  log('css range px', CSS.supports('animation-range: 0px 100px'));
+  log('requestIdleCallback', typeof requestIdleCallback);
+  log('scheduler.yield', typeof (window.scheduler && scheduler.yield));
+  const a = document.getElementById('a'), b = document.getElementById('b');
+  const opts = (subject) => ({ timeline: new ViewTimeline({ subject, axis: 'block' }), fill: 'both' });
+  const kf = [{ translate: '0px 0' }, { translate: '-100px 0' }];
+  const anA = a.animate(kf, opts(a));
+  const anB = b.animate(kf, opts(b));
+  log('view anim timeline', anA.timeline && anA.timeline.constructor.name);
+  log('rangeStart prop', 'rangeStart' in anA ? String(anA.rangeStart && JSON.stringify(anA.rangeStart)) : 'absent');
+  let ranged = null;
+  try {
+    const c = document.createElement('div'); c.className = 'box'; document.getElementById('space').appendChild(c);
+    ranged = c.animate(kf, { timeline: new ScrollTimeline({ source: document.documentElement, axis: 'block' }), fill: 'both', rangeStart: '100px', rangeEnd: '500px' });
+    log('scroll anim with px range', 'ok rangeStart=' + JSON.stringify(ranged.rangeStart));
+  } catch (e) { log('scroll anim with px range', 'threw ' + e); }
+  const report = (tag) => {
+    const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
+    log(tag, `scrollY=${scrollY} H=${innerHeight} vv=${visualViewport && visualViewport.height}` +
+      ` A top=${ra.top.toFixed(0)} p=${(anA.effect.getComputedTiming().progress ?? NaN).toFixed(3)} t=${anA.currentTime}` +
+      ` | B(transformed parent) top=${rb.top.toFixed(0)} p=${(anB.effect.getComputedTiming().progress ?? NaN).toFixed(3)}` +
+      (ranged ? ` | ranged p=${(ranged.effect.getComputedTiming().progress ?? NaN).toFixed(3)}` : ''));
+    show();
+  };
+  report('at 0');
+  setTimeout(() => { scrollTo(0, 400); requestAnimationFrame(() => requestAnimationFrame(() => { report('at 400'); scrollTo(0, 900); requestAnimationFrame(() => requestAnimationFrame(() => { report('at 900 (B untransformed top would be 281, p=.489; transformed 581, p=.011)'); })); })); }, 500);
+  // Expected for A: p = (H - top) / (H + h), h = 40.
+} catch (e) { log('error', e && e.stack || e); }
+show();
+</script></body></html>

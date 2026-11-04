@@ -21,7 +21,7 @@ final class Popup: UIViewController, PageHost {
     private var announced: String?
 
     init(opener: Page, configuration: WKWebViewConfiguration) {
-        page = Page(tab: UUID(), space: opener.space, configuration: configuration)
+        page = Page(tab: UUID(), space: opener.space, configuration: configuration, keyboardByWindow: false)
         super.init(nibName: nil, bundle: nil)
         page.host = self
         modalPresentationStyle = .formSheet

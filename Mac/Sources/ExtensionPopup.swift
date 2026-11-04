@@ -504,9 +504,11 @@ private struct PopupPaneBody: View {
                     }
                 }
         }
-        // As narrow as the page wants, down to what its header needs.
-        .frame(minWidth: 240, alignment: .leading)
-        .fixedSize()
+        // As wide as the page, down to what its header needs: a long name
+        // is cut short in the header, and never widens the pane past its
+        // page (Grammarly's left a band of empty glass beside it).
+        .frame(width: max(240, size.width + 2 * PopupMetrics.inset), alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
         .clipShape(shape)
         .glassEffect(.regular.tint(Color(nsColor: .windowBackgroundColor).opacity(0.75)), in: shape)
         .shadow(color: .black.opacity(0.08), radius: 2, y: 1)

@@ -25,8 +25,8 @@ settings:
     # time (Docs/iPhoneDuoPlan.md, Phase E).
     SWIFT_VERSION: "5.0"
     SWIFT_EMIT_LOC_STRINGS: YES
-    MARKETING_VERSION: "1.1.0"
-    CURRENT_PROJECT_VERSION: "42"
+    MARKETING_VERSION: "1.1.1"
+    CURRENT_PROJECT_VERSION: "50"
 packages:
   WebEngineKit:
     path: WebEngineKit

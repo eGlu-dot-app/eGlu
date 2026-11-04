@@ -89,10 +89,10 @@ private final class Fixture: NSObject, WKWebExtensionControllerDelegate, WKNavig
         let context = WKWebExtensionContext(for: package)
         context.uniqueIdentifier = "abcdefghijklmnopabcdefghijklmnop"
         context.baseURL = URL(string: "chrome-extension://abcdefghijklmnopabcdefghijklmnop/")!
-        for permission in package.requestedPermissions where !ExtensionPolicy.deniedPermissions.contains(permission.rawValue) {
+        for permission in package.requestedPermissions where !ExtensionPolicy.heldPermissions.contains(permission.rawValue) {
             context.setPermissionStatus(.grantedExplicitly, for: permission)
         }
-        for permission in ExtensionPolicy.deniedPermissions {
+        for permission in ExtensionPolicy.heldPermissions {
             context.setPermissionStatus(.deniedExplicitly, for: WKWebExtension.Permission(rawValue: permission))
         }
         for site in ExtensionPolicy.deniedSites {

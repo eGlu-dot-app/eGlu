@@ -5,6 +5,7 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 import WebKit
+import os
 
 /// The tab a sideways drag on the phone bar brings in: from the right (1)
 /// or the left (-1), and whether the bar will say its name or its address.
@@ -277,6 +278,14 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
     /// The tabs down the window's side, in place of the row along the top
     /// and the address bar (Settings › Tabs).
     private var sideTabs: UIHostingController<SideTabs>?
+    /// The hover card is a window child so it can extend past the sidebar.
+    private var tabHoverCard: UIHostingController<TabHoverCard>?
+    private var hoveredTab: TabHover?
+    private var tabHoverSpace: UUID?
+    private var tabHoverWork: DispatchWorkItem?
+    private var tabHoverCloseWork: DispatchWorkItem?
+    private var hoveringTab = false
+    private var hoveringTabCard = false
     /// What moves the stack, the sidebar and the phone bar between layouts.
     private let chromeConstraints = ChromeConstraints()
     /// Wider than a phone, the window is the Mac's, with the tabs along the
@@ -317,9 +326,6 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
     private var afterTabs: BarAction?
     /// Behind the phone bar: the page through it, blurred more the lower it is (BarBackdrop).
     private let barBackdrop = BarBackdrop()
-    /// Behind the iPhone Duo's strip, beside the page: the page's edge on
-    /// that side drawn on across it (placeStripGround).
-    private let stripGround = UIImageView()
     private var addressBar: UIHostingController<AddressBar>?
     /// The space's bookmarks under the bars, where the tabs are along the top (BookmarksStrip).
     private var bookmarksStrip: UIHostingController<BookmarksStrip>?
@@ -431,6 +437,22 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)
             .sink { [weak self] _ in self?.keyboardStarted() }
             .store(in: &subscriptions)
+        // The page is laid out above a docked keyboard (pageRoom), so every
+        // move of the keyboard lays the window out again. Nothing else did
+        // when it went: the page stayed cut short where the keyboard had
+        // been, the card's ground showing under it. Once as it starts to
+        // move, and again when it has, by which time the keyboard's guide
+        // has its new place for certain.
+        for notification in [UIResponder.keyboardWillChangeFrameNotification, UIResponder.keyboardDidChangeFrameNotification] {
+            NotificationCenter.default.publisher(for: notification)
+                .sink { [weak self] _ in self?.view.setNeedsLayout() }
+                .store(in: &subscriptions)
+        }
+        // WebKit hears none of it (PageView): the field being typed in is
+        // brought above the keyboard here, once the page is cut short to it.
+        NotificationCenter.default.publisher(for: UIResponder.keyboardDidChangeFrameNotification)
+            .sink { [weak self] _ in self?.revealFocusAboveKeyboard() }
+            .store(in: &subscriptions)
         for notification in [UIAccessibility.voiceOverStatusDidChangeNotification, UIAccessibility.switchControlStatusDidChangeNotification] {
             NotificationCenter.default.publisher(for: notification)
                 .receive(on: DispatchQueue.main)
@@ -476,6 +498,9 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         resumeWelcomeIfNeeded()
         askAboutWritingIfNeeded()
         if let pendingBookmarkImport { showBookmarkImport(pendingBookmarkImport) }
+        #if DEBUG
+        StripTour.start(in: self)
+        #endif
     }
 
     /// Only one window welcomes, however many open at a first launch.
@@ -539,6 +564,7 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
     /// The window is gone (its scene was closed): its page stays, off
     /// screen now, for the Freezer to decide about.
     func disconnect() {
+        hideTabHover()
         connected = false
         let ownedWelcome = Browser.welcomeOwner === self
         if ownedWelcome { Browser.welcomeOwner = nil }
@@ -574,12 +600,6 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
             ground.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
         ])
         windowGround = ground
-        // Stretched across from a picture one point wide, smoothly (Page.stripEdge).
-        stripGround.contentMode = .scaleToFill
-        stripGround.isUserInteractionEnabled = false
-        stripGround.isHidden = true
-        stripGround.accessibilityElementsHidden = true
-        view.insertSubview(stripGround, aboveSubview: ground.view)
         for (shadow, opacity, radius, drop) in [(cardShadow, Float(0.08), CGFloat(14), CGFloat(6)), (cardEdge, 0.16, 1, 0.5)] {
             shadow.isUserInteractionEnabled = false
             shadow.isHidden = true
@@ -623,6 +643,11 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         let banner = embed(BannerBar(window: model) { [weak self] in self?.act($0) })
         banner.sizingOptions = .intrinsicContentSize
         bannerBar = banner
+        // Over the page in the stack, which runs on under the iPhone Duo's
+        // strip (placeUnderStrip): what these say keeps clear of the strip.
+        saveStatus.safeAreaRegions = .container
+        splitStatus.safeAreaRegions = .container
+        banner.safeAreaRegions = .container
 
         stage.clipsToBounds = true
         stage.backgroundColor = Palette.UI.ground
@@ -829,6 +854,7 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         // A sixth of the way down, as Spotlight's sits, and clear of the bars in a short window.
         let down = max(72, (view.bounds.height * 0.16).rounded())
         if let commandBarTop, commandBarTop.constant != down { commandBarTop.constant = down }
+        placeTabHover()
     }
 
     /// The stage has this pass's frame: the panes go in it, and the cards'
@@ -1002,6 +1028,7 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
     /// rows along the top on a wide window, the bar at the bottom on a
     /// phone-width one, as tall as its form.
     private func show(_ layout: ChromeLayout) {
+        hideTabHover()
         let phone = layout.phoneBar != nil
         if sideTabs?.view.isHidden == layout.sidebar {
             sideTabs?.view.isHidden = !layout.sidebar
@@ -1106,13 +1133,13 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         }
         if barBackdrop.overrideUserInterfaceStyle != footStyle { barBackdrop.overrideUserInterfaceStyle = footStyle }
         barBackdrop.tint = foot?.uiColor
-        // The iPhone Duo strip's items read on what is behind them: the page's
-        // edge drawn on across it (placeStripGround), else the window's colour;
-        // at its foot on a phone, the bar's ground, which runs on under the strip.
+        // The iPhone Duo strip's items read on what is behind them: the
+        // page, which runs on under the strip, or the window's colour, as
+        // the bars along the top do; at its foot on a phone, the bar's
+        // ground, which runs on under the strip.
         if let navigation = navigationController {
-            let column = stripGround.isHidden ? nil : page?.stripColumn
-            let top = column.map { $0.top.isDark ? UIUserInterfaceStyle.dark : .light } ?? style
-            let bottom = model.phone ? footStyle : column.map { $0.foot.isDark ? UIUserInterfaceStyle.dark : .light } ?? style
+            let top = style
+            let bottom = model.phone ? footStyle : style
             if navigation.navigationBar.overrideUserInterfaceStyle != top { navigation.navigationBar.overrideUserInterfaceStyle = top }
             if navigation.toolbar.overrideUserInterfaceStyle != bottom { navigation.toolbar.overrideUserInterfaceStyle = bottom }
         }
@@ -1279,6 +1306,7 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
     /// forward there instead when you asked for it; a window coming back
     /// takes another tab of its space, or none.
     func show(tab id: UUID?, inSpace space: UUID, userInitiated: Bool = true) {
+        hideTabHover()
         pinnedControl.close()
         let session = Session.shared
         guard let id, let record = session.workspace.tab(id), let owner = session.workspace.spaceID(of: id) else {
@@ -1357,6 +1385,11 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
     /// popover does, and still goes where it was meant to.
     private func pressed(_ keys: UIKeyModifierFlags, at point: CGPoint) {
         model.lastPress = (keys, Date())
+        if let card = tabHoverCard?.view, !card.bounds.contains(card.convert(point, from: nil)) {
+            hideTabHover()
+        } else if tabHoverCard == nil {
+            hideTabHover()
+        }
         // The touch is the window's; the bookmarks' frame the sidebar's (SideTabs.space).
         guard model.bookmarksOpen, let side = sideTabs?.view,
               !model.bookmarksFrame.contains(side.convert(point, from: nil))
@@ -1523,7 +1556,7 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
             let ground = divider.isHidden ? Palette.UI.ground : .clear
             stage.backgroundColor = clear ? (page?.footColor?.uiColor ?? page?.view.underPageBackgroundColor ?? ground) : ground
         }
-        placeStripGround()
+        placeUnderStrip()
         layoutMeasureCard()
         picture.frame = main
         // The start page runs on under the bar too, its own ground behind
@@ -1658,6 +1691,15 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
     /// Whether the page on screen was last laid out clear of the phone bar (Page.standsClear).
     private var laidClear = false
 
+    /// The keyboard has come to rest: if it cut the page short, the field
+    /// typed in is brought into what is left (Page.revealFocus).
+    private func revealFocusAboveKeyboard() {
+        view.layoutIfNeeded()
+        guard pageRoom != stage.bounds else { return }
+        page?.revealFocus()
+        partner?.revealFocus()
+    }
+
     private var pageRoom: CGRect {
         FootRoom.aboveKeyboard(stage.bounds,
                                keyboard: stage.convert(view.keyboardLayoutGuide.layoutFrame, from: view),
@@ -1682,47 +1724,105 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         return view.safeAreaInsets.right >= view.safeAreaInsets.left ? .maxXEdge : .minXEdge
     }
 
-    /// Behind the iPhone Duo's strip, beside the page, the page's edge on
-    /// that side drawn on across it (Page.stripColumn): a header's colour
-    /// beside the header, a gradient going on, the page's ground beside the
-    /// ground, as if the page reached the window's edge. Only where the page
-    /// is edge to edge and meets the strip: on a card, beside a split or a
-    /// sidebar, in the desktop view and on the start page the window's own
-    /// colour stands behind the strip.
-    private func placeStripGround() {
-        // From the safe area's edge to the window's. Measured by the stack,
-        // which never moves: a sideways swipe moves the stage.
-        let safe = view.bounds.inset(by: view.safeAreaInsets)
-        let meets: (CGRectEdge) -> Bool = { [stack] side in
-            side == .maxXEdge ? abs(stack.frame.maxX - safe.maxX) < 1 : abs(stack.frame.minX - safe.minX) < 1
+    /// The page on under the iPhone Duo's strip to the window's edge: its
+    /// pictures, colours and text seen through the strip's glass, and what
+    /// can be pressed on it moved out from under the strip's items by
+    /// strip.js, told where they are (stripCover; Docs/iPhoneDuoDesign.md §9).
+    /// Only where the page is edge to edge beside the strip, so only in a
+    /// phone-width window: on a card (every wider window is one, show),
+    /// beside a split, in the desktop view, on the start page, and on a
+    /// hands-off page, which gets no scripts, it stops at the strip, the
+    /// window's own colour behind it.
+    /// `measuring` on a layout pass, where the strip's items are looked for
+    /// again; otherwise (a page's change, several times a second while it
+    /// scrolls) the strip as last measured, asking the system nothing.
+    private func placeUnderStrip(measuring: Bool = true) {
+        // The pane beside never runs under the strip: hidden in a phone-width
+        // window, beside a split in a wider one. One that ran under it before
+        // (the panes swapped) lets it go, or it would keep making room for it.
+        partner?.strip = nil
+        let edgeToEdge = model.url != nil && !carded && divider.isHidden
+            && page.map { desktopPad?.page !== $0 && !$0.isHandsOff } == true
+        let side = edgeToEdge ? stripSide : nil
+        let width = side == .maxXEdge ? view.safeAreaInsets.right : side == .minXEdge ? view.safeAreaInsets.left : 0
+        let reach = width > 0 ? side : nil
+        if laidUnderStrip != reach || laidStripWidth != width {
+            laidUnderStrip = reach
+            laidStripWidth = width
+            chromeConstraints.reachUnderStrip(reach, width: width,
+                                              rightToLeft: view.effectiveUserInterfaceLayoutDirection == .rightToLeft)
+            view.setNeedsLayout()
         }
-        let edgeToEdge = model.url != nil && !carded && divider.isHidden && page.map { desktopPad?.page !== $0 } == true
-        let side = edgeToEdge ? stripSide.flatMap { meets($0) ? $0 : nil } : nil
-        // Looked at only while it is drawn on.
-        page?.stripEdge = side
-        guard let side, let page, let column = page.stripColumn else {
-            stripGround.isHidden = true
+        // Once the page reaches the window's edge: told meanwhile, it would move what is still clear of the strip.
+        let under = reach.map { reach in abs(reach == .maxXEdge ? stack.frame.maxX - view.bounds.maxX : stack.frame.minX) < 1 } ?? false
+        guard under, let reach else {
+            measuredStrip = nil
+            page?.strip = nil
             return
         }
-        let start = side == .maxXEdge ? safe.maxX : view.bounds.minX
-        let end = side == .maxXEdge ? view.bounds.maxX : safe.minX
-        // As high as the page's edge it was drawn from (to the phone bar, whose
-        // blur goes on under the strip), in the stage, which the swipe moves only sideways.
-        let shown = stack.convert(stage.frame, to: view)
-        let frame = CGRect(x: start, y: shown.minY + page.view.frame.minY, width: max(0, end - start), height: column.height)
-        if stripGround.frame != frame { stripGround.frame = frame }
-        if stripGround.image !== column.picture {
-            if stripGround.isHidden || stripGround.image == nil {
-                stripGround.image = column.picture
-            } else {
-                // The page scrolled or changed under it: eased, as the bar's ground is.
-                UIView.transition(with: stripGround, duration: 0.2, options: [.transitionCrossDissolve, .allowUserInteraction]) {
-                    self.stripGround.image = column.picture
-                }
-            }
-        }
-        stripGround.isHidden = frame.width < 1 || frame.height < 1
+        if measuring || measuredStrip == nil { measuredStrip = stripCover(on: reach) }
+        page?.strip = measuredStrip
     }
+
+    /// The side the page runs on under the strip, and how far, as last laid out (placeUnderStrip).
+    private var laidUnderStrip: CGRectEdge?
+    private var laidStripWidth: CGFloat = 0
+    /// The strip as the last layout pass found it (stripCover).
+    private var measuredStrip: DuoLayout.Strip? {
+        didSet {
+            guard measuredStrip != oldValue, let strip = measuredStrip else { return }
+            let bands = strip.bands.map { "\(Int($0[0]))–\(Int($0[1]))" }.joined(separator: " ")
+            let line = "strip \(strip.side.rawValue) \(Int(strip.width)) pt, "
+                + "\(strip.known ? "items placed" : "an item unplaced, all one band"): \(bands) · \(stripSources)"
+            Diagnostics.strip = line
+            Self.stripLog.info("\(line, privacy: .public)")
+        }
+    }
+    /// What the last stripCover found, for the log and Diagnostics.
+    private var stripSources = ""
+    private static let stripLog = Logger(subsystem: "net.taehee.safience", category: "strip")
+
+    /// What the strip on `side` takes of the page (DuoLayout.Strip), in the
+    /// page view's points: its width, and the bands down it where something
+    /// stands: the status bar's and the cameras' regions, and the system's
+    /// bar's items with its overflow (…), from the items themselves
+    /// (StripItems.frames). The system draws the strip outside the app's
+    /// windows, so nothing of it is found among their views; where it gives
+    /// no place for an item, the whole strip is one band (DuoLayout.stripBands).
+    private func stripCover(on side: CGRectEdge) -> DuoLayout.Strip? {
+        guard let page, let window = view.window else { return nil }
+        let width = side == .maxXEdge ? view.safeAreaInsets.right : view.safeAreaInsets.left
+        guard width > 0 else { return nil }
+        let bounds = window.bounds
+        let column = CGRect(x: side == .maxXEdge ? bounds.maxX - width : bounds.minX, y: bounds.minY,
+                            width: width, height: bounds.height)
+        var occlusions: [CGRect]?
+        if #available(iOS 27.1, *) {
+            occlusions = view.reservedRegions(kind: .occlusion)
+                .map { view.convert($0.frame, to: window) }
+                .filter { $0.intersects(column) }
+        }
+        // An item the system shows elsewhere than in the strip isn't placed in it.
+        var items = (stripItems?.frames(in: window) ?? []).map { $0.flatMap { $0.intersects(column) ? $0 : nil } }
+        #if DEBUG
+        // -stripUnplaced YES: as on a device that gives the items no place, the whole strip one band.
+        if UserDefaults.standard.bool(forKey: "stripUnplaced") { items = items.map { _ in nil } }
+        #endif
+        let shown = page.view.convert(page.view.bounds, to: window)
+        let cover = DuoLayout.stripBands(items: items, occlusions: occlusions, pageTop: shown.minY, pageHeight: shown.height,
+                                         margin: Self.stripMargin)
+        let systemVersion = ProcessInfo.processInfo.operatingSystemVersionString
+        stripSources = "items \(items.map { $0.map { "\(Int($0.minY))–\(Int($0.maxY))" } ?? "none" }.joined(separator: ", "))"
+            + " · regions \(occlusions.map { "\($0.count)" } ?? "unasked") · iOS \(systemVersion)"
+        return DuoLayout.Strip(side: side == .maxXEdge ? .right : .left, width: width, bands: cover.bands, ramp: Self.stripRamp,
+                               known: cover.known)
+    }
+
+    /// Room kept above and below what stands in the strip (the items'
+    /// frames are their symbols', inside their glass), and the height of the
+    /// slant from beside it to clear of it: a finger's width.
+    private static let stripMargin: CGFloat = 8
+    private static let stripRamp: CGFloat = 44
 
     /// The strip's tools stay in reach where the phone bar's go (an address
     /// typed, the tabs out), so what one does first puts those away: the
@@ -1826,6 +1926,7 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
     }
 
     private func showEmpty(space: UUID) {
+        hideTabHover()
         detach()
         model.spaceID = space
         model.tabID = nil
@@ -1940,8 +2041,8 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         if clear != laidClear { layoutPanes() }
         if laidClear { stage.backgroundColor = page.footColor?.uiColor ?? view.underPageBackgroundColor }
         model.set(\.url, to: page.displayURL ?? Session.shared.workspace.tab(page.tab)?.url)
-        // The page's edge beside the strip, as it loads and scrolls.
-        placeStripGround()
+        // Whether the page runs on under the strip: not the start page, nor a hands-off page.
+        placeUnderStrip(measuring: false)
         model.set(\.title, to: view.title ?? "")
         model.set(\.loading, to: view.isLoading)
         if model.load.fraction != view.estimatedProgress { model.load.fraction = view.estimatedProgress }
@@ -2413,6 +2514,12 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
     func act(_ action: BarAction) {
         let session = Session.shared
         switch action {
+        case .hoverTab(let item): beginTabHover(item); return
+        case .leaveTab(let id): leaveTabHover(id); return
+        case .hideTabHover: hideTabHover(); return
+        default: hideTabHover()
+        }
+        switch action {
         case .select(let tab): show(tab: tab, inSpace: session.workspace.spaceID(of: tab) ?? model.spaceID)
         case .close(let tab): closeTab(tab)
         case .closeTabs(let tabs): requestCloseTabs(tabs)
@@ -2490,6 +2597,16 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         case .openInNewTab(let url):
             guard let tab = session.change({ $0.openTab(url, in: model.spaceID, after: model.tabID) }) else { return }
             show(tab: tab, inSpace: model.spaceID)
+        case .openFromBar(let id):
+            if let url = session.workspace.space(model.spaceID).flatMap({ Bookmarks.find(id, in: $0.bookmarks)?.url }) {
+                HistoryRecorder.shared.expect(.bookmark, url)
+            }
+            if let tab = session.change({ $0.openFromBar(id, in: model.spaceID) }) {
+                show(tab: tab, inSpace: model.spaceID)
+            }
+        case .addToBar(let tab, let folder, let before):
+            guard session.workspace.spaceID(of: tab) == model.spaceID else { return }
+            session.change { _ = $0.addToBar(tab, into: folder, before: before) }
         case .toggleBookmark: toggleBookmark()
         case .removeBookmark(let id): session.change { $0.removeBookmark(id, in: model.spaceID) }
         case .newFolder(let name, let parent): session.change { _ = $0.addFolder(named: name, in: parent, of: model.spaceID) }
@@ -2512,10 +2629,126 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         case .inspectFromMac: inspectNote()
         case .splitWith(let other): split(with: other)
         case .splitWithNewTab: splitWithNewTab()
+        case .splitWithPage(let url):
+            guard let tab = model.tabID, let new = session.change({ $0.splitWithNewTab(tab, url: url) }) else { return }
+            show(tab: new, inSpace: model.spaceID)
+            syncSplit()
+            focusPage()
         case .separate(let tab): session.change { $0.separate(tab) }
         case .copy(let url): copy(url)
         case .swapSides(let tab): session.change { $0.swapSides(tab) }
+        case .hoverTab, .leaveTab, .hideTabHover: break
         }
+    }
+
+    /// A pointer resting on a pinned page opens its card after half a second.
+    private func beginTabHover(_ item: TabHover) {
+        guard !model.phone, !model.editingAddress, !item.anchor.isEmpty, !item.anchor.isNull else { return }
+        tabHoverCloseWork?.cancel()
+        hoveringTab = true
+        if hoveredTab?.id == item.id, tabHoverCard != nil { return }
+        hideTabHover()
+        hoveredTab = item
+        tabHoverSpace = model.spaceID
+        hoveringTab = true
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, hoveringTab, hoveredTab?.id == item.id, tabHoverSpace == model.spaceID else { return }
+            showTabHover(item)
+        }
+        tabHoverWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
+    }
+
+    /// Leaving the row and its card allows a short crossing between them.
+    private func leaveTabHover(_ id: UUID) {
+        guard hoveredTab?.id == id else { return }
+        hoveringTab = false
+        tabHoverWork?.cancel()
+        closeTabHoverLater()
+    }
+
+    private func closeTabHoverLater() {
+        tabHoverCloseWork?.cancel()
+        guard !hoveringTab, !hoveringTabCard else { return }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, !hoveringTab, !hoveringTabCard else { return }
+            hideTabHover()
+        }
+        tabHoverCloseWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: work)
+    }
+
+    /// The card belongs to the browser, outside the sidebar's hosting view.
+    private func showTabHover(_ item: TabHover) {
+        let session = Session.shared
+        guard connected, view.window != nil, let space = session.workspace.space(model.spaceID),
+              !model.phone, !model.editingAddress else { return }
+        let tab = item.tab.flatMap { session.workspace.tab($0) }
+        let isOpen = tab.map { $0.isPinned ? Pinned.isOpen($0) : space.isInBar($0) } ?? false
+        let shown = TabHover(id: item.id, tab: tab?.id, title: tab?.label ?? item.title,
+                             url: tab?.url ?? item.url, isOpen: isOpen, anchor: item.anchor, source: item.source)
+        let canSplit = space.otherTabs.contains { $0.id == model.tabID && $0.id != item.tab }
+        let host = UIHostingController(rootView: TabHoverCard(item: shown, canSplit: canSplit, hovering: { [weak self] inside in
+            guard let self else { return }
+            hoveringTabCard = inside
+            if inside { tabHoverCloseWork?.cancel() } else { closeTabHoverLater() }
+        }, act: { [weak self] in self?.act($0) }))
+        host.safeAreaRegions = []
+        host.view.backgroundColor = .clear
+        addChild(host)
+        // A popover's rows need their card above the presentation as well.
+        let container: UIView = item.source == .window ? (view.window ?? view) : view
+        container.addSubview(host.view)
+        host.didMove(toParent: self)
+        tabHoverCard = host
+        placeTabHover()
+    }
+
+    /// Converts each bar's coordinates and keeps the card inside the window.
+    private func placeTabHover() {
+        guard let host = tabHoverCard, let item = hoveredTab, let container = host.view.superview else { return }
+        guard tabHoverSpace == model.spaceID else { hideTabHover(); return }
+        let anchor: CGRect
+        switch item.source {
+        case .sidebar:
+            guard let side = sideTabs?.view, !side.isHidden else { hideTabHover(); return }
+            anchor = view.convert(item.anchor, from: side)
+        case .top:
+            guard let top = topBar?.view, !top.isHidden else { hideTabHover(); return }
+            anchor = view.convert(item.anchor, from: top)
+        case .window:
+            anchor = view.convert(item.anchor, from: nil)
+        }
+        let size = host.sizeThatFits(in: CGSize(width: 260, height: CGFloat.greatestFiniteMagnitude))
+        let bounds = view.bounds.inset(by: UIEdgeInsets(top: view.safeAreaInsets.top + 8, left: 8,
+                                                       bottom: view.safeAreaInsets.bottom + 8, right: 8))
+        var x = item.source == .top ? anchor.minX : anchor.maxX + 8
+        let y = item.source == .top ? anchor.maxY + 8 : anchor.minY
+        if item.source == .sidebar, let side = sideTabs?.view {
+            x = max(x, view.convert(side.bounds, from: side).maxX + 8)
+        } else if item.source == .window, x + 260 > bounds.maxX, anchor.minX - 268 >= bounds.minX {
+            x = anchor.minX - 268
+        }
+        let frame = CGRect(x: min(max(x, bounds.minX), max(bounds.minX, bounds.maxX - 260)),
+                           y: min(max(y, bounds.minY), max(bounds.minY, bounds.maxY - size.height)),
+                           width: 260, height: size.height)
+        host.view.frame = container.convert(frame, from: view)
+    }
+
+    private func hideTabHover() {
+        tabHoverWork?.cancel()
+        tabHoverCloseWork?.cancel()
+        tabHoverWork = nil
+        tabHoverCloseWork = nil
+        hoveredTab = nil
+        tabHoverSpace = nil
+        hoveringTab = false
+        hoveringTabCard = false
+        guard let host = tabHoverCard else { return }
+        tabHoverCard = nil
+        host.willMove(toParent: nil)
+        host.view.removeFromSuperview()
+        host.removeFromParent()
     }
 
     // MARK: Pinned tabs and bookmarks
@@ -2532,7 +2765,12 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         let moving = space.split(containing: tab).map { [$0.left, $0.right] } ?? [tab]
         guard !moving.contains(target),
               let index = space.tabs.filter({ !moving.contains($0.id) }).firstIndex(where: { $0.id == target }) else { return }
-        session.change { $0.moveTab(tab, toIndex: index) }
+        // From the bar's row among the others: out of the bar, its bookmark staying.
+        let amongOthers = space.otherTabs.contains { $0.id == target }
+        session.change { workspace in
+            if amongOthers { workspace.separateFromBar(tab) }
+            workspace.moveTab(tab, toIndex: index)
+        }
     }
 
     private func closeTab(_ id: UUID) {
