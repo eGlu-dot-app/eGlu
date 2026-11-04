@@ -189,6 +189,7 @@
 		795024926FF3860BFFABD5B3 /* Split.swift in Sources */ = {isa = PBXBuildFile; fileRef = 284C993E4AEB18F66C0AAE47 /* Split.swift */; };
 		7A5BD7BC4E073243DA2A7717 /* SVGRaster.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67D1622D20840F5386645C79 /* SVGRaster.swift */; };
 		7AF31EA5C0076A632C0B490B /* CommandBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D9C68923A8768BAA0AB769E /* CommandBar.swift */; };
+		7B2D8E320E5A1051E407D00C /* PageDownloadAndFileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7C0791A3F6DA81A41DC1C4B /* PageDownloadAndFileTests.swift */; };
 		7B65344A3A60B4876F877DA2 /* DockIconKeys.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6CE0B7565C0B79E96D0E0D7 /* DockIconKeys.swift */; };
 		7BA99FB6E4EAD99F9B0FC1E7 /* PageShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = F26C79B66C0BC2E23D7F30D5 /* PageShared.swift */; };
 		7C182C646F1B3F8215CA7259 /* SessionPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDB808F0F91E544C0928D496 /* SessionPreferences.swift */; };
@@ -592,6 +593,7 @@
 		B66540A3A739C184927A5CA7 /* WindowModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowModel.swift; sourceTree = "<group>"; };
 		B67F14D2E31858A4C7AA1C77 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		B78C9065BA100C29ED568057 /* Engineer.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = Engineer.icon; sourceTree = "<group>"; };
+		B7C0791A3F6DA81A41DC1C4B /* PageDownloadAndFileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageDownloadAndFileTests.swift; sourceTree = "<group>"; };
 		B8982665E67E921A6858CCB7 /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
 		BBD98695F13CCA8CBD63163E /* ExtensionReport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionReport.swift; sourceTree = "<group>"; };
 		BC1AB4644B617A408C5773D1 /* PageActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageActions.swift; sourceTree = "<group>"; };
@@ -1024,6 +1026,7 @@
 			children = (
 				E9478617D34AE80447D8EEA7 /* PageBackTests.swift */,
 				1D36C6CE512B1C7506C63C09 /* PageCommandTests.swift */,
+				B7C0791A3F6DA81A41DC1C4B /* PageDownloadAndFileTests.swift */,
 				0EC5B76D8B45ABDBB17A59B3 /* PageEngineTests.swift */,
 				9F9CEFFA794663339F1F6E5D /* PageLifecycleTests.swift */,
 				363CCE6E471185496431C4D5 /* PageNavigationPolicyTests.swift */,
@@ -1434,6 +1437,7 @@
 			files = (
 				880065BDAAACC4524DA8A57F /* PageBackTests.swift in Sources */,
 				F89C24434B16340F6AD92122 /* PageCommandTests.swift in Sources */,
+				7B2D8E320E5A1051E407D00C /* PageDownloadAndFileTests.swift in Sources */,
 				B17B4E6C0800D80806AE320F /* PageEngineTests.swift in Sources */,
 				C44FF14A1BFC5361791F29B0 /* PageLifecycleTests.swift in Sources */,
 				06DDF515B807A3D09E47430E /* PageNavigationPolicyTests.swift in Sources */,

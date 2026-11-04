@@ -327,7 +327,7 @@ final class Page: NSObject {
         view = PageView(frame: .zero, configuration: config)
         super.init()
         view.page = self
-        navigationAdapter = WebKitNavigationAdapter(view: view, policy: self, events: self, legacy: self)
+        navigationAdapter = WebKitNavigationAdapter(view: view, policy: self, events: self)
         view.navigationDelegate = navigationAdapter
         // An extension's page has WebKit's question about recording the
         // screen answered by eGlu's recording channel (ExtensionCapture).
@@ -613,9 +613,9 @@ final class Page: NSObject {
     private func request(_ url: URL) {
         if url.isFileURL {
             FileAccess.open(url)
-            view.loadFileURL(url, allowingReadAccessTo: url)
+            navigationAdapter.loadFile(url, allowingReadAccessTo: url)
         } else {
-            view.load(URLRequest(url: url))
+            navigationAdapter.load(URLRequest(url: url))
         }
     }
 
@@ -1438,7 +1438,7 @@ final class Page: NSObject {
 
 // MARK: - WebKit's questions
 
-extension Page: WKNavigationDelegate, WKUIDelegate {
+extension Page: WKUIDelegate {
     /// WebKit's private way to hear which element a context menu is for:
     /// its link is kept for "Handoff Linked File", the menu itself shown
     /// as proposed, so willOpenMenu sees it all.
@@ -1468,21 +1468,6 @@ extension Page: WKNavigationDelegate, WKUIDelegate {
 
     private var isDark: Bool {
         view.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-    }
-
-    func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {
-        downloading(download)
-    }
-
-    func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) {
-        downloading(download)
-    }
-
-    /// A tab that was only ever the file's way in, with no page of its own
-    /// to show, goes once the download has begun, as Safari's does.
-    private func downloading(_ download: WKDownload) {
-        Downloads.shared.adopt(download, from: self)
-        if committed == nil, !view.canGoBack { host?.pageDidClose(self) }
     }
 
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
@@ -1596,6 +1581,17 @@ extension Page: WKNavigationDelegate, WKUIDelegate {
 // MARK: Navigation events
 
 extension Page: WebNavigationEvents {
+    /// A tab that was only ever the file's way in, with no page of its own
+    /// to show, goes once the download has begun, as Safari's does.
+    func navigationBecameDownload(_ download: any WebEngineCore.WebDownload) {
+        guard let download = (download as? WebKitDownload)?.download else {
+            assertionFailure("Expected a WebKitDownload")
+            return
+        }
+        Downloads.shared.adopt(download, from: self)
+        if committed == nil, !view.canGoBack { host?.pageDidClose(self) }
+    }
+
     func navigationStarted(url: URL?) {
         loadingFrom = url
     }

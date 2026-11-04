@@ -3,6 +3,20 @@ import WebEngineCore
 import XCTest
 
 final class WebNavigationTests: XCTestCase {
+    @MainActor
+    func testRequestLoaderAcceptsRequestsAndSeparateFileReadAccess() {
+        let fake = RequestLoader()
+        let loader: any WebRequestLoading = fake
+        let request = URLRequest(url: URL(string: "https://example.com/")!)
+        let file = URL(fileURLWithPath: "/fixture/page.html")
+        let access = file.deletingLastPathComponent()
+        loader.load(request)
+        loader.loadFile(file, allowingReadAccessTo: access)
+        XCTAssertEqual(fake.requests, [request])
+        XCTAssertEqual(fake.files.map(\.url), [file])
+        XCTAssertEqual(fake.files.map(\.access), [access])
+    }
+
     func testInitializersPreserveEveryField() {
         var request = URLRequest(url: URL(string: "https://example.com:8443/path?q=1")!,
                                  cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 17)
@@ -106,5 +120,15 @@ final class WebNavigationTests: XCTestCase {
         XCTAssertNotEqual(origin, .tuple(scheme: "https", host: "example.com", port: 8443))
         XCTAssertNotEqual(origin, .opaque)
         XCTAssertEqual(WebOrigin.opaque, .opaque)
+    }
+}
+
+@MainActor
+private final class RequestLoader: WebRequestLoading {
+    var requests: [URLRequest] = []
+    var files: [(url: URL, access: URL)] = []
+    func load(_ request: URLRequest) { requests.append(request) }
+    func loadFile(_ url: URL, allowingReadAccessTo readAccessURL: URL) {
+        files.append((url, readAccessURL))
     }
 }

@@ -1,61 +1,23 @@
 import WebEngineCore
 import WebKit
 
-/// Owns action and response decisions and the main-frame load lifecycle.
-/// Download callbacks and any other selectors still implemented by the page
-/// go to the legacy delegate.
-///
-/// It must not outlive its legacy delegate: WebKit remembers which selectors
-/// a delegate answers when it is assigned, and one forwarded to a delegate
-/// that has gone would raise. Page owns its adapter, and WebKit holds its
-/// navigation delegate weakly, so the two go together.
+/// The web view's whole navigation delegate: decisions, lifecycle and downloads.
+/// WebKit's private UI-delegate callbacks (context menu and unused wheel events)
+/// are not navigation-delegate calls and stay with Page as its UI delegate.
 @MainActor
 public final class WebKitNavigationAdapter: NSObject, WKNavigationDelegate, WebRequestLoading {
     private weak var view: WKWebView?
     private weak var policy: (any WebNavigationPolicy)?
     private weak var events: (any WebNavigationEvents)?
-    private weak var legacy: (any WKNavigationDelegate)?
 
     /// Complete construction before assigning the adapter as navigationDelegate:
     /// WebKit caches the selectors the delegate responds to at assignment.
     public init(view: WKWebView, policy: any WebNavigationPolicy,
-                events: any WebNavigationEvents, legacy: any WKNavigationDelegate) {
+                events: any WebNavigationEvents) {
         self.view = view
         self.policy = policy
         self.events = events
-        self.legacy = legacy
         super.init()
-    }
-
-    public override func responds(to selector: Selector!) -> Bool {
-        if super.responds(to: selector) { return true }
-        // Every form of the decision on a navigation is the policy's, never
-        // the legacy delegate's: WebKit asks the `preferences:` form first.
-        let name = NSStringFromSelector(selector)
-        if name.contains("decidePolicyForNavigationAction") || name.contains("decidePolicyForNavigationResponse") {
-            return false
-        }
-        // WebKit asks on the main thread; anything asking elsewhere gets the
-        // adapter's own answer rather than a crash.
-        guard Thread.isMainThread else { return false }
-        return MainActor.assumeIsolated { legacy?.responds(to: selector) ?? false }
-    }
-
-    public override func forwardingTarget(for selector: Selector!) -> Any? {
-        // Implemented selectors belong to the adapter, never the legacy delegate.
-        if super.responds(to: selector) { return super.forwardingTarget(for: selector) }
-        guard Thread.isMainThread else { return super.forwardingTarget(for: selector) }
-        let target = MainActor.assumeIsolated { () -> (any WKNavigationDelegate)? in
-            // As in responds(to:): a decision is never the legacy delegate's.
-            let name = NSStringFromSelector(selector)
-            if name.contains("decidePolicyForNavigationAction") || name.contains("decidePolicyForNavigationResponse") {
-                return nil
-            }
-            if let legacy, legacy.responds(to: selector) { return legacy }
-            return nil as (any WKNavigationDelegate)?
-        }
-        if let target { return target }
-        return super.forwardingTarget(for: selector)
     }
 
     public func snapshot(_ action: WKNavigationAction) -> WebNavigation {
@@ -213,6 +175,14 @@ public final class WebKitNavigationAdapter: NSObject, WKNavigationDelegate, WebR
         events?.contentProcessEnded()
     }
 
+    public func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {
+        events?.navigationBecameDownload(WebKitDownload(download))
+    }
+
+    public func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) {
+        events?.navigationBecameDownload(WebKitDownload(download))
+    }
+
     /// A load that failed for a reason worth telling: not one that was
     /// stopped, nor one that became a download.
     static func loadError(_ error: Error) -> WebLoadError {
@@ -233,11 +203,14 @@ public final class WebKitNavigationAdapter: NSObject, WKNavigationDelegate, WebR
         view?.load(request)
     }
 
+    public func loadFile(_ url: URL, allowingReadAccessTo readAccessURL: URL) {
+        view?.loadFileURL(url, allowingReadAccessTo: readAccessURL)
+    }
+
     public func tearDown() {
         if view?.navigationDelegate === self { view?.navigationDelegate = nil }
         view = nil
         policy = nil
         events = nil
-        legacy = nil
     }
 }

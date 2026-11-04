@@ -14,6 +14,8 @@ final class NavigationEventsRecorder: WebNavigationEvents {
 
     var received: [Event] = []
     var onEvent: ((Event) -> Void)?
+    var downloads: [any WebEngineCore.WebDownload] = []
+    var onDownload: ((any WebEngineCore.WebDownload) -> Void)?
 
     private func record(_ event: Event) {
         received.append(event)
@@ -26,24 +28,16 @@ final class NavigationEventsRecorder: WebNavigationEvents {
     func navigationFinished() { record(.finished) }
     func navigationFailed(_ error: WebLoadError, provisional: Bool) { record(.failed(error, provisional: provisional)) }
     func contentProcessEnded() { record(.processEnded) }
+    func navigationBecameDownload(_ download: any WebEngineCore.WebDownload) {
+        downloads.append(download)
+        onDownload?(download)
+    }
 }
 
 @MainActor
 private final class AllowPolicy: WebNavigationPolicy {
     func decideNavigation(_ navigation: WebNavigation, reply: @MainActor (WebNavigationDecision) -> Void) { reply(.allow) }
     func decideResponse(_ response: WebResponse, reply: @MainActor (WebResponseDecision) -> Void) { reply(.allow) }
-}
-
-@MainActor
-private final class LifecycleLegacyDelegate: NSObject, WKNavigationDelegate {
-    var calls = 0
-    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) { calls += 1 }
-    func webView(_ webView: WKWebView, didReceiveServerRedirectForProvisionalNavigation navigation: WKNavigation!) { calls += 1 }
-    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) { calls += 1 }
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { calls += 1 }
-    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { calls += 1 }
-    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { calls += 1 }
-    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { calls += 1 }
 }
 
 private final class LifecycleSchemeHandler: NSObject, WKURLSchemeHandler {
@@ -69,6 +63,33 @@ private final class LifecycleSchemeHandler: NSObject, WKURLSchemeHandler {
 }
 
 final class WebKitNavigationEventsTests: XCTestCase {
+    @MainActor
+    func testLoadFileReportsStartedCommittedFinishedWithFileURL() async throws {
+        // A folder of its own in the temporary folder, readable as a whole, so
+        // the read-access address differs from the file's.
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let url = folder.appendingPathComponent("page.html")
+        try Data("<!doctype html><title>file</title><p>offline file</p>".utf8).write(to: url)
+        let view = makeView()
+        let policy = AllowPolicy()
+        let events = NavigationEventsRecorder()
+        let adapter = WebKitNavigationAdapter(view: view, policy: policy, events: events)
+        view.navigationDelegate = adapter
+        defer { view.stopLoading(); adapter.tearDown() }
+        let done = expectation(description: "file load finished")
+        events.onEvent = { event in
+            if event == .finished { done.fulfill() }
+            if case .failed = event { XCTFail("file fixture must succeed"); done.fulfill() }
+        }
+        let loader: any WebRequestLoading = adapter
+        loader.loadFile(url, allowingReadAccessTo: folder)
+        await fulfillment(of: [done], timeout: 10)
+        XCTAssertEqual(events.received, [.started(url), .committed(url), .finished])
+        XCTAssertEqual(view.url, url)
+    }
+
     @MainActor
     private func makeView(handler: LifecycleSchemeHandler? = nil) -> WKWebView {
         let configuration = WKWebViewConfiguration()
@@ -107,8 +128,7 @@ final class WebKitNavigationEventsTests: XCTestCase {
         let view = makeView(handler: LifecycleSchemeHandler())
         let policy = AllowPolicy()
         let events = NavigationEventsRecorder()
-        let legacy = LifecycleLegacyDelegate()
-        let adapter = WebKitNavigationAdapter(view: view, policy: policy, events: events, legacy: legacy)
+        let adapter = WebKitNavigationAdapter(view: view, policy: policy, events: events)
         view.navigationDelegate = adapter
         defer { view.stopLoading(); adapter.tearDown() }
         let done = expectation(description: "offline load finished")
@@ -123,7 +143,6 @@ final class WebKitNavigationEventsTests: XCTestCase {
         adapter.webView(view, didReceiveServerRedirectForProvisionalNavigation: nil)
         adapter.webViewWebContentProcessDidTerminate(view)
         XCTAssertEqual(events.received, [.started(url), .committed(url), .finished, .redirected(url), .processEnded])
-        XCTAssertEqual(legacy.calls, 0)
     }
 
     @MainActor
@@ -134,8 +153,7 @@ final class WebKitNavigationEventsTests: XCTestCase {
         let view = makeView(handler: LifecycleSchemeHandler(error: original))
         let policy = AllowPolicy()
         let events = NavigationEventsRecorder()
-        let legacy = LifecycleLegacyDelegate()
-        let adapter = WebKitNavigationAdapter(view: view, policy: policy, events: events, legacy: legacy)
+        let adapter = WebKitNavigationAdapter(view: view, policy: policy, events: events)
         view.navigationDelegate = adapter
         defer { view.stopLoading(); adapter.tearDown() }
         let done = expectation(description: "offline load failed")
@@ -146,7 +164,6 @@ final class WebKitNavigationEventsTests: XCTestCase {
         adapter.load(URLRequest(url: url))
         await fulfillment(of: [done], timeout: 10)
         XCTAssertEqual(events.received, [.started(url), .failed(WebKitNavigationAdapter.loadError(original), provisional: true)])
-        XCTAssertEqual(legacy.calls, 0)
     }
 
     @MainActor
@@ -161,12 +178,11 @@ final class WebKitNavigationEventsTests: XCTestCase {
     }
 
     @MainActor
-    func testAllCallbacksReportSynchronouslyAndNeverForwardToLegacy() {
+    func testAllLifecycleCallbacksReportSynchronously() {
         let view = makeView()
         let policy = AllowPolicy()
         let events = NavigationEventsRecorder()
-        let legacy = LifecycleLegacyDelegate()
-        let adapter = WebKitNavigationAdapter(view: view, policy: policy, events: events, legacy: legacy)
+        let adapter = WebKitNavigationAdapter(view: view, policy: policy, events: events)
         defer { adapter.tearDown() }
         let selectors = [
             #selector(WKNavigationDelegate.webView(_:didStartProvisionalNavigation:)),
@@ -178,7 +194,6 @@ final class WebKitNavigationEventsTests: XCTestCase {
             #selector(WKNavigationDelegate.webViewWebContentProcessDidTerminate(_:)),
         ]
         for selector in selectors {
-            XCTAssertTrue(legacy.responds(to: selector))
             XCTAssertTrue(adapter.responds(to: selector))
             XCTAssertNil(adapter.forwardingTarget(for: selector))
         }
@@ -187,27 +202,23 @@ final class WebKitNavigationEventsTests: XCTestCase {
         let mapped = WebKitNavigationAdapter.loadError(original)
         XCTAssertEqual(events.received, [.started(nil), .redirected(nil), .committed(nil), .finished,
                                          .failed(mapped, provisional: false), .failed(mapped, provisional: true), .processEnded])
-        XCTAssertEqual(legacy.calls, 0)
         adapter.tearDown()
         reportAllCallbacks(adapter, view: view, error: original)
         XCTAssertEqual(events.received.count, 7, "teardown clears the events reference while its owner is still alive")
-        XCTAssertEqual(legacy.calls, 0)
     }
 
     @MainActor
     func testAdapterHoldsEventsWeakly() {
         let view = makeView()
         let policy = AllowPolicy()
-        let legacy = LifecycleLegacyDelegate()
         weak var weakEvents: NavigationEventsRecorder?
         let adapter = autoreleasepool {
             let events = NavigationEventsRecorder()
             weakEvents = events
-            return WebKitNavigationAdapter(view: view, policy: policy, events: events, legacy: legacy)
+            return WebKitNavigationAdapter(view: view, policy: policy, events: events)
         }
         XCTAssertNil(weakEvents)
         reportAllCallbacks(adapter, view: view, error: NSError(domain: "fixture", code: 1))
-        XCTAssertEqual(legacy.calls, 0)
         adapter.tearDown()
     }
 }

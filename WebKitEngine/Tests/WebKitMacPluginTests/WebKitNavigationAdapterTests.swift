@@ -48,26 +48,6 @@ private final class Policy: WebNavigationPolicy {
     }
 }
 
-@MainActor
-private final class LegacyDelegate: NSObject, WKNavigationDelegate {
-    var finished: (() -> Void)?
-    var wheel: ((NSEvent) -> Void)?
-    var responseCalls = 0
-
-    func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,
-                 decisionHandler: @escaping @MainActor (WKNavigationResponsePolicy) -> Void) {
-        responseCalls += 1
-        decisionHandler(.cancel)
-    }
-
-    @objc func webView(_ webView: WKWebView, decidePolicyForNavigationResponse response: WKNavigationResponse,
-                       unusedVariant: AnyObject) {}
-
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { finished?() }
-
-    @objc func _webView(_ webView: WKWebView, didNotHandleWheelEvent event: NSEvent) { wheel?(event) }
-}
-
 /// Every fixture is local; WebKit supplies the real navigation response.
 private final class ResponseSchemeHandler: NSObject, WKURLSchemeHandler {
     static let scheme = "eglu-response-test"
@@ -96,7 +76,74 @@ private final class ResponseSchemeHandler: NSObject, WKURLSchemeHandler {
     func webView(_ webView: WKWebView, stop urlSchemeTask: any WKURLSchemeTask) {}
 }
 
+/// No test download may get a destination, even if cancellation races its response.
+@MainActor
+private final class NoFileDownloadDelegate: NSObject, WKDownloadDelegate {
+    func download(_ download: WKDownload, decideDestinationUsing response: URLResponse,
+                  suggestedFilename: String, completionHandler: @escaping @MainActor (URL?) -> Void) {
+        completionHandler(nil)
+    }
+}
+
 final class WebKitNavigationAdapterTests: XCTestCase {
+    @MainActor
+    private func checkDownload(fromResponse: Bool) async throws {
+        let view = makeView(schemeHandler: ResponseSchemeHandler())
+        let policy = Policy()
+        let events = NavigationEventsRecorder()
+        let adapter = WebKitNavigationAdapter(view: view, policy: policy, events: events)
+        let noFile = NoFileDownloadDelegate()
+        view.navigationDelegate = adapter
+        defer { view.stopLoading(); adapter.tearDown() }
+        let received = expectation(description: "navigation became a download")
+        let cancelled = expectation(description: "download cancelled without writing a file")
+        // WebKit cannot turn a custom scheme's response into a download (it
+        // stops the load with WebKitErrorDomain 102 instead), so the response's
+        // case is a data: address, which it can.
+        let url = fromResponse ? URL(string: "data:text/html,%3Ctitle%3Edownload%3C/title%3E")!
+            : ResponseSchemeHandler.url("action-download")
+        var actions = 0
+        var responses = 0
+        policy.decide = { navigation, reply in
+            actions += 1
+            XCTAssertEqual(navigation.request.url, url)
+            reply(fromResponse ? .allow : .download)
+        }
+        policy.response = { response, reply in
+            responses += 1
+            XCTAssertEqual(response.response.url, url)
+            reply(.download)
+        }
+        events.onDownload = { download in
+            received.fulfill()
+            guard let wrapper = download as? WebKitDownload else {
+                XCTFail("download must wrap WebKit's own object")
+                return
+            }
+            XCTAssertEqual(wrapper.originalURL, url)
+            XCTAssertEqual(wrapper.originalURL, wrapper.download.originalRequest?.url)
+            wrapper.download.delegate = noFile
+            wrapper.download.cancel { _ in cancelled.fulfill() }
+        }
+        adapter.load(URLRequest(url: url))
+        await fulfillment(of: [received, cancelled], timeout: 10)
+        XCTAssertEqual(actions, 1)
+        XCTAssertEqual(responses, fromResponse ? 1 : 0)
+        XCTAssertEqual(events.downloads.count, 1)
+        adapter.tearDown()
+        XCTAssertEqual(events.downloads.first?.originalURL, url, "the host's download outlives the adapter")
+    }
+
+    @MainActor
+    func testActionDownloadIsReportedOnceWithOriginalURL() async throws {
+        try await checkDownload(fromResponse: false)
+    }
+
+    @MainActor
+    func testResponseDownloadIsReportedOnceWithOriginalURL() async throws {
+        try await checkDownload(fromResponse: true)
+    }
+
     @MainActor
     private func makeView(schemeHandler: ResponseSchemeHandler? = nil) -> WKWebView {
         let config = WKWebViewConfiguration()
@@ -199,9 +246,8 @@ final class WebKitNavigationAdapterTests: XCTestCase {
         for path in ["html", "attachment", "unsupported"] {
             let (view, original) = try await captureResponse(path)
             let policy = Policy()
-            let legacy = LegacyDelegate()
             let events = NavigationEventsRecorder()
-            let adapter = WebKitNavigationAdapter(view: view, policy: policy, events: events, legacy: legacy)
+            let adapter = WebKitNavigationAdapter(view: view, policy: policy, events: events)
             defer { adapter.tearDown() }
             var decisions = 0
             policy.response = { response, reply in
@@ -227,7 +273,6 @@ final class WebKitNavigationAdapterTests: XCTestCase {
             adapter.webView(view, decidePolicyFor: original) { replies.append($0) }
             XCTAssertEqual(decisions, 1)
             XCTAssertEqual(replies, [.allow])
-            XCTAssertEqual(legacy.responseCalls, 0)
         }
     }
 
@@ -235,9 +280,8 @@ final class WebKitNavigationAdapterTests: XCTestCase {
     func testResponseAdapterRepliesSynchronouslyOnceAndCancelsMissingRepliesOrPolicy() async throws {
         let (view, original) = try await captureResponse("html")
         var policy: Policy? = Policy()
-        let legacy = LegacyDelegate()
         let events = NavigationEventsRecorder()
-        let adapter = WebKitNavigationAdapter(view: view, policy: policy!, events: events, legacy: legacy)
+        let adapter = WebKitNavigationAdapter(view: view, policy: policy!, events: events)
         defer { adapter.tearDown() }
         for expected in [WKNavigationResponsePolicy.allow, .cancel, .download] {
             var events: [String] = []
@@ -311,28 +355,32 @@ final class WebKitNavigationAdapterTests: XCTestCase {
     }
 
     @MainActor
-    func testResponseSelectorsBelongToAdapterEvenWhenLegacyImplementsThem() {
+    func testResponseSelectorsBelongToAdapter() {
         let view = makeView()
         let policy = Policy()
-        let legacy = LegacyDelegate()
         let events = NavigationEventsRecorder()
-        let adapter = WebKitNavigationAdapter(view: view, policy: policy, events: events, legacy: legacy)
+        let adapter = WebKitNavigationAdapter(view: view, policy: policy, events: events)
         defer { adapter.tearDown() }
         let responseSelector = NSSelectorFromString("webView:decidePolicyForNavigationResponse:decisionHandler:")
         let variant = NSSelectorFromString("webView:decidePolicyForNavigationResponse:unusedVariant:")
-        XCTAssertTrue(legacy.responds(to: responseSelector))
+        let actionSelector = NSSelectorFromString("webView:decidePolicyForNavigationAction:decisionHandler:")
         XCTAssertTrue(adapter.responds(to: responseSelector))
-        XCTAssertTrue(legacy.responds(to: variant))
+        XCTAssertTrue(adapter.responds(to: actionSelector))
         XCTAssertFalse(adapter.responds(to: variant))
+        for selector in [responseSelector, actionSelector,
+                         NSSelectorFromString("webView:navigationAction:didBecomeDownload:"),
+                         NSSelectorFromString("webView:navigationResponse:didBecomeDownload:")] {
+            XCTAssertTrue(adapter.responds(to: selector))
+            XCTAssertNil(adapter.forwardingTarget(for: selector))
+        }
     }
 
     @MainActor
-    func testResponsePolicyHandlesMainAndChildFramesWithoutForwardingToLegacy() async {
+    func testResponsePolicyHandlesMainAndChildFrames() async {
         let view = makeView(schemeHandler: ResponseSchemeHandler())
         let policy = Policy()
-        let legacy = LegacyDelegate()
         let events = NavigationEventsRecorder()
-        let adapter = WebKitNavigationAdapter(view: view, policy: policy, events: events, legacy: legacy)
+        let adapter = WebKitNavigationAdapter(view: view, policy: policy, events: events)
         view.navigationDelegate = adapter
         defer { view.stopLoading(); adapter.tearDown() }
         let done = expectation(description: "main and child frames finished through adapter")
@@ -348,7 +396,6 @@ final class WebKitNavigationAdapterTests: XCTestCase {
         adapter.load(URLRequest(url: ResponseSchemeHandler.url("frames")))
         await fulfillment(of: [done], timeout: 10)
         XCTAssertEqual(frames, ["frames": true, "child": false])
-        XCTAssertEqual(legacy.responseCalls, 0)
     }
 
     @MainActor
@@ -431,9 +478,8 @@ final class WebKitNavigationAdapterTests: XCTestCase {
         }
         let action = try XCTUnwrap(captured)
         var policy: Policy? = Policy()
-        let legacy = LegacyDelegate()
         let events = NavigationEventsRecorder()
-        let adapter = WebKitNavigationAdapter(view: view, policy: policy!, events: events, legacy: legacy)
+        let adapter = WebKitNavigationAdapter(view: view, policy: policy!, events: events)
         defer { adapter.tearDown() }
         for expected in [WKNavigationActionPolicy.allow, .cancel, .download] {
             var events: [String] = []
@@ -471,10 +517,8 @@ final class WebKitNavigationAdapterTests: XCTestCase {
     func testAdapterLoadsAndReportsFinishAfterAssignment() async {
         let view = makeView()
         let policy = Policy()
-        let legacy = LegacyDelegate()
         let events = NavigationEventsRecorder()
-        let adapter = WebKitNavigationAdapter(view: view, policy: policy, events: events, legacy: legacy)
-        // The legacy is present before assignment, when WebKit caches selectors.
+        let adapter = WebKitNavigationAdapter(view: view, policy: policy, events: events)
         view.navigationDelegate = adapter
         defer { adapter.tearDown() }
         let done = expectation(description: "real WebKit handler allowed load and reported finish")
@@ -491,47 +535,42 @@ final class WebKitNavigationAdapterTests: XCTestCase {
     }
 
     @MainActor
-    func testForwardingKeepsWheelEventIdentityAndTeardownClearsReferences() throws {
+    func testAdapterDoesNotAnswerOrForwardUnimplementedSelectorsAndTeardownClearsReferences() {
         let view = makeView()
         let policy = Policy()
-        let legacy = LegacyDelegate()
         let events = NavigationEventsRecorder()
-        let adapter = WebKitNavigationAdapter(view: view, policy: policy, events: events, legacy: legacy)
+        let adapter = WebKitNavigationAdapter(view: view, policy: policy, events: events)
         view.navigationDelegate = adapter
-        let selector = NSSelectorFromString("_webView:didNotHandleWheelEvent:")
-        XCTAssertTrue(adapter.responds(to: selector))
-        let event = try XCTUnwrap(NSEvent.otherEvent(with: .applicationDefined, location: .zero,
-                                                    modifierFlags: [], timestamp: 123, windowNumber: 0,
-                                                    context: nil, subtype: 0, data1: 0, data2: 0))
-        var received: NSEvent?
-        legacy.wheel = { received = $0 }
-        adapter.perform(selector, with: view, with: event)
-        XCTAssertTrue(received === event)
+        let selectors = [
+            #selector(WKNavigationDelegate.webView(_:didReceive:completionHandler:)),
+            NSSelectorFromString("webView:decidePolicyForNavigationAction:preferences:decisionHandler:"),
+            NSSelectorFromString("_webView:didNotHandleWheelEvent:"),
+            NSSelectorFromString("_webView:getContextMenuFromProposedMenu:forElement:userInfo:completionHandler:"),
+        ]
+        for selector in selectors {
+            XCTAssertFalse(adapter.responds(to: selector))
+            XCTAssertNil(adapter.forwardingTarget(for: selector))
+        }
         adapter.tearDown()
         adapter.tearDown()
         XCTAssertNil(view.navigationDelegate)
-        XCTAssertFalse(adapter.responds(to: selector))
-        XCTAssertNil(adapter.forwardingTarget(for: selector))
         // Loading after teardown is inert even while all former owners remain alive.
         adapter.load(URLRequest(url: dataURL("must not load")))
+        adapter.loadFile(URL(fileURLWithPath: "/unused.html"), allowingReadAccessTo: URL(fileURLWithPath: "/"))
         XCTAssertNil(view.url)
     }
 
     @MainActor
-    func testAdapterDoesNotRetainViewOrLegacyBeforeTeardown() {
+    func testAdapterDoesNotRetainViewBeforeTeardown() {
         let policy = Policy()
         weak var weakView: WKWebView?
-        weak var weakLegacy: LegacyDelegate?
         let events = NavigationEventsRecorder()
         let adapter = autoreleasepool {
             let view = makeView()
-            let legacy = LegacyDelegate()
             weakView = view
-            weakLegacy = legacy
-            return WebKitNavigationAdapter(view: view, policy: policy, events: events, legacy: legacy)
+            return WebKitNavigationAdapter(view: view, policy: policy, events: events)
         }
         XCTAssertNil(weakView)
-        XCTAssertNil(weakLegacy)
         XCTAssertTrue(adapter.responds(to: #selector(WKNavigationDelegate.webView(_:didFinish:))))
         adapter.tearDown()
     }

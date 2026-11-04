@@ -4,6 +4,7 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+- On the Mac, a page's own loads and the downloads its links become go through the WebKit plugin too, which is now the page's whole navigation delegate: step 4 of keeping eGlu's interface apart from its engines is done (`Docs/EngineSplitPlan.md`). Nothing changes in use.
 - On the Mac, what a page does when a load starts, commits, finishes or fails, or when its content process ends, now follows a plain report from the WebKit plugin rather than WebKit's own callbacks: the next step in keeping eGlu's interface apart from its engines (`Docs/EngineSplitPlan.md`). Nothing changes in use.
 - On the Mac, whether a page shows what a website sends or downloads it is decided from a plain description of the response, which the WebKit plugin makes from what WebKit says, rather than from WebKit's own objects: the next step in keeping eGlu's interface apart from its engines (`Docs/EngineSplitPlan.md`). Nothing changes in use.
 - On the Mac, where a link, a form or a script takes a page (here, a new tab, another app, a Peek, a download) is decided from a plain description of the navigation, which the WebKit plugin makes from what WebKit says, rather than from WebKit's own objects: the next step in keeping eGlu's interface apart from its engines (`Docs/EngineSplitPlan.md`). Nothing changes in use.

@@ -20,6 +20,12 @@ public struct WebLoadError: Error, Sendable, Equatable {
     }
 }
 
+/// A download a navigation became. The host takes it over and it outlives the page.
+@MainActor
+public protocol WebDownload: AnyObject {
+    var originalURL: URL? { get }
+}
+
 /// What happens to the main frame's load, reported in order, on the main actor.
 /// Navigation and document identifiers wait until a slice needs them:
 /// Page does not use WebKit's navigation objects in these callbacks.
@@ -36,4 +42,6 @@ public protocol WebNavigationEvents: AnyObject {
     func navigationFailed(_ error: WebLoadError, provisional: Bool)
     /// The page's content process ended; the page is blank.
     func contentProcessEnded()
+    /// Reported before the engine's callback returns; the host must take it over in this call.
+    func navigationBecameDownload(_ download: any WebDownload)
 }

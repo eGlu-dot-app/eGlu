@@ -95,4 +95,5 @@ public protocol WebNavigationPolicy: AnyObject {
 @MainActor
 public protocol WebRequestLoading: AnyObject {
     func load(_ request: URLRequest)
+    func loadFile(_ url: URL, allowingReadAccessTo readAccessURL: URL)
 }
