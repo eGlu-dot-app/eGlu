@@ -148,6 +148,7 @@ final class Page: NSObject {
     /// The same view, for hosts to place, move and give the keys.
     private(set) lazy var surface: any WebEngineSurface = PageWebKitSurface(view: view)
     private var navigationAdapter: WebKitNavigationAdapter!
+    private let channels: any WebMessageChannels
     private let controller: WKUserContentController
     weak var host: PageHost?
 
@@ -323,6 +324,7 @@ final class Page: NSObject {
         let controller = extensionPage ? config.userContentController : WKUserContentController()
         config.userContentController = controller
         self.controller = controller
+        channels = WebKitMessageChannels(controller: controller, appWorld: Page.world)
         view = PageView(frame: .zero, configuration: config)
         super.init()
         view.page = self
@@ -370,19 +372,18 @@ final class Page: NSObject {
         // The Chrome Web Store's button asks through this, from the app's
         // own world (StoreButton).
         if !isExtensionPage {
-            controller.add(StoreButton(page: self), contentWorld: Page.world, name: StoreButton.name)
+            channels.open(StoreButton.name, in: .app) { [store = StoreButton(page: self)] in store.received($0) }
             // A password field on the page, for history (PasswordWatch).
-            controller.add(PasswordWatch(page: self), contentWorld: Page.world, name: PasswordWatch.name)
+            channels.open(PasswordWatch.name, in: .app) { [watch = PasswordWatch(page: self)] in watch.received($0) }
             // Grammar checking's questions to the Mac, from the app's own
             // world (WritingHandler, writing.js).
-            controller.addScriptMessageHandler(WritingHandler(page: self),
-                                               contentWorld: Page.world, name: WritingHandler.name)
-            // The measuring tool's word from the page (MeasureHandler).
-            controller.add(MeasureHandler(page: self), contentWorld: Page.world, name: MeasureHandler.name)
+            channels.open(WritingHandler.name, in: .app) { [writing = WritingHandler(page: self)] in writing.handle($0, reply: $1) }
+            // The measuring tool's word from the page (MeasureChannel).
+            channels.open(MeasureChannel.name, in: .app) { [tool = MeasureChannel(page: self)] in tool.received($0) }
             // Apple Passwords under the sign-in box, only in a build that
             // may run Apple's helper (ApplePasswords).
             if ApplePasswords.entitled {
-                controller.add(ApplePasswordsHandler(page: self), contentWorld: Page.world, name: ApplePasswordsForm.name)
+                channels.open(ApplePasswordsForm.name, in: .app) { [apple = ApplePasswordsHandler(page: self)] in apple.received($0) }
             }
         }
     }
@@ -702,13 +703,13 @@ final class Page: NSObject {
         controller.removeAllUserScripts()
         guard !handsOff else { return }
         if !isExtensionPage {
-            controller.addUserScript(WKUserScript(source: PasswordWatch.script, injectionTime: .atDocumentEnd,
+            controller.addUserScript(WKUserScript(source: Self.bridged(PasswordWatch.script, using: channels), injectionTime: .atDocumentEnd,
                                                   forMainFrameOnly: true, in: Page.world))
             // English typed here is checked by Harper on this Mac, where
             // Settings › Writing is on and the site isn't off (writing.js).
             // Its strings are the String Catalog's, written in as data.
             if writing {
-                controller.addUserScript(WKUserScript(source: Self.writingScript,
+                controller.addUserScript(WKUserScript(source: writingScript,
                                                       injectionTime: .atDocumentEnd,
                                                       forMainFrameOnly: true, in: Page.world))
             }
@@ -720,7 +721,7 @@ final class Page: NSObject {
                                                   forMainFrameOnly: true, in: .page))
         }
         if apple {
-            controller.addUserScript(WKUserScript(source: ApplePasswordsForm.script, injectionTime: .atDocumentEnd,
+            controller.addUserScript(WKUserScript(source: Self.bridged(ApplePasswordsForm.script, using: channels), injectionTime: .atDocumentEnd,
                                                   forMainFrameOnly: true, in: Page.world))
         }
         // In the page's own world, where WebKit's browser is, before the
@@ -733,7 +734,7 @@ final class Page: NSObject {
         }
         controller.addFilterScripts(for: filters)
         if store {
-            controller.addUserScript(WKUserScript(source: Scripts.extensionStore, injectionTime: .atDocumentEnd,
+            controller.addUserScript(WKUserScript(source: Self.bridged(Scripts.extensionStore, using: channels), injectionTime: .atDocumentEnd,
                                                   forMainFrameOnly: true, in: Page.world))
         }
         // The JSON view, while Settings formats JSON and the response's type
@@ -761,7 +762,12 @@ final class Page: NSObject {
 
     /// writing.js with the card's words and the Mac's key for its first
     /// suggestion (Edit › Accept Writing Suggestion).
-    private static let writingScript = WritingScript.source(acceptKey: "⌃⌥G", acceptShortcut: "Control+Alt+G")
+    private static let writingSource = WritingScript.source(acceptKey: "⌃⌥G", acceptShortcut: "Control+Alt+G")
+    private var writingScript: String { Self.bridged(Self.writingSource, using: channels) }
+
+    private static func bridged(_ script: String, using channels: any WebMessageChannels) -> String {
+        channels.bridgeScript + "\n" + script
+    }
 
     /// ⌃⌥G takes the open card's first suggestion: the fix goes in the way
     /// the page's own Undo takes back (writing.js apply()).
@@ -788,7 +794,7 @@ final class Page: NSObject {
     /// One already there, stopped, starts again instead.
     private func writingStart() {
         guard !isHandsOff else { return }
-        view.callAsyncJavaScript(Self.writingScript, arguments: [:], in: nil, in: Page.world) { _ in }
+        view.callAsyncJavaScript(writingScript, arguments: [:], in: nil, in: Page.world) { _ in }
     }
 
     /// Whether the page on screen has ads and trackers blocked, for its menu.
@@ -811,7 +817,7 @@ final class Page: NSObject {
         let had = installed?.contains("|apple") == true
         prepare(for: committed ?? view.url)
         guard !had, installed?.contains("|apple") == true, !isHandsOff, !HandsOff.covers(view.url), !isExtensionPage else { return }
-        view.evaluateJavaScript(ApplePasswordsForm.script, in: nil, in: Page.world) { _ in }
+        view.evaluateJavaScript(Self.bridged(ApplePasswordsForm.script, using: channels), in: nil, in: Page.world) { _ in }
     }
 
     func settingsChanged() {
@@ -993,12 +999,13 @@ final class Page: NSObject {
         measure = model
         host?.pageDidChange(self)
         let view = view
+        let channels = channels
         Task { [weak self] in
             // The tool ends its own way (Escape, the page put away): the
             // promise resolves and this run's model is let go.
             // The notes' dots again, found by their elements' names.
             let notes = model.notes.map { ["id": $0.id.uuidString, "name": $0.name, "number": $0.number] as [String: Any] }
-            _ = try? await view.callAsyncJavaScript(Scripts.measure, arguments: ["guides": model.argument.merging(["notes": notes]) { _, new in new }],
+            _ = try? await view.callAsyncJavaScript(Self.bridged(Scripts.measure, using: channels), arguments: ["guides": model.argument.merging(["notes": notes]) { _, new in new }],
                                                     in: nil, contentWorld: Page.world)
             guard let self, self.measure === model else { return }
             self.measure = nil
@@ -1020,7 +1027,7 @@ final class Page: NSObject {
         measure == nil ? startMeasuring() : stopMeasuring()
     }
 
-    /// What the tool said (MeasureHandler), this run's only: a selection's
+    /// What the tool said (MeasureChannel), this run's only: a selection's
     /// details, a distance, what shows, a tapped point, its ending.
     func measured(_ body: [String: Any]) {
         guard let model = measure, (body["run"] as? NSNumber)?.intValue == model.run else { return }

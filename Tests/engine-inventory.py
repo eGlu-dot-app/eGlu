@@ -488,14 +488,24 @@ def run_inventory(root: Path):
         content = (root / rel_path).read_text(encoding="utf-8", errors="replace")
         hidden_web_views.extend(find_hidden_web_views(content, rel_path))
 
-    # Section f: Script bridges.
+    # Section f: App scripts and the WebKit plugin's transport counted apart.
     script_bridges: list[Finding] = []
-    for rel_path in js_files:
+    plugin_script_bridges: list[Finding] = []
+    # Tests that stand in for or read the handlers on purpose are listed apart, as in section b.
+    test_script_bridges: list[Finding] = []
+    plugin_swift = [f for f in swift_files if f.replace("\\", "/").startswith("WebKitEngine/")]
+    app_js = [f for f in js_files if f.replace("\\", "/").startswith(("Mac/", "Shared/", "PadCore/", "Tests/"))]
+    plugin_js = [f for f in js_files if f.replace("\\", "/").startswith("WebKitEngine/")]
+    for rel_path in app_js + plugin_js + all_scan_swift + plugin_swift:
         content = (root / rel_path).read_text(encoding="utf-8", errors="replace")
-        script_bridges.extend(find_script_bridges(content, rel_path))
-    for rel_path in all_scan_swift:
-        content = (root / rel_path).read_text(encoding="utf-8", errors="replace")
-        script_bridges.extend(find_script_bridges(content, rel_path))
+        norm = rel_path.replace("\\", "/")
+        if norm.startswith("WebKitEngine/"):
+            group = plugin_script_bridges
+        elif norm.startswith("Tests/"):
+            group = test_script_bridges
+        else:
+            group = script_bridges
+        group.extend(find_script_bridges(content, rel_path))
 
     return {
         "mac_imports": mac_imports,
@@ -508,6 +518,8 @@ def run_inventory(root: Path):
         "private_apis": private_apis,
         "hidden_web_views": hidden_web_views,
         "script_bridges": script_bridges,
+        "plugin_script_bridges": plugin_script_bridges,
+        "test_script_bridges": test_script_bridges,
     }
 
 
@@ -528,12 +540,14 @@ def build_summary_table(data: dict) -> str:
         ("c. Declarations (Extension* files)", len(data["extension_declarations"]), count_files(data["extension_declarations"])),
         ("d. Private WebKit API", len(data["private_apis"]), count_files(data["private_apis"])),
         ("e. Hidden web views", len(data["hidden_web_views"]), count_files(data["hidden_web_views"])),
-        ("f. Script bridges", len(data["script_bridges"]), count_files(data["script_bridges"])),
+        ("f. Script bridges (app)", len(data["script_bridges"]), count_files(data["script_bridges"])),
+        ("f. Script bridges (WebKit plugin)", len(data["plugin_script_bridges"]), count_files(data["plugin_script_bridges"])),
+        ("f. Script bridges (tests)", len(data["test_script_bridges"]), count_files(data["test_script_bridges"])),
     ]
 
     # The total is the app's dependencies: Page.swift's own uses of its view
     # and the tests' deliberate reads are listed, not counted.
-    not_counted = {"test_reach_ins", "page_swift_reach_ins"}
+    not_counted = {"test_reach_ins", "page_swift_reach_ins", "plugin_script_bridges", "test_script_bridges"}
     total_count = sum(len(findings) for key, findings in data.items() if key not in not_counted)
     all_files = set()
     for key, findings in data.items():
@@ -603,8 +617,12 @@ def build_full_report(data: dict) -> str:
         format_findings_group(data["private_apis"]),
         f"### e. Hidden web views ({len(data['hidden_web_views'])} lines in {count_files(data['hidden_web_views'])} files)",
         format_findings_group(data["hidden_web_views"]),
-        f"### f. Script bridges ({len(data['script_bridges'])} lines in {count_files(data['script_bridges'])} files)",
+        f"### f. Script bridges (app: {len(data['script_bridges'])} lines in {count_files(data['script_bridges'])} files)",
         format_findings_group(data["script_bridges"]),
+        f"#### WebKit plugin ({len(data['plugin_script_bridges'])} lines in {count_files(data['plugin_script_bridges'])} files)",
+        format_findings_group(data["plugin_script_bridges"]),
+        f"#### Tests ({len(data['test_script_bridges'])} lines in {count_files(data['test_script_bridges'])} files)",
+        format_findings_group(data["test_script_bridges"]),
     ]
     return "\n".join(blocks).strip() + "\n"
 

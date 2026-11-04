@@ -1,7 +1,7 @@
 // eGlu's measuring tool, grown from element-pick.js. Run once in the app's
 // own world with callAsyncJavaScript: everything it draws is one canvas in a
 // closed shadow root over the page (never part of the page's styles or
-// queries), and everything it says goes through the egluMeasure handler to
+// queries), and everything it says goes through egluBridge on egluMeasure to
 // the app's panel. It resolves when the tool ends, and while it runs it takes
 // the click (with the presses that make it) and Esc, ⌥ held, G, R and X from
 // the page, and nothing else: a key typed into a field is the field's.
@@ -27,8 +27,10 @@ let refCount = 0;
 // What the last frame drew, for the tests (state()), which can't look inside.
 let drawn = { columns: [], ticks: { x: 0, y: 0 }, firstTick: { x: -1, y: -1 }, gaps: [], pinned: 0 };
 const tell = (message) => {
-  const handlers = window.webkit && window.webkit.messageHandlers;
-  if (handlers && handlers.egluMeasure) handlers.egluMeasure.postMessage(Object.assign({ run }, message));
+  const bridge = globalThis.egluBridge;
+  if (bridge) {
+    try { bridge.post("egluMeasure", Object.assign({ run }, message)); } catch (_) {}
+  }
 };
 
 const host = document.createElement("div");

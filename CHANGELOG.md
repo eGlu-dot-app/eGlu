@@ -4,6 +4,7 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+- On the Mac, the scripts eGlu puts into pages (the writing checker, the measuring tool, the Chrome Web Store's button, the password field watch and Apple Passwords' sign-in box) talk to the app through one small bridge of eGlu's, `egluBridge`, rather than WebKit's handlers, and the app hears them on plain named channels from the WebKit plugin: step 6 of keeping eGlu's interface apart from its engines (`Docs/EngineSplitPlan.md`). On iPhone and iPad the writing checker and the measuring tool use the same bridge. Nothing changes in use.
 - On the Mac, a window a website opens (a pop-up, a Peek, a tab, a little window, a picture-in-picture window) is asked for with a plain description of the request, and the window that hosts the page no longer sees any of WebKit's types: step 5 of keeping eGlu's interface apart from its engines (`Docs/EngineSplitPlan.md`). Nothing changes in use.
 - On the Mac, a page's own loads and the downloads its links become go through the WebKit plugin too, which is now the page's whole navigation delegate: step 4 of keeping eGlu's interface apart from its engines is done (`Docs/EngineSplitPlan.md`). Nothing changes in use.
 - On the Mac, what a page does when a load starts, commits, finishes or fails, or when its content process ends, now follows a plain report from the WebKit plugin rather than WebKit's own callbacks: the next step in keeping eGlu's interface apart from its engines (`Docs/EngineSplitPlan.md`). Nothing changes in use.

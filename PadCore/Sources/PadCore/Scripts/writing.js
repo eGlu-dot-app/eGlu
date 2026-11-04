@@ -269,7 +269,7 @@ let asking = 0;
 let askedSeq = 0;
 
 const post = (message) => {
-  try { return window.webkit.messageHandlers.egluWriting.postMessage(message); }
+  try { return globalThis.egluBridge.request('egluWriting', message); }
   catch (_) { return Promise.resolve(null); }
 };
 

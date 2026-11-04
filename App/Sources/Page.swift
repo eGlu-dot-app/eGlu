@@ -1,6 +1,7 @@
 import PadCore
 import UIKit
 import WebKit
+import WebKitSupport
 
 /// What a page asks of whoever is showing it: a window (Browser) or a
 /// sign-in pop-up (Popup).
@@ -579,7 +580,7 @@ final class Page: NSObject {
 
     /// writing.js with the card's words. No key beside its first suggestion:
     /// most of these devices have no keyboard to press it on.
-    private static let writingScript = WritingScript.source(acceptKey: nil, acceptShortcut: nil)
+    private static let writingScript = WebKitScriptBridge.source + "\n" + WritingScript.source(acceptKey: nil, acceptShortcut: nil)
 
     /// ⌃⌥G takes the open card's first suggestion: the fix goes in the way
     /// the page's own Undo takes back (writing.js apply()).
@@ -1171,7 +1172,7 @@ final class Page: NSObject {
             // promise resolves and this run's model is let go.
             // The notes' dots again, found by their elements' names.
             let notes = model.notes.map { ["id": $0.id.uuidString, "name": $0.name, "number": $0.number] as [String: Any] }
-            _ = try? await view.callAsyncJavaScript(Scripts.measure, arguments: ["guides": model.argument.merging(["notes": notes]) { _, new in new }],
+            _ = try? await view.callAsyncJavaScript(WebKitScriptBridge.source + "\n" + Scripts.measure, arguments: ["guides": model.argument.merging(["notes": notes]) { _, new in new }],
                                                     in: nil, contentWorld: Page.world)
             guard let self, self.measure === model else { return }
             self.measure = nil

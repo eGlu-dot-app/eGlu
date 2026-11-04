@@ -1,6 +1,7 @@
 import AppKit
 import PadCore
 import SwiftUI
+import WebEngineCore
 import WebKit
 
 /// Apple Passwords under the sign-in box, the way Safari offers them,
@@ -168,7 +169,7 @@ enum ApplePasswordsForm {
     static let script = """
     (() => {
       if (window.top !== window) return;
-      const post = (body) => { try { window.webkit.messageHandlers.\(name).postMessage(body); } catch (e) {} };
+      const post = (body) => { try { globalThis.egluBridge.post("\(name)", body); } catch (e) {} };
       const kindOf = (el) => {
         if (!(el instanceof HTMLInputElement) || el.disabled || el.readOnly) return null;
         const type = (el.type || "text").toLowerCase();
@@ -223,32 +224,30 @@ enum ApplePasswordsForm {
 /// What the sign-in box script tells the Mac: the main frame's own
 /// messages, in the app's own world, on a page Apple Passwords serves.
 @MainActor
-final class ApplePasswordsHandler: NSObject, WKScriptMessageHandler {
+final class ApplePasswordsHandler {
     private weak var page: Page?
 
     init(page: Page) {
         self.page = page
     }
 
-    nonisolated func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
-        MainActor.assumeIsolated {
-            // From the document shown now: one being left as the page goes
-            // elsewhere speaks for its own site, not the new one's.
-            let origin = message.frameInfo.securityOrigin
-            guard let page, message.frameInfo.isMainFrame, message.world == Page.world, !page.isHandsOff,
-                  ApplePasswords.serves(page.view.url), origin.host.lowercased() == page.view.url?.host()?.lowercased(),
-                  origin.protocol.lowercased() == page.view.url?.scheme?.lowercased(),
-                  let body = message.body as? [String: Any], let kind = body["kind"] as? String else { return }
-            switch kind {
-            case "focus":
-                let number = { (key: String) in (body[key] as? NSNumber)?.doubleValue ?? 0 }
-                let rect = CGRect(x: number("x"), y: number("y"), width: number("width"), height: number("height"))
-                ApplePasswordsCard.shared.focused(page, field: rect, password: body["field"] as? String == "password")
-            case "blur":
-                ApplePasswordsCard.shared.left(page)
-            default:
-                break
-            }
+    func received(_ message: WebMessage) {
+        // From the document shown now: one being left as the page goes
+        // elsewhere speaks for its own site, not the new one's.
+        guard let page, message.isMainFrame, message.world == .app, !page.isHandsOff,
+              ApplePasswords.serves(page.view.url), case let .tuple(scheme, host, _) = message.origin,
+              host.lowercased() == page.view.url?.host()?.lowercased(),
+              scheme.lowercased() == page.view.url?.scheme?.lowercased(),
+              let body = message.body.foundation as? [String: Any], let kind = body["kind"] as? String else { return }
+        switch kind {
+        case "focus":
+            let number = { (key: String) in (body[key] as? NSNumber)?.doubleValue ?? 0 }
+            let rect = CGRect(x: number("x"), y: number("y"), width: number("width"), height: number("height"))
+            ApplePasswordsCard.shared.focused(page, field: rect, password: body["field"] as? String == "password")
+        case "blur":
+            ApplePasswordsCard.shared.left(page)
+        default:
+            break
         }
     }
 }

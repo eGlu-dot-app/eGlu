@@ -102,6 +102,8 @@ targets:
     dependencies:
       - package: PadCore
       - package: Engines
+      - package: WebKitEngine
+        product: WebKitSupport
     settings:
       base:
         INFOPLIST_FILE: App/Info.plist

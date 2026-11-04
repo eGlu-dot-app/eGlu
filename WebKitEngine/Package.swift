@@ -3,19 +3,22 @@ import PackageDescription
 
 let package = Package(
     name: "WebKitEngine",
-    platforms: [.macOS("26.0")],
+    platforms: [.macOS("26.0"), .iOS("17.0")],
     products: [
-        .library(name: "WebKitMacPlugin", targets: ["WebKitMacPlugin"])
+        .library(name: "WebKitMacPlugin", targets: ["WebKitMacPlugin"]),
+        .library(name: "WebKitSupport", targets: ["WebKitSupport"])
     ],
     dependencies: [
         .package(path: "../WebEngineKit")
     ],
     targets: [
+        .target(name: "WebKitSupport", resources: [.copy("Scripts")]),
         .target(name: "WebKitMacPlugin", dependencies: [
+            "WebKitSupport",
             .product(name: "WebEngineCore", package: "WebEngineKit")
         ]),
         .testTarget(name: "WebKitMacPluginTests", dependencies: [
-            "WebKitMacPlugin", .product(name: "WebEngineCore", package: "WebEngineKit")
+            "WebKitMacPlugin", "WebKitSupport", .product(name: "WebEngineCore", package: "WebEngineKit")
         ])
     ],
     swiftLanguageModes: [.v6]
