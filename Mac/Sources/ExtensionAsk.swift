@@ -404,8 +404,16 @@ struct ExtensionAccessGroups: View {
     let summary: ExtensionAccessSummary
     var access: Binding<Extensions.Installed.SiteAccess>?
     var everything = false
+    /// Asked to give it now (permissions.request): its cookies are what a
+    /// yes gives. Otherwise they stay blocked, a choice for its settings.
+    var grantsCookies = false
     @State private var sitesShown = false
     @State private var moreShown = false
+
+    /// What allowing cookies reaches, said wherever they are given.
+    static var cookiesNote: String {
+        String(localized: "With cookies, it can read your sign-ins on the sites it can access, Google's included, in every space, and send them elsewhere.")
+    }
 
     var body: some View {
         let onClick = access?.wrappedValue == .onClick
@@ -437,12 +445,21 @@ struct ExtensionAccessGroups: View {
             }
         }
         let shown = everything ? summary.notable + summary.routine : summary.notable
-        if !shown.isEmpty || !summary.routine.isEmpty {
+        if !shown.isEmpty || !summary.routine.isEmpty || summary.cookies {
             AskGroup(title: String(localized: "Capabilities")) {
+                if summary.cookies {
+                    if grantsCookies {
+                        AskLine(symbol: ExtensionAccessDescription.symbol("cookies"), text: ExtensionAccessDescription.capability("cookies"))
+                    } else {
+                        AskLine(symbol: ExtensionAccessDescription.symbol("cookies"), text: String(localized: "Cookies stay blocked"),
+                                detail: String(localized: "They keep you signed in to sites. You can allow them later in its settings."))
+                    }
+                    if !shown.isEmpty { Divider().padding(.leading, AskLine.textInset) }
+                }
                 lines(shown)
                 if !everything, !summary.routine.isEmpty {
                     AskMore(title: shown.isEmpty ? String(localized: "Show Capabilities") : String(localized: "Show More"),
-                            count: summary.routine.count, first: shown.isEmpty, shown: $moreShown) {
+                            count: summary.routine.count, first: shown.isEmpty && !summary.cookies, shown: $moreShown) {
                         Divider().padding(.leading, AskLine.textInset)
                         lines(summary.routine)
                     }

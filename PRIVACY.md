@@ -44,7 +44,7 @@ Only what using a browser needs:
 
 ## On a Mac: Chrome extensions
 
-eGlu for Mac runs Chrome extensions you add. An extension is someone else's software: what it does with what it can read is under its developer's privacy policy, not this one. On the sites you allow it, an extension can read and change the page as the page's own scripts can, and send what it reads elsewhere. eGlu limits what any extension may reach: none gets Chrome's cookies API, none runs on Google's sign-in (accounts.google.com), and each reads only the sites you allowed it when you added it, or only the page you click it on.
+eGlu for Mac runs Chrome extensions you add. An extension is someone else's software: what it does with what it can read is under its developer's privacy policy, not this one. On the sites you allow it, an extension can read and change the page as the page's own scripts can, and send what it reads elsewhere. eGlu limits what any extension may reach: none runs on Google's sign-in (accounts.google.com), each reads only the sites you allowed it when you added it, or only the page you click it on, and none gets Chrome's cookies API unless you allow it for that extension (its settings, or when it asks). Cookies keep you signed in to sites: an extension you allow them can read them on the sites it can access, Google's sign-in cookies included, in every space, and send them elsewhere.
 
 What the app keeps on your Mac for them, sent to no one:
 

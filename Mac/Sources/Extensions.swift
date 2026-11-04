@@ -14,8 +14,8 @@ import WebKit
 /// extension's files are kept once, for every space.
 ///
 /// Google's sign-in stays out of every extension's reach (ExtensionPolicy):
-/// each context denies its hosts and the `cookies` permission, whatever the
-/// extension asked for.
+/// each context denies its hosts, whatever the extension asked for, and the
+/// `cookies` permission until the person allows it for that extension.
 @MainActor
 final class Extensions: NSObject, ObservableObject {
     static let shared = Extensions()
@@ -83,6 +83,9 @@ final class Extensions: NSObject, ObservableObject {
         /// The version whose warnings the person said look wrong (This
         /// Looks Wrong): not shown for it, and back with an update.
         var looksWrong: String?
+        /// The person let it read cookies (its settings, or its own
+        /// request): kept through updates, on this Mac only.
+        var readsCookies: Bool?
     }
 
     /// The list has opened for the one just installed: not again.
@@ -150,6 +153,40 @@ final class Extensions: NSObject, ObservableObject {
     }
 
     func asksForNativeOnlyOptionally(_ id: String) -> Bool { nativeOptional.contains(id) }
+
+    /// Whether it asks for cookies, outright or as an optional permission:
+    /// a choice its settings give. Once allowed, the choice shows even
+    /// before its manifest is read (on in no space), so it can be taken back.
+    func asksForCookies(_ item: Installed) -> Bool {
+        item.granted?.contains("cookies") == true || item.readsCookies == true
+            || manifests[item.id]?.optionalPermissions.contains("cookies") == true
+    }
+
+    /// Whether the person let it read cookies: not until they do.
+    func readsCookies(_ id: String) -> Bool {
+        installed.first { $0.id == id }?.readsCookies == true
+    }
+
+    /// Lets it read cookies, or takes that back, in every space it is on
+    /// in. There it starts again, unless it just asked for them itself, so
+    /// its worker starts knowing what it may do: Grammarly tries its
+    /// cookies as it starts.
+    func setReadsCookies(_ id: String, _ on: Bool, restarting: Bool = true) {
+        guard let index = installed.firstIndex(where: { $0.id == id }), (installed[index].readsCookies == true) != on else { return }
+        installed[index].readsCookies = on
+        saveList()
+        let item = installed[index]
+        for (space, loaded) in contexts {
+            guard let context = loaded[id] else { continue }
+            if restarting {
+                unload(id, in: space)
+                Task { await load(item, in: space) }
+            } else {
+                Self.holdCookies(context, letting: on)
+                update(id, in: space) { $0.cookiesKeptBack = !on && self.manifests[id]?.permissions.contains("cookies") == true }
+            }
+        }
+    }
     /// Keep-awake assertions an extension asked for (power), by "space/id".
     var keptAwake: [String: IOPMAssertionID] = [:]
     /// Each loaded context's errors watch, removed when it unloads.
@@ -524,7 +561,8 @@ final class Extensions: NSObject, ObservableObject {
             context.baseURL = URL(string: "\(Self.scheme)://\(item.id)/")!
             context.isInspectable = true
             context.inspectionName = item.name
-            allow(context, package, access: item.siteAccess)
+            // The cookie choice as it is now: it may have changed while the package was read.
+            allow(context, package, access: item.siteAccess, cookies: now.readsCookies == true)
             watch(context, item, in: space)
             try controller(for: space).load(context)
             // Its commands' keys: the person's, or none (ExtensionKeys).
@@ -619,21 +657,29 @@ final class Extensions: NSObject, ObservableObject {
         return true
     }
 
-    /// What the extension may do: what it asked for, less what no extension
-    /// gets; its sites when the person chose all of them; never Google's
-    /// sign-in.
-    private func allow(_ context: WKWebExtensionContext, _ package: WKWebExtension, access: Installed.SiteAccess) {
-        for permission in package.requestedPermissions where !ExtensionPolicy.deniedPermissions.contains(permission.rawValue) {
+    /// What the extension may do: what it asked for, less cookies unless
+    /// the person allowed them; its sites when the person chose all of
+    /// them; never Google's sign-in.
+    private func allow(_ context: WKWebExtensionContext, _ package: WKWebExtension, access: Installed.SiteAccess, cookies: Bool) {
+        for permission in package.requestedPermissions where !ExtensionPolicy.heldPermissions.contains(permission.rawValue) {
             context.setPermissionStatus(.grantedExplicitly, for: permission)
         }
-        for name in ExtensionPolicy.deniedPermissions {
-            context.setPermissionStatus(.deniedExplicitly, for: WKWebExtension.Permission(rawValue: name))
-        }
+        Self.holdCookies(context, letting: cookies)
         Self.letRulesRedirect(context, package)
         if access == .allSites {
             for pattern in Self.sites(of: package) { context.setPermissionStatus(.grantedExplicitly, for: pattern) }
         }
         Self.fence(context)
+    }
+
+    /// Cookies denied, or granted when the person let this extension have
+    /// them and it asks for them, outright or as an optional permission.
+    /// Granted, it reads them on the sites it may read, Google's sign-in
+    /// cookies included (set for .google.com): the person was told so.
+    static func holdCookies(_ context: WKWebExtensionContext, letting cookies: Bool) {
+        let package = context.webExtension
+        let asked = package.requestedPermissions.union(package.optionalPermissions).contains(.cookies)
+        context.setPermissionStatus(cookies && asked ? .grantedExplicitly : .deniedExplicitly, for: .cookies)
     }
 
     /// Chrome lets "declarativeNetRequest" redirect a request or change its
@@ -730,7 +776,7 @@ final class Extensions: NSObject, ObservableObject {
             nativeOptional.remove(id)
         }
         manifests[id] = manifest
-        seen.cookiesKeptBack = manifest.permissions.contains("cookies")
+        seen.cookiesKeptBack = manifest.permissions.contains("cookies") && !readsCookies(id)
         let missing = missing(for: manifest, package)
         lacking[id] = missing
         // Read away from the main thread once it has loaded (readCode).
@@ -1567,8 +1613,9 @@ final class Extensions: NSObject, ObservableObject {
         try archive.write(to: file, options: .atomic)
         let resolvedName = ZipFile.file(in: archive, matching: { $0 == "manifest.json" })
             .flatMap { try? ExtensionManifest(json: $0) }?.displayName(in: archive, fallback: name) ?? name
+        // Its cookies, as the person chose them for the version there was.
         let item = Installed(id: id, name: resolvedName, version: version, source: source, siteAccess: access, spaces: spaces,
-                             granted: granted, folder: folder)
+                             granted: granted, folder: folder, readsCookies: installed.first { $0.id == id }?.readsCookies)
         // A newer version of one already here: the same id, so the same
         // developer's key. An unsigned one has a random id of its own and
         // never takes another's place.
@@ -2096,6 +2143,16 @@ extension Extensions {
             if defaults.bool(forKey: "checkUpdatesNow") {
                 lines.append("updates \(await checkForUpdates(now: true))")
             }
+            // Cookies allowed, as its settings' switch allows them: it starts
+            // again with them, and its pages are loaded again.
+            if defaults.bool(forKey: "extensionCookiesTest"), let id = installed.first?.id {
+                setReadsCookies(id, true)
+                note("cookies allowed")
+                try? await Task.sleep(for: .seconds(4))
+                for page in opened { session.pages.live[page.tab]?.reload() }
+                try? await Task.sleep(for: .seconds(max(11, defaults.integer(forKey: "extensionWait"))))
+                lines += await report(spaces, opened).map { "cookies " + $0 }
+            }
             // Removed from the first space, its data there cleared, and on
             // again: its pages there start afresh, the other space's don't.
             if defaults.bool(forKey: "extensionRemoveTest"), let id = installed.first?.id, let first = spaces.first {
@@ -2261,17 +2318,22 @@ extension Extensions: WKWebExtensionControllerDelegate {
     func webExtensionController(_ controller: WKWebExtensionController, promptForPermissions permissions: Set<WKWebExtension.Permission>,
                                 in tab: (any WKWebExtensionTab)?, for extensionContext: WKWebExtensionContext,
                                 completionHandler: @escaping (Set<WKWebExtension.Permission>, Date?) -> Void) {
-        let asked = permissions.filter { !ExtensionPolicy.deniedPermissions.contains($0.rawValue) }
+        // Cookies too, as Chrome asks for them: a yes is the person's
+        // choice for the extension, in every space (setReadsCookies).
+        let asked = permissions
         guard !asked.isEmpty else { return completionHandler([], nil) }
         guard let sourceSpace = space(of: controller),
               let owner = permissionWindow(in: sourceSpace, tab: tab) else { return completionHandler([], nil) }
         let summary = ExtensionAccessSummary(permissions: asked.map(\.rawValue), sites: [])
         let title = String(localized: "\u{201C}\(extensionContext.webExtension.displayName ?? String(localized: "An extension"))\u{201D} wants more access")
+        let id = extensionContext.uniqueIdentifier
         Task {
-            let yes = await askForMore(title: title, from: extensionContext, in: sourceSpace, window: owner) {
-                ExtensionAccessGroups(summary: summary, everything: true)
+            let yes = await askForMore(title: title, from: extensionContext, in: sourceSpace, window: owner,
+                                       note: summary.cookies ? ExtensionAccessGroups.cookiesNote : nil) {
+                ExtensionAccessGroups(summary: summary, everything: true, grantsCookies: true)
             }
             completionHandler(yes ? asked : [], nil)
+            if yes, summary.cookies { setReadsCookies(id, true, restarting: false) }
         }
     }
 

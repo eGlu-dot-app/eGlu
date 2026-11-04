@@ -10,7 +10,9 @@ import Foundation
 /// Safari on a Mac and nothing else.
 ///
 /// The app reads no cookies anywhere, so the cookie rule holds by not having
-/// the code; `covers(cookieDomain:)` is for anything that ever has to.
+/// the code; `covers(cookieDomain:)` is for anything that ever has to. An
+/// extension the person lets read cookies can read these too
+/// (ExtensionPolicy.heldPermissions); that is its, and their, choice.
 public enum HandsOff {
     public static let hosts = ["accounts.google.com"]
 

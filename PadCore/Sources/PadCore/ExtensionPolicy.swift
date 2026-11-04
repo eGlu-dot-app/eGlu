@@ -10,7 +10,8 @@ import Foundation
 /// grant the tab before that denial is read, so on a hands-off page the
 /// click grants nothing. And the cookies accounts.google.com receives are
 /// set for .google.com, which an extension let on any Google site could
-/// read through `chrome.cookies`, so no extension gets that permission.
+/// read through `chrome.cookies`, so no extension gets that permission
+/// unless the person allows it for that one extension, told so.
 public enum ExtensionPolicy {
     /// Match patterns every extension context denies: each hands-off host
     /// and the hosts within it.
@@ -18,8 +19,11 @@ public enum ExtensionPolicy {
         HandsOff.hosts.map { "*://*.\($0)/*" }
     }
 
-    /// Permissions every extension context denies.
-    public static let deniedPermissions: Set<String> = ["cookies"]
+    /// Permissions every extension context denies until the person allows
+    /// one for that extension in its settings, told what it reaches:
+    /// `cookies` reads the sign-ins of every site the extension may read,
+    /// Google's included.
+    public static let heldPermissions: Set<String> = ["cookies"]
 
     /// Whether a click on an extension's button may grant it the page it
     /// was clicked on.

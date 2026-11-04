@@ -476,8 +476,9 @@ extension Extensions {
     /// want of a click, within ten seconds of a press on the extension's
     /// button, once, and only for permissions and sites its manifest names
     /// (optional ones included): asked as WebKit's own question would be.
-    /// Extension pages, files, Google's sign-in and cookies are never
-    /// given, so never asked about.
+    /// Extension pages, files and Google's sign-in are never given, so
+    /// never asked about. Cookies are asked about as what they are: a yes
+    /// lets the extension read them in every space (setReadsCookies).
     private func requestAfterClick(_ names: [String], origins: [String], context: WKWebExtensionContext, in space: UUID) async throws -> Bool {
         let key = "\(space.uuidString)/\(context.uniqueIdentifier)"
         guard let when = Self.pressed[key], Date().timeIntervalSince(when) < 10 else {
@@ -496,12 +497,12 @@ extension Extensions {
         guard wanted.allSatisfy(named.contains), patterns.allSatisfy({ asked in declared.contains { $0.matches(asked) } }) else {
             throw Unanswered(why: "Only permissions specified in the manifest may be requested.")
         }
-        // What eGlu never gives (cookies, files, Google's sign-in) makes the
-        // whole request a no, as Chrome answers one it can't grant whole.
+        // What eGlu never gives (files, Google's sign-in) makes the whole
+        // request a no, as Chrome answers one it can't grant whole.
         let blocked = { (pattern: WKWebExtension.MatchPattern) in
             Self.withheld(pattern) || HandsOff.covers(host: pattern.host.map { $0.hasPrefix("*.") ? String($0.dropFirst(2)) : $0 })
         }
-        guard !wanted.contains(where: { ExtensionPolicy.deniedPermissions.contains($0.rawValue) }), !patterns.contains(where: blocked) else { return false }
+        guard !patterns.contains(where: blocked) else { return false }
         let missing = wanted.filter { context.permissionStatus(for: $0) != .grantedExplicitly }
         let unreached = patterns.filter { context.permissionStatus(for: $0) != .grantedExplicitly }
         guard !missing.isEmpty || !unreached.isEmpty else { return true }
@@ -511,13 +512,16 @@ extension Extensions {
         let alert = NSAlert()
         alert.messageText = String(localized: "\u{201C}\(package.displayName ?? String(localized: "An extension"))\u{201D} asks for more.")
         let lines = missing.map { ExtensionAccessDescription.capability($0.rawValue) } + unreached.map { ExtensionAccessDescription.site($0.string) }
+        let cookies = missing.contains(.cookies)
         alert.informativeText = lines.sorted().joined(separator: "\n") + "\n\n" + String(localized: "Applies in \(spaceName). Google's sign-in pages remain blocked.")
+            + (cookies ? " " + ExtensionAccessGroups.cookiesNote : "")
         alert.addButton(withTitle: String(localized: "Allow"))
         alert.addButton(withTitle: String(localized: "Don't Allow"))
         guard await present(alert, in: owner) == .alertFirstButtonReturn else { return false }
         for permission in missing { context.setPermissionStatus(.grantedExplicitly, for: permission) }
         for pattern in unreached { context.setPermissionStatus(.grantedExplicitly, for: pattern) }
         Self.fence(context)
+        if cookies { setReadsCookies(context.uniqueIdentifier, true, restarting: false) }
         return true
     }
 

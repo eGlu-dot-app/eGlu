@@ -4,6 +4,7 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+- On the Mac, an extension that asks for cookies can have them if you allow it: Settings › Extensions › its name › Allow cookies, or when it asks. Grammarly needs them to see that you are signed in. Cookies stay blocked for every extension until you allow them, and its settings say what they reach: your sign-ins on the sites it can access, Google's included.
 - On the Mac, reloading an extension at the same version reads its changed scripts again for compatibility warnings, and messages to an extension's page embedded in a website wait for its reply.
 - On the Mac, adding an extension or opening one for the first time no longer holds the whole browser still while eGlu reads its code: for a password manager's megabytes of scripts that took many seconds, once for each space it was on.
 - On the Mac, an extension's popup is as wide as its page: a long name, as Grammarly's, is cut short in its header and no longer widens the popup past the page beside a band of empty glass.
