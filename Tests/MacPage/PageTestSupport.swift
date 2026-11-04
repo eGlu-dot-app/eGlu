@@ -50,7 +50,8 @@ class PageTestCase: XCTestCase {
     // MARK: Pages and tabs
 
     /// A configuration whose store keeps nothing, made by the test, not by
-    /// `Page.configuration(space:)`, which would use the space's lasting store.
+    /// the app's engine (`AppWebKitEngine.configuration(space:)`), which would
+    /// use the space's lasting store.
     static func keepingNothing() -> WKWebViewConfiguration {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()

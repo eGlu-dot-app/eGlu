@@ -329,7 +329,7 @@ final class WindowModel: ObservableObject, PageHost {
     /// The keys go to the page, as they do after a click on it; to the
     /// Peek's while one is up, since the page under it is out of reach.
     func focusPage() {
-        guard let view = peek?.page.view ?? page?.view else { return }
+        guard let view = peek?.page.surface.view ?? page?.surface.view else { return }
         DispatchQueue.main.async { [weak self] in self?.window?.makeFirstResponder(view) }
     }
 
@@ -534,8 +534,8 @@ final class WindowModel: ObservableObject, PageHost {
     }
 
     private func clicked(_ event: NSEvent) {
-        guard let partner, let window, event.window === window, partner.view.window === window else { return }
-        let view = partner.view
+        guard let partner, let window, event.window === window, partner.surface.view.window === window else { return }
+        let view = partner.surface.view
         guard view.bounds.contains(view.convert(event.locationInWindow, from: nil)) else { return }
         // What lies over the page (the command bar, the find bar) is not the page: a click there moves nothing.
         if let hit = window.contentView?.hitTest(event.locationInWindow), hit !== view, !hit.isDescendant(of: view) { return }
@@ -1242,7 +1242,7 @@ final class WindowModel: ObservableObject, PageHost {
 
     func isShowing(_ page: Page) -> Bool {
         (page === self.page || page === partner) && window?.isVisible == true
-            && page.view.window === window && !page.view.isHiddenOrHasHiddenAncestor
+            && page.surface.view.window === window && !page.surface.view.isHiddenOrHasHiddenAncestor
     }
 
     func page(_ page: Page, open configuration: WKWebViewConfiguration, for action: WKNavigationAction,

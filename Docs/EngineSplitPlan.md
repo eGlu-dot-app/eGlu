@@ -1,6 +1,6 @@
 # Engine split: implementation plan (eGlu for Mac)
 
-Status: planned on 4 November 2026 at commit 75fcca2, narrowed to the Mac app and validated the same day. Claude wrote the draft. Codex (gpt-6.1-sol) read the repository over two rounds, corrected the draft and sketched the contracts, then validated the Mac plan in two independent runs. Gemini researched what a Chromium engine would face and then checked that research against primary sources. Section 11 records the validation and what it changed. Steps 0 and 1 were built on 4 November 2026, not yet committed (7.3). The decisions left open are in section 9.
+Status: planned on 4 November 2026 at commit 75fcca2, narrowed to the Mac app and validated the same day. Claude wrote the draft. Codex (gpt-6.1-sol) read the repository over two rounds, corrected the draft and sketched the contracts, then validated the Mac plan in two independent runs. Gemini researched what a Chromium engine would face and then checked that research against primary sources. Section 11 records the validation and what it changed. Steps 0 and 1 were built and committed on 4 November 2026 (cf0049e6, 7.3); steps 2 and 3 were built the same day, not yet committed (7.4). The decisions left open are in section 9.
 
 **Scope:** eGlu for Mac only (`Mac/`, and the `Shared/` and PadCore code it compiles). The iPad and iPhone app is out of scope. It still compiles `Shared/` and PadCore, so it must keep building and behaving the same; it adopts nothing new (section 4).
 
@@ -354,6 +354,8 @@ How it behaves:
 
 ### 5.3 The page's view
 
+Hosts place, size, move and focus the engine's own `NSView` through `Page.surface`; no caller needs `acceptsFirstMouse` yet.
+
 ```swift
 import AppKit
 
@@ -363,8 +365,6 @@ import AppKit
     /// data detectors stay the view's.
     var view: NSView { get }
     func focus()
-    /// PiP's window takes the first click (`PictureWindow.swift:346`).
-    var acceptsFirstMouse: Bool { get set }
 }
 
 /// What the Mac's plugin hands the host: a page and its view together.
@@ -518,8 +518,8 @@ Each step is one or more pull requests, and none changes behaviour. Each feature
 |---|---|---|---|
 | 0. Inventory | A script that lists, for the Mac app's sources, tests and scripts (Swift string scripts included): WebKit and `Engines` imports, `page.view` reach-ins and their aliases, WebKit types in signatures, private selectors, hidden web views, and `webkit.messageHandlers`. The import check, reporting only. The cookie test widened to the new package folders | | The inventory checked in; the checks running |
 | 1. Page state and navigation | The first pull request (7.1) | 0 | Mac hosts read state and navigate through `Page` |
-| 2. Pages made through a factory | `Pages` and `Session` make pages and start engine services through one injected engine. `WebEngineKit` and `WebKitEngine` begin here | 1 | A test makes pages through the factory with a fake engine. (The whole app built with the fake comes at step 13, once nothing else needs WebKit) |
-| 3. The view | 5.3; hosts place and focus `surface.view` instead of `page.view` | 2 | No host reaches into `page.view` to show it |
+| 2. Pages made through a factory | Every one of the eight places that makes a page asks one factory, `MacPageEngine`, which `Session` owns and `Pages` is given; the factory also sweeps the stores and starts content blocking and extensions at launch, in the same order as today. `PageState` moves into `WebEngineKit` (`WebEngineCore`); building the WebKit configuration moves into `WebKitEngine` (`WebKitMacPlugin`). The factory stays in the app for now: it makes the app's `Page` | 1 | Tests with a spy factory show `Pages` makes every tab's page through it. The hosts that make pages of their own (little windows, Peek, pop-ups, extension pop-ups, extension sign-in) ask `Session.shared.engine`, which the tests check is the app's factory. The factory still returns real WebKit pages: a fake engine cannot make a `Page` until step 4 moves WebKit out of it. (The whole app built with the fake comes at step 13) |
+| 3. The view | 5.3 in `WebEngineKit` (`WebEngineAppKit`); `Page.surface`, an adapter around its own `PageView`, so hosts place, size, move and focus `surface.view` instead of `page.view`. Apple Passwords' coordinates, the recording indicator, the inspector and child-page returns stay on WebKit until their steps | 2 | No host reaches into `page.view` to show or focus it |
 | 4. Navigation lifecycle and policy | 5.2's events, decisions, errors, redirects, modifiers, file loads; `PageHost` loses its WebKit types except in child creation | 2 | `Page`'s WebKit delegate code in `WebKitMacPlugin` |
 | 5. Child pages | Synchronous acceptance; Peek, little windows, pop-ups, document PiP | 3, 4 | `PageHost.page(_:open:for:features:)` gone, and with it `PageHost`'s last WebKit types |
 | 6. Scripts and messages | `egluBridge` (5.4), with the iOS adapter; Writing, Measure, Store, Passwords handlers on channels | 4 | No Mac script calls `webkit.messageHandlers` but the extension runtime's |
@@ -571,7 +571,7 @@ The first pull request touches no `Shared/` file and no iOS file (`project.yml:7
 
 ### 7.3 What was built (4 November 2026)
 
-Steps 0 and 1, in this worktree, uncommitted. Built by subagents and checked by Claude: Gemini wrote step 0, Codex wrote step 1's code, a Claude subagent wrote the test target; Codex (`/codex review`, twice) and Gemini reviewed the whole diff.
+Steps 0 and 1, committed as cf0049e6. Built by subagents and checked by Claude: Gemini wrote step 0, Codex wrote step 1's code, a Claude subagent wrote the test target; Codex (`/codex review`, twice) and Gemini reviewed the whole diff.
 
 | Step | Files | Result |
 |---|---|---|
@@ -587,6 +587,25 @@ Where the build differs from 7.1 and 7.2:
 - The replacement tests use `Session.replacePage`, which makes a page with the space's lasting store under the test identifier's `~/Library/WebKit` folder. Each run's leftovers there are removed after it.
 
 Known gaps: the inventory misses WebKit types on the continuation lines of multi-line signatures, and its comment and string stripping has edge cases (raw strings, `//` inside JavaScript strings). Separately, and older than this work: an `EGLU_DATA_ROOT` exported in the shell that runs `xcodebuild` is written into any build's `Info.plist` (`Mac/Info.plist:5`), so a normal build made that way would use that folder.
+
+### 7.4 Steps 2 and 3 (4 November 2026)
+
+Built on top of cf0049e6, not yet committed. Codex wrote both steps' code, each in a worktree of its own (`codex exec`, allowed to write only there); a Claude subagent wrote step 2's hosted tests; Claude wrote step 3's, merged the work, ran every check and read every diff; `/codex review` and Gemini reviewed the whole of it.
+
+| Step | What | Result |
+|---|---|---|
+| 2 | `Mac/Sources/MacPageEngine.swift` (`MacPageSource`, `MacPageEngine`, `AppWebKitEngine`), owned by `Session` and given to `Pages`; the eight places that made a `Page`, and `ExtensionAuth`'s configuration, ask it; `Page.init` takes its configuration; `Session.startWorkspaceServices` calls it for the stores, content blocking and extensions, in the same order. New packages: `WebEngineKit` (`WebEngineCore`: `PageState`) and `WebKitEngine` (`WebKitMacPlugin`: `WebKitConfiguration.make`, with the private-call guards) | 7 hosted tests (`PageEngineTests`); 3 package tests |
+| 3 | `WebEngineKit` gains `WebEngineAppKit` (`WebEngineSurface`: `view`, `focus()`); `Page.surface` (`PageWebKitSurface`) is the page's own `PageView`; the window, pop-ups, little windows, Peek (through `PageSurface`), Apple Passwords and the window's split-view clicks place, constrain, check and focus `surface.view`, with the same windows and timing | 5 hosted tests (`PageSurfaceTests`); 1 package test |
+
+All three schemes build with no new warnings; the 31 hosted tests and the package tests pass; the real data folder was identical before and after each run. Reach-ins into `page.view` in app code: 69 after step 1, 57 after step 3.
+
+Where the build differs from the plan:
+- `WebEngineSurface` has no `acceptsFirstMouse`: nothing needs it (the only first-mouse overrides are PictureWindow's own views).
+- `Shared/PageShared.swift` is untouched: the hidden transcript reader moves with the other hidden pages in step 9.
+- The factory stays in the app (it makes the app's `Page`); `Session`'s initializer stays private, so tests give a spy factory to a `Pages` of their own.
+- Still on WebKit's view, by design until their steps: Apple Passwords' coordinates, the recording indicator, the inspector, child-page returns, the extension pop-up's own web view, restoration and URL reads.
+
+Reviews: `/codex review` found no defects. Gemini (gemini-3.8-flash-high, which saw the diff cut off past 120 KB) reported eight findings; Claude checked each at its line and none held.
 
 ## 8. What a Chromium plugin would face
 

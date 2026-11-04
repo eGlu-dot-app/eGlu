@@ -41,7 +41,8 @@ final class PeekPage: ObservableObject, PageHost, Identifiable {
         self.width = width
         self.height = height
         asked = url
-        page = Page(tab: UUID(), space: opener.space, configuration: configuration)
+        let source: MacPageSource = configuration.map { .supplied($0, extensionPage: false) } ?? .space
+        page = Session.shared.engine.makePage(tab: UUID(), space: opener.space, source: source)
         page.openedFrom = opener.tab
         self.url = url
         page.host = self

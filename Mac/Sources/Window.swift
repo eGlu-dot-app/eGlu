@@ -199,7 +199,7 @@ struct PageSurface: NSViewRepresentable {
     }
 
     func updateNSView(_ holder: PageHolder, context: Context) {
-        holder.show(page?.view)
+        holder.show(page?.surface.view)
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: PageHolder, context: Context) -> CGSize? {

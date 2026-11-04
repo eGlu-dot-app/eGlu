@@ -3,7 +3,7 @@ import WebKit
 /// WebKit's own Web Inspector, a private API (WKWebViewPrivate.h: every
 /// WKWebView keeps an `_inspector`, a _WKInspector with show(), showConsole()
 /// and toggleElementSelection()) gone at behind responds(to:), as the DMG
-/// may and the other private calls in Page.configuration do. A WebKit that
+/// may and the other private calls in WebKitConfiguration.make do. A WebKit that
 /// takes it away leaves show() false, and the caller says Safari's Develop
 /// menu is the way instead.
 enum WebInspector {

@@ -34,7 +34,8 @@ final class Session: ObservableObject {
     private static let intelligenceKey = "hasIntelligence"
     private var intelligenceWatch: NSObjectProtocol?
 
-    let pages = Pages()
+    let engine: any MacPageEngine
+    let pages: Pages
     private let windows = NSHashTable<WindowModel>.weakObjects()
     /// Opens, retries and restores the workspace's file; its writes are persistence's.
     private let store = WorkspaceStore(folder: Session.folder, snapshots: Snapshots.folder)
@@ -91,7 +92,13 @@ final class Session: ObservableObject {
         WorkspaceStore.file(in: folder)
     }
 
+    /// The one Session (`shared`). Its engine makes every page (MacPageEngine);
+    /// tests give one of theirs to a `Pages` of their own, never to a second
+    /// Session, which would open and write the same workspace.
     private init() {
+        let engine = AppWebKitEngine()
+        self.engine = engine
+        pages = Pages(engine: engine)
         let opened = store.open()
         workspace = opened.workspace
         workspaceProblem = opened.problem
@@ -181,12 +188,12 @@ final class Session: ObservableObject {
         // and no page test needs any of it.
         if Session.hostingTests { return }
         #endif
-        Stores.sweep()
+        engine.sweepStores()
         HistoryRecorder.shared.prune()
         Snapshots.prune(keeping: Set(workspace.spaces.flatMap { $0.tabs.map(\.id) }))
         pages.watchMemory()
-        ContentBlocker.shared.start()
-        Extensions.shared.start(afterLaunch: afterLaunch)
+        engine.startContentBlocking()
+        engine.startExtensions(afterLaunch: afterLaunch)
         ElsewhereChecker.shared.start()
         if preferences.iCloudSync, Session.canSync { Sync.shared.start(join: false) }
     }

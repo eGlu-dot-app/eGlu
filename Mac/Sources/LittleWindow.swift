@@ -56,7 +56,8 @@ final class LittleWindow: NSObject, ObservableObject, PageHost, NSWindowDelegate
 
     private init(url: URL?, space: UUID, configuration: WKWebViewConfiguration?) {
         self.space = space
-        page = Page(tab: UUID(), space: space, configuration: configuration)
+        let source: MacPageSource = configuration.map { .supplied($0, extensionPage: false) } ?? .space
+        page = Session.shared.engine.makePage(tab: UUID(), space: space, source: source)
         let screen = NSApp.keyWindow?.screen ?? NSScreen.main
         let room = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1280, height: 800)
         let size = CGSize(width: min(Self.standard.width, room.width * 0.9), height: min(Self.standard.height, room.height * 0.9))
@@ -132,7 +133,7 @@ final class LittleWindow: NSObject, ObservableObject, PageHost, NSWindowDelegate
     func focusPage() {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            self.window.makeFirstResponder(self.page.view)
+            self.window.makeFirstResponder(self.page.surface.view)
         }
     }
 

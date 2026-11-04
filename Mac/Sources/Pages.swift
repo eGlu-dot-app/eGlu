@@ -11,6 +11,7 @@ import WebKit
 /// than an iPad, so the Freezer (Memory.swift in PadCore) is given more.
 @MainActor
 final class Pages {
+    private let engine: any MacPageEngine
     private(set) var live: [UUID: Page] = [:]
     private struct KeptState {
         let space: UUID
@@ -22,6 +23,10 @@ final class Pages {
     private var freezing: Set<UUID> = []
     private var pressure: DispatchSourceMemoryPressure?
 
+    init(engine: any MacPageEngine) {
+        self.engine = engine
+    }
+
     /// What stays live off screen on a Mac: a few heavy web apps, and the
     /// light pages last looked at.
     static let limits = LiveLimits(heavy: 3, lightOffScreen: 12)
@@ -32,9 +37,7 @@ final class Pages {
         if live[tab.id] != nil { moved(tab.id) }
         // An extension's own page is made from the extension's configuration,
         // as WebKit needs, while the extension is on in the space.
-        let page = tab.url.flatMap { Extensions.shared.configuration(for: $0, in: space) }
-            .map { Page(tab: tab.id, space: space, configuration: $0, extensionPage: true) }
-            ?? Page(tab: tab.id, space: space)
+        let page = engine.makePage(tab: tab.id, space: space, source: .tab(tab.url))
         live[tab.id] = page
         addresses[tab.id] = tab.url
         let token = Snapshots.token(for: tab.id, in: space)
@@ -63,7 +66,7 @@ final class Pages {
     /// A page WebKit made for a tab, opened by another page.
     func adopt(tab: UUID, space: UUID, configuration: WKWebViewConfiguration, extensionPage: Bool = false) -> Page {
         close(tab)
-        let page = Page(tab: tab, space: space, configuration: configuration, extensionPage: extensionPage)
+        let page = engine.makePage(tab: tab, space: space, source: .supplied(configuration, extensionPage: extensionPage))
         live[tab] = page
         return page
     }

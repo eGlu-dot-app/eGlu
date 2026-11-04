@@ -28,6 +28,10 @@ settings:
     MARKETING_VERSION: "1.1.0"
     CURRENT_PROJECT_VERSION: "42"
 packages:
+  WebEngineKit:
+    path: WebEngineKit
+  WebKitEngine:
+    path: WebKitEngine
   PadCore:
     path: PadCore
   # The Rust engines (Harper for grammar, anydoc and pdf-inspector for
@@ -59,6 +63,12 @@ targetTemplates:
     dependencies:
       - package: PadCore
       - package: Engines
+      - package: WebEngineKit
+        product: WebEngineCore
+      - package: WebEngineKit
+        product: WebEngineAppKit
+      - package: WebKitEngine
+        product: WebKitMacPlugin
       # In Contents/PlugIns, where the Dock looks for the plug-in Mac/Info.plist names.
       - target: eGlu Dock Tile
         embed: true

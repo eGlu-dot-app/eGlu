@@ -30,7 +30,7 @@ final class Popup: NSObject, PageHost, NSWindowDelegate {
     static func open(from opener: Page, configuration: WKWebViewConfiguration, features: WKWindowFeatures,
                      over parent: NSWindow?) -> WKWebView {
         // A page of no tab: what it says about itself is kept nowhere.
-        let page = Page(tab: UUID(), space: opener.space, configuration: configuration)
+        let page = Session.shared.engine.makePage(tab: UUID(), space: opener.space, source: .supplied(configuration, extensionPage: false))
         page.openedFrom = opener.tab
         let size = NSSize(width: features.width?.doubleValue ?? 520, height: features.height?.doubleValue ?? 640)
         let popup = Popup(page: page, opener: opener, size: size, over: parent)
@@ -108,7 +108,7 @@ final class Popup: NSObject, PageHost, NSWindowDelegate {
         progress.minValue = 0
         progress.maxValue = 1
         [status, progress, recovery].forEach(statusBox.addArrangedSubview)
-        let stack = NSStackView(views: [header, statusBox, page.view])
+        let stack = NSStackView(views: [header, statusBox, page.surface.view])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 0
@@ -123,7 +123,7 @@ final class Popup: NSObject, PageHost, NSWindowDelegate {
             stack.bottomAnchor.constraint(equalTo: content.bottomAnchor),
             header.widthAnchor.constraint(equalTo: stack.widthAnchor),
             statusBox.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            page.view.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            page.surface.view.widthAnchor.constraint(equalTo: stack.widthAnchor),
             progress.widthAnchor.constraint(equalTo: statusBox.widthAnchor, constant: -24),
             security.widthAnchor.constraint(equalToConstant: 16),
         ])

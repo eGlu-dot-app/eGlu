@@ -1,6 +1,8 @@
 import AppKit
 import PadCore
 import UniformTypeIdentifiers
+import WebEngineAppKit
+import WebEngineCore
 import WebKit
 
 /// What a page asks of whoever is showing it: a window (WindowModel), a
@@ -127,19 +129,6 @@ final class PageView: WKWebView {
     }
 }
 
-/// What WebKit itself reports for a page: the engine's state
-/// (Docs/EngineSplitPlan.md 5.2). Page's own members add the product's
-/// rules, such as going back past a replaced page, on top.
-struct PageState: Equatable {
-    let url: URL?
-    let title: String?
-    let isLoading: Bool
-    let estimatedProgress: Double
-    let canGoBack: Bool
-    let canGoForward: Bool
-    let hasOnlySecureContent: Bool
-}
-
 /// One tab's page while it is live: its web view, the content blocker's
 /// lists and scripts it gets, and everything WebKit tells it.
 ///
@@ -156,6 +145,8 @@ final class Page: NSObject {
     let tab: UUID
     let space: UUID
     let view: PageView
+    /// The same view, for hosts to place, move and give the keys.
+    private(set) lazy var surface: any WebEngineSurface = PageWebKitSurface(view: view)
     private let controller: WKUserContentController
     weak var host: PageHost?
 
@@ -319,15 +310,14 @@ final class Page: NSObject {
         #endif
     }()
 
-    /// `configuration`: WebKit's, for a page opened by another page; a new
-    /// one in the space's store otherwise. Either way the page gets a script
-    /// controller of its own, so the scripts swapped for one page (none at
-    /// all on a hands-off host) never touch another's.
-    init(tab: UUID, space: UUID, configuration: WKWebViewConfiguration? = nil, extensionPage: Bool = false) {
+    /// `configuration`: supplied by the page engine. A page gets a script
+    /// controller of its own unless it is an extension's page, so scripts
+    /// swapped for one page never touch another's.
+    init(tab: UUID, space: UUID, configuration: WKWebViewConfiguration, extensionPage: Bool = false) {
         self.tab = tab
         self.space = space
         isExtensionPage = extensionPage
-        let config = configuration ?? Page.configuration(space: space)
+        let config = configuration
         // An extension's page keeps the controller WebKit made for it.
         let controller = extensionPage ? config.userContentController : WKUserContentController()
         config.userContentController = controller
@@ -346,40 +336,6 @@ final class Page: NSObject {
             view.uiDelegate = self
         }
         setUp()
-    }
-
-    static func configuration(space: UUID) -> WKWebViewConfiguration {
-        let config = WKWebViewConfiguration()
-        config.websiteDataStore = Stores.store(for: space)
-        // Safari, by name: the end of the user agent that WebKit leaves to
-        // the app (Identity.swift). Without it sites read the app as a web
-        // view inside an app, and Google refuses to sign in.
-        config.applicationNameForUserAgent = Identity.applicationName(for: ProcessInfo.processInfo.operatingSystemVersion)
-        config.mediaTypesRequiringUserActionForPlayback = .audio
-        config.preferences.isElementFullscreenEnabled = true
-        // window.open only from a click or a key, as Safari's pop-up
-        // blocking has it; a sign-in window opened by its button opens.
-        config.preferences.javaScriptCanOpenWindowsAutomatically = false
-        // macOS's own picture in picture for a video (appWentBehind, and a
-        // site's own button): WebKit has it, and turns it off in an app's
-        // web views on macOS, with no public switch. This one is private: a
-        // DMG has no App Review, and a macOS that takes it away leaves
-        // picture in picture off, as it was. With the underscore the key
-        // finds no setter and throws; without it, `_setAllows…:` is found.
-        if config.preferences.responds(to: Selector(("_setAllowsPictureInPictureMediaPlayback:"))) {
-            config.preferences.setValue(true, forKey: "allowsPictureInPictureMediaPlayback")
-        }
-        // Right-click Inspect Element and console logging to the page's own
-        // inspector: the same private switch Safari has, found the same way.
-        // The developer tools need the _inspector object, not this; it only
-        // opens WebKit's own inspector for a page that asks to be inspected.
-        if config.preferences.responds(to: Selector(("_setDeveloperExtrasEnabled:"))) {
-            config.preferences.setValue(true, forKey: "developerExtrasEnabled")
-        }
-        // The space's extensions (Extensions): WebKit takes a page's
-        // controller only before the page's view is made.
-        config.webExtensionController = Extensions.shared.controller(for: space)
-        return config
     }
 
     private func setUp() {
