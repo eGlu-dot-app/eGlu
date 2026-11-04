@@ -1,5 +1,7 @@
 import PadCore
+import WebEngineCore
 import WebKit
+import WebKitMacPlugin
 import XCTest
 @testable import eGluMac
 
@@ -104,6 +106,27 @@ final class PageEngineTests: PageTestCase {
         XCTAssertEqual(spy.calls.count, 2)
     }
 
+    /// A window a website opened, as a tab: its page is asked for with the
+    /// very request, which carries what the child must be made with, and
+    /// becomes the tab's live page.
+    func testAdoptPassesTheChildRequestItWasGiven() throws {
+        let spy = SpyEngine()
+        let pages = spiedPages(spy)
+        let space = try XCTUnwrap(Session.shared.workspace.spaces.first?.id)
+        let request = TestChildRequest()
+        let tab = UUID()
+        let page = pages.adopt(tab: tab, space: space, child: request)
+        let call = try XCTUnwrap(spy.calls.last)
+        XCTAssertEqual(call.source, .child)
+        XCTAssertTrue(call.child === request, "the factory was given another request")
+        XCTAssertEqual(call.tab, tab)
+        XCTAssertEqual(call.space, space)
+        XCTAssertTrue(call.page === page)
+        XCTAssertFalse(page.isExtensionPage)
+        XCTAssertTrue(pages.live[tab] === page)
+        XCTAssertEqual(spy.calls.count, 1)
+    }
+
     // MARK: The app's factory
 
     /// A supplied configuration makes a page with it, an extension's page
@@ -199,6 +222,7 @@ final class SpyEngine: MacPageEngine {
         case space
         case tab(URL?)
         case supplied(extensionPage: Bool)
+        case child
     }
 
     /// One page asked for, and the page made.
@@ -208,6 +232,8 @@ final class SpyEngine: MacPageEngine {
         let space: UUID
         /// The configuration given with `.supplied`, as it was given.
         let configuration: WKWebViewConfiguration?
+        /// The request given with `.child`, as it was given.
+        let child: (any WebChildRequest)?
         let page: Page
     }
 
@@ -217,6 +243,7 @@ final class SpyEngine: MacPageEngine {
         let page: Page
         let kind: Source
         var supplied: WKWebViewConfiguration?
+        var child: (any WebChildRequest)?
         switch source {
         case .space:
             kind = .space
@@ -224,12 +251,23 @@ final class SpyEngine: MacPageEngine {
         case .tab(let url):
             kind = .tab(url)
             page = Page(tab: tab, space: space, configuration: PageTestCase.keepingNothing())
+        case .child(let request):
+            kind = .child
+            child = request
+            // WebKit's own request carries the configuration to make the
+            // child with; a test's has none and gets a blank one.
+            if let request = request as? WebKitChildRequest {
+                supplied = request.configuration
+                page = Page(tab: tab, space: space, configuration: request.configuration)
+            } else {
+                page = Page(tab: tab, space: space, configuration: PageTestCase.keepingNothing())
+            }
         case .supplied(let configuration, let extensionPage):
             kind = .supplied(extensionPage: extensionPage)
             supplied = configuration
             page = Page(tab: tab, space: space, configuration: configuration, extensionPage: extensionPage)
         }
-        calls.append(Call(source: kind, tab: tab, space: space, configuration: supplied, page: page))
+        calls.append(Call(source: kind, tab: tab, space: space, configuration: supplied, child: child, page: page))
         return page
     }
 
@@ -242,4 +280,15 @@ final class SpyEngine: MacPageEngine {
     func startContentBlocking() {}
 
     func startExtensions(afterLaunch: Bool) {}
+}
+
+/// A website's request for a window, as a test makes one: an address and
+/// no size, with nothing WebKit made behind it.
+@MainActor
+final class TestChildRequest: WebChildRequest {
+    let navigation = WebNavigation(request: URLRequest(url: URL(string: "https://eglu-tests.invalid/child")!),
+                                   sourceOrigin: .opaque, targetIsMainFrame: nil, kind: .other, modifiers: [],
+                                   buttonNumber: 0, requestsDownload: false, isServerRedirect: false,
+                                   contentRuleRedirect: nil, sourceIsMainFrame: true)
+    let features = WebWindowFeatures(width: nil, height: nil)
 }

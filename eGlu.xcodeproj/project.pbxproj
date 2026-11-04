@@ -131,6 +131,7 @@
 		4EDE7159A2B2D62FBE1482CE /* eGlu.icon in Resources */ = {isa = PBXBuildFile; fileRef = F74A481F35078203E6778C29 /* eGlu.icon */; };
 		4F3E8B02D0942D47B38DB531 /* ChromeConstraints.swift in Sources */ = {isa = PBXBuildFile; fileRef = D896D70ADD5EAC460A0FC79D /* ChromeConstraints.swift */; };
 		4F5CA22F1494EF83FAAA3ABD /* ExtensionSocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D0F94B94438655C61A3705F /* ExtensionSocket.swift */; };
+		4F63240070531B74004F6B2B /* PageChildTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 196B9C2481AEA1990A739D2A /* PageChildTests.swift */; };
 		506F9ADE39F76818FD8D8359 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72B8D3EF80D9D91D89771548 /* HistoryView.swift */; };
 		520EB4E9694D3C4C3700C507 /* MeasurePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 295F884323DB72655D014BD3 /* MeasurePanel.swift */; };
 		52F3C417852BBDC0255229E6 /* DeveloperBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E20BDB914E83BD7060BB461 /* DeveloperBar.swift */; };
@@ -460,6 +461,7 @@
 		175C837A0864F7FFAB8BA56D /* HandoffSpeech.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandoffSpeech.swift; sourceTree = "<group>"; };
 		17A829B7FF8B1CE19086B4B2 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		18B265C71B0477CE9C358898 /* Feather.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Feather.swift; sourceTree = "<group>"; };
+		196B9C2481AEA1990A739D2A /* PageChildTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageChildTests.swift; sourceTree = "<group>"; };
 		199CA3489A3A93C47AE8C0A6 /* PopupModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PopupModel.swift; sourceTree = "<group>"; };
 		1A23DF8DB256F464D8F6D74E /* SiteIconsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiteIconsTests.swift; sourceTree = "<group>"; };
 		1AA47374F100620B5D221A40 /* ExtensionCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionCapture.swift; sourceTree = "<group>"; };
@@ -1025,6 +1027,7 @@
 			isa = PBXGroup;
 			children = (
 				E9478617D34AE80447D8EEA7 /* PageBackTests.swift */,
+				196B9C2481AEA1990A739D2A /* PageChildTests.swift */,
 				1D36C6CE512B1C7506C63C09 /* PageCommandTests.swift */,
 				B7C0791A3F6DA81A41DC1C4B /* PageDownloadAndFileTests.swift */,
 				0EC5B76D8B45ABDBB17A59B3 /* PageEngineTests.swift */,
@@ -1436,6 +1439,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				880065BDAAACC4524DA8A57F /* PageBackTests.swift in Sources */,
+				4F63240070531B74004F6B2B /* PageChildTests.swift in Sources */,
 				F89C24434B16340F6AD92122 /* PageCommandTests.swift in Sources */,
 				7B2D8E320E5A1051E407D00C /* PageDownloadAndFileTests.swift in Sources */,
 				B17B4E6C0800D80806AE320F /* PageEngineTests.swift in Sources */,

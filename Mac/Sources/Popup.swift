@@ -1,6 +1,6 @@
 import AppKit
 import PadCore
-import WebKit
+import WebEngineCore
 
 /// A window a page opened at a size of its own (a sign-in with Google or
 /// Apple, a share dialog) where no Peek can have it: from a page in a Peek,
@@ -27,15 +27,14 @@ final class Popup: NSObject, PageHost, NSWindowDelegate {
     /// The window it stands over closing: it closes too.
     private var parentClosing: NSObjectProtocol?
 
-    static func open(from opener: Page, configuration: WKWebViewConfiguration, features: WKWindowFeatures,
-                     over parent: NSWindow?) -> WKWebView {
+    static func open(from opener: Page, child: any WebChildRequest, over parent: NSWindow?) -> Page {
         // A page of no tab: what it says about itself is kept nowhere.
-        let page = Session.shared.engine.makePage(tab: UUID(), space: opener.space, source: .supplied(configuration, extensionPage: false))
+        let page = Session.shared.engine.makePage(tab: UUID(), space: opener.space, source: .child(child))
         page.openedFrom = opener.tab
-        let size = NSSize(width: features.width?.doubleValue ?? 520, height: features.height?.doubleValue ?? 640)
+        let size = NSSize(width: child.features.width ?? 520, height: child.features.height ?? 640)
         let popup = Popup(page: page, opener: opener, size: size, over: parent)
         open.insert(popup)
-        return popup.page.view
+        return popup.page
     }
 
     /// An extension's popup window (windows.create with type "popup"): a
@@ -184,9 +183,8 @@ final class Popup: NSObject, PageHost, NSWindowDelegate {
         panel.isVisible
     }
 
-    func page(_ page: Page, open configuration: WKWebViewConfiguration, for action: WKNavigationAction,
-              features: WKWindowFeatures) -> WKWebView? {
-        Popup.open(from: page, configuration: configuration, features: features, over: panel)
+    func page(_ page: Page, openChild request: any WebChildRequest) -> Page? {
+        Popup.open(from: page, child: request, over: panel)
     }
 
     /// No tabs here: the page goes there itself.

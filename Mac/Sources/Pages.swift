@@ -1,5 +1,6 @@
 import AppKit
 import PadCore
+import WebEngineCore
 import WebKit
 
 /// Every tab's page: live, or let go until it is opened again.
@@ -67,6 +68,14 @@ final class Pages {
     func adopt(tab: UUID, space: UUID, configuration: WKWebViewConfiguration, extensionPage: Bool = false) -> Page {
         close(tab)
         let page = engine.makePage(tab: tab, space: space, source: .supplied(configuration, extensionPage: extensionPage))
+        live[tab] = page
+        return page
+    }
+
+    /// A child made from its request before the call that asked returns.
+    func adopt(tab: UUID, space: UUID, child: any WebChildRequest) -> Page {
+        close(tab)
+        let page = engine.makePage(tab: tab, space: space, source: .child(child))
         live[tab] = page
         return page
     }

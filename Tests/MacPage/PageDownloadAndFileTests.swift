@@ -436,8 +436,7 @@ private final class DownloadHost: PageHost {
 
     func pageDidChange(_ page: Page) {}
     func isShowing(_ page: Page) -> Bool { false }
-    func page(_ page: Page, open configuration: WKWebViewConfiguration, for action: WKNavigationAction,
-              features: WKWindowFeatures) -> WKWebView? { nil }
+    func page(_ page: Page, openChild request: any WebChildRequest) -> Page? { nil }
     func page(_ page: Page, openInNewTab url: URL, inFront: Bool) -> Bool { false }
     func pageDidClose(_ page: Page) {
         closed.append(ObjectIdentifier(page))

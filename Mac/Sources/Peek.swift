@@ -1,7 +1,7 @@
 import AppKit
 import PadCore
 import SwiftUI
-import WebKit
+import WebEngineCore
 
 /// A page in a Peek (PadCore's Peek), as in Arc: a pop-up its tab's page
 /// asked for at a size of its own, a link that leaves a pinned tab's site,
@@ -34,14 +34,14 @@ final class PeekPage: ObservableObject, PageHost, Identifiable {
     /// Closed, or its page given to a tab: nothing more to do.
     private(set) var isOver = false
 
-    /// `configuration`: WebKit's, for a pop-up, so the page keeps its tie to
+    /// `child`: the request for a pop-up, so the page keeps its tie to
     /// the one that opened it; nil for a link, loaded by whoever made it.
-    init(opener: Page, configuration: WKWebViewConfiguration?, url: URL?, width: Double?, height: Double?) {
+    init(opener: Page, child: (any WebChildRequest)?, url: URL?, width: Double?, height: Double?) {
         self.opener = opener
         self.width = width
         self.height = height
         asked = url
-        let source: MacPageSource = configuration.map { .supplied($0, extensionPage: false) } ?? .space
+        let source: MacPageSource = child.map { .child($0) } ?? .space
         page = Session.shared.engine.makePage(tab: UUID(), space: opener.space, source: source)
         page.openedFrom = opener.tab
         self.url = url
@@ -110,13 +110,12 @@ final class PeekPage: ObservableObject, PageHost, Identifiable {
 
     /// A pop-up of the Peek's own page stands over the window, as pop-ups did
     /// before Peek; any other window it opens is a tab after the tab the Peek is over.
-    func page(_ page: Page, open configuration: WKWebViewConfiguration, for action: WKNavigationAction,
-              features: WKWindowFeatures) -> WKWebView? {
-        if features.width != nil || features.height != nil {
-            return Popup.open(from: page, configuration: configuration, features: features, over: hostWindow)
+    func page(_ page: Page, openChild request: any WebChildRequest) -> Page? {
+        if request.features.width != nil || request.features.height != nil {
+            return Popup.open(from: page, child: request, over: hostWindow)
         }
         guard let opener, let host = opener.host else { return nil }
-        return host.page(opener, open: configuration, for: action, features: features)
+        return host.page(opener, openChild: request)
     }
 
     /// A ⌘-click in the Peek: a tab after the one it stands over.

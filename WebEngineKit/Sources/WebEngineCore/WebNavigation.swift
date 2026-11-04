@@ -33,6 +33,8 @@ public struct WebContentRuleRedirect: Sendable {
 public struct WebNavigation: Sendable {
     public let request: URLRequest
     public let sourceOrigin: WebOrigin
+    /// nil when the engine does not say which frame asked.
+    public let sourceIsMainFrame: Bool?
     public let targetIsMainFrame: Bool?
     public let kind: WebNavigationKind
     public let modifiers: WebModifiers
@@ -44,9 +46,10 @@ public struct WebNavigation: Sendable {
     public init(request: URLRequest, sourceOrigin: WebOrigin, targetIsMainFrame: Bool?,
                 kind: WebNavigationKind, modifiers: WebModifiers, buttonNumber: Int,
                 requestsDownload: Bool, isServerRedirect: Bool,
-                contentRuleRedirect: WebContentRuleRedirect?) {
+                contentRuleRedirect: WebContentRuleRedirect?, sourceIsMainFrame: Bool? = nil) {
         self.request = request
         self.sourceOrigin = sourceOrigin
+        self.sourceIsMainFrame = sourceIsMainFrame
         self.targetIsMainFrame = targetIsMainFrame
         self.kind = kind
         self.modifiers = modifiers

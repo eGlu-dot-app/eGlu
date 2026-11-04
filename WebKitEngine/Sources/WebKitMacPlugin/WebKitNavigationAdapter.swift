@@ -24,7 +24,7 @@ public final class WebKitNavigationAdapter: NSObject, WKNavigationDelegate, WebR
         Self.translate(action)
     }
 
-    /// Also used by the temporary child-creation WKNavigationAction overload.
+    /// Also used to capture the navigation for a child request.
     public static func translate(_ action: WKNavigationAction) -> WebNavigation {
         let kind: WebNavigationKind
         switch action.navigationType {
@@ -56,7 +56,7 @@ public final class WebKitNavigationAdapter: NSObject, WKNavigationDelegate, WebR
                              modifiers: modifiers, buttonNumber: action.buttonNumber,
                              requestsDownload: action.shouldPerformDownload,
                              isServerRedirect: flag("_isRedirect", on: action),
-                             contentRuleRedirect: ruleRedirect(action))
+                             contentRuleRedirect: ruleRedirect(action), sourceIsMainFrame: sourceFrame?.isMainFrame)
     }
 
     private static func flag(_ key: String, on action: WKNavigationAction) -> Bool {

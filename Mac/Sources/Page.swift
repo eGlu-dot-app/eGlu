@@ -20,10 +20,9 @@ protocol PageHost: AnyObject {
     func pageDidChange(_ page: Page)
     func isShowing(_ page: Page) -> Bool
     /// A window the page opened (window.open, a link to a new window). The
-    /// returned view must be made with `configuration`, as WebKit requires,
-    /// for the new page to keep its tie to the one that opened it.
-    func page(_ page: Page, open configuration: WKWebViewConfiguration, for action: WKNavigationAction,
-              features: WKWindowFeatures) -> WKWebView?
+    /// returned page must be made from `request`, before this call returns,
+    /// for the new page to keep its tie to the one that opened it. nil rejects it.
+    func page(_ page: Page, openChild request: any WebChildRequest) -> Page?
     /// A ⌘-click's address, for a tab of its own (NewTabClick); false where
     /// there are no tabs, and the page goes there itself.
     func page(_ page: Page, openInNewTab url: URL, inFront: Bool) -> Bool
@@ -490,11 +489,6 @@ final class Page: NSObject {
     /// says which only privately (_isRedirect), asked first; without it,
     /// the frame, and a redirect from a blank tab reads as the site that
     /// redirected. nil for anything else.
-    // Child creation stays on WKUIDelegate until the next slice.
-    static func site(sending action: WKNavigationAction, loadingFrom: URL?, to url: URL) -> URL? {
-        site(sending: WebKitNavigationAdapter.translate(action), loadingFrom: loadingFrom, to: url)
-    }
-
     static func site(sending action: WebNavigation, loadingFrom: URL?, to url: URL) -> URL? {
         let frame: URL? = {
             guard case let .tuple(scheme, host, port) = action.sourceOrigin,
@@ -1268,16 +1262,16 @@ final class Page: NSObject {
         host is WindowModel
     }
 
-    /// A Peek over the page, in place of the one open. `configuration`:
-    /// WebKit's, for a window the page opened, which WebKit loads itself;
+    /// A Peek over the page, in place of the one open. `child`:
+    /// the request for a window the page opened, which the engine loads itself;
     /// nil for a link, loaded here.
     @discardableResult
-    func openPeek(_ url: URL?, configuration: WKWebViewConfiguration? = nil, width: Double? = nil,
+    func openPeek(_ url: URL?, child: (any WebChildRequest)? = nil, width: Double? = nil,
                   height: Double? = nil) -> PeekPage {
         peek?.close()
-        let made = PeekPage(opener: self, configuration: configuration, url: url, width: width, height: height)
+        let made = PeekPage(opener: self, child: child, url: url, width: width, height: height)
         peek = made
-        if configuration != nil {
+        if child != nil {
             made.page.wasOpened = true
         } else if let url {
             made.page.load(url)
@@ -1325,10 +1319,10 @@ final class Page: NSObject {
     }
 
     /// The window picture.js asked for, in place of the one open: one at a time, as in Chrome.
-    private func openPicture(_ configuration: WKWebViewConfiguration, features: WKWindowFeatures,
+    private func openPicture(_ child: WebKitChildRequest,
                              request: DocumentPicture.Request) -> WKWebView {
         picture?.close()
-        let window = PictureWindow(opener: self, configuration: configuration, features: features, request: request)
+        let window = PictureWindow(opener: self, configuration: child.configuration, features: child.features, request: request)
         window.automatic = enteringPicture
         picture = window
         return window.view
@@ -1472,27 +1466,30 @@ extension Page: WKUIDelegate {
 
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
                  for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+        let request = WebKitChildRequest(configuration: configuration, action: navigationAction, features: windowFeatures)
+        let navigation = request.navigation
         // A website's window opened on an extension's page: only a page the
         // extension shows that site, as a navigation to one is held to
         // (opensExtensionPage); checked here too, before any view is made.
-        if !isExtensionPage, let url = navigationAction.request.url, Extensions.shared.isExtensionPage(url),
-           !(Self.site(sending: navigationAction, loadingFrom: nil, to: url).map { Extensions.shared.webAccessible(url, from: $0, in: space) } ?? false) {
+        if !isExtensionPage, let url = navigation.request.url, Extensions.shared.isExtensionPage(url),
+           !(Self.site(sending: navigation, loadingFrom: nil, to: url).map { Extensions.shared.webAccessible(url, from: $0, in: space) } ?? false) {
             return nil
         }
         // Another app's link asked for in a window of its own: theirs to
         // open, with no tab made for a page that will never be.
-        if let url = navigationAction.request.url, AppLink.isOne(scheme: url.scheme), !Extensions.shared.isExtensionPage(url) {
-            openElsewhere(url, clicked: navigationAction.navigationType == .linkActivated,
-                          mainFrame: navigationAction.targetFrame?.isMainFrame ?? true)
+        if let url = navigation.request.url, AppLink.isOne(scheme: url.scheme), !Extensions.shared.isExtensionPage(url) {
+            openElsewhere(url, clicked: navigation.kind == .link,
+                          mainFrame: navigation.targetIsMainFrame ?? true)
             return nil
         }
         // picture.js's window, from the page itself and not a frame in it: it floats (PictureWindow).
         // Anywhere else, the same address is an ordinary pop-up.
-        if let request = DocumentPicture.Request(url: navigationAction.request.url), navigationAction.sourceFrame.isMainFrame,
+        // The source can be absent; the old non-optional sourceFrame read would crash then.
+        if let pictureRequest = DocumentPicture.Request(url: navigation.request.url), navigation.sourceIsMainFrame == true,
            Self.offersPicture(committed ?? view.url) {
             // Asked for on leaving the tab, but the tab is back on screen, with eGlu in front, by now: no window.
             if enteringPicture, !videoWanted || !Session.shared.preferences.automaticPictureInPicture { return nil }
-            return openPicture(configuration, features: windowFeatures, request: request)
+            return openPicture(request, request: pictureRequest)
         }
         // While the app calls the site's handler for leaving the tab, the
         // click WebKit grants the call opens the site's picture window only.
@@ -1501,14 +1498,14 @@ extension Page: WKUIDelegate {
         if let asked = peekAsked {
             peekAsked = nil
             if Date().timeIntervalSince(asked) < 5, canPeek {
-                return openPeek(navigationAction.request.url, configuration: configuration).page.view
+                return openPeek(navigation.request.url, child: request).page.view
             }
         }
-        let made = host?.page(self, open: configuration, for: navigationAction, features: windowFeatures)
-        if let child = (made as? PageView)?.page, child !== self {
+        let made = host?.page(self, openChild: request)
+        if let child = made, child !== self {
             child.wasOpened = true
         }
-        return made
+        return made?.view
     }
 
     func webViewDidClose(_ webView: WKWebView) {

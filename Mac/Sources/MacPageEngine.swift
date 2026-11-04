@@ -1,5 +1,6 @@
 import Foundation
 import PadCore
+import WebEngineCore
 import WebKit
 import WebKitMacPlugin
 
@@ -9,7 +10,9 @@ enum MacPageSource {
     case space
     /// An enabled extension's configuration for the address, or the space's.
     case tab(URL?)
-    /// WebKit's or an extension's configuration, used as given.
+    /// A website's child, made from its request before the call returns.
+    case child(any WebChildRequest)
+    /// An extension's configuration, used as given.
     case supplied(WKWebViewConfiguration, extensionPage: Bool)
 }
 
@@ -41,6 +44,11 @@ final class AppWebKitEngine: MacPageEngine {
                 return Page(tab: tab, space: space, configuration: configuration, extensionPage: true)
             }
             return Page(tab: tab, space: space, configuration: configuration(space: space))
+        case .child(let request):
+            guard let request = request as? WebKitChildRequest else {
+                preconditionFailure("AppWebKitEngine requires a WebKitChildRequest")
+            }
+            return Page(tab: tab, space: space, configuration: request.configuration, extensionPage: false)
         case .supplied(let configuration, let extensionPage):
             return Page(tab: tab, space: space, configuration: configuration, extensionPage: extensionPage)
         }

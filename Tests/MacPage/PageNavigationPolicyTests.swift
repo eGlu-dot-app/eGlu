@@ -390,8 +390,7 @@ private final class NewTabHost: PageHost {
     var takesHandoffFiles: Bool { false }
     func pageDidChange(_ page: Page) {}
     func isShowing(_ page: Page) -> Bool { false }
-    func page(_ page: Page, open configuration: WKWebViewConfiguration, for action: WKNavigationAction,
-              features: WKWindowFeatures) -> WKWebView? { nil }
+    func page(_ page: Page, openChild request: any WebChildRequest) -> Page? { nil }
     func page(_ page: Page, openInNewTab url: URL, inFront: Bool) -> Bool {
         newTabs.append(NewTab(url: url, inFront: inFront))
         return takesNewTabs
