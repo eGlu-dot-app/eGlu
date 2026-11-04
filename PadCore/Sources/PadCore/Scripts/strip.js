@@ -341,8 +341,18 @@
   const sideProperty = () => (m.right ? 'padding-right' : 'padding-left');
 
   // A block's or a row's room, written in its own style, over what the page
-  // had there, which comes back when the room goes.
+  // had there, which comes back when the room goes. Running text's room is
+  // the outermost block's only: text blocks inside it given room before
+  // give it back, or their lines would end the strip's width short twice.
   function give(node, room) {
+    if (room.kind === 'text') {
+      for (const inner of node.getElementsByTagName('*')) {
+        const had = given.get(inner);
+        if (!had || had.kind !== 'text') continue;
+        restore(inner, had);
+        given.delete(inner);
+      }
+    }
     const property = sideProperty();
     room.property = property;
     room.saved = keep(node, [property, 'box-sizing']);
@@ -368,16 +378,17 @@
   // (a width the page set, outside its padding) is sized to hold it; one
   // that still grows (a box as wide as what is in it) gets none. Put right
   // only where it may be laid out anew: one scrolled into view meanwhile
-  // waits until it is below the window again.
+  // waits until it is below the window again. One the page took out goes,
+  // settled or not.
   function checkGiven() {
     for (const [node, room] of given) {
-      if (!room.fresh) continue;
       if (!node.isConnected) {
         // Its own style back, should the page put it back in.
         restore(node, room);
         given.delete(node);
         continue;
       }
+      if (!room.fresh) continue;
       const box = node.getBoundingClientRect();
       if (box.width <= room.width + 1) {
         room.fresh = false;
@@ -390,6 +401,8 @@
         restore(node, room);
         given.delete(node);
         refused.add(node);
+        // The text blocks inside it, which gave their room up to it, are looked at again for their own.
+        if (room.kind === 'text') textRoots.push(node);
       }
     }
   }
@@ -590,9 +603,11 @@
 
   // A write that lays out what is inside `node`, made at once where the
   // page may be laid out anew (layable). Once it has settled, in the
-  // window, it stands only where `node` keeps its place and its height:
-  // what is in it moves along it, and nothing round it moves. One that
-  // doesn't is taken back before it is drawn. Whether it stands.
+  // window, it stands only where `node` keeps its place and its height,
+  // its parent its height, and the boxes beside it in its parent their
+  // places and sizes (a row grown wider pushes the one beside it): what
+  // is in it moves along it, and nothing round it moves. One that doesn't
+  // is taken back before it is drawn. Whether it stands.
   function inPlace(node, write, undo) {
     const before = node.getBoundingClientRect();
     if (layable(before.top)) {
@@ -601,10 +616,16 @@
     }
     const holder = node.parentElement;
     const held = holder ? holder.getBoundingClientRect().height : 0;
+    const beside = holder ? [...holder.children].filter((child) => child !== node)
+      .map((child) => [child, child.getBoundingClientRect()]) : [];
     write();
     const after = node.getBoundingClientRect();
     if (Math.abs(after.top - before.top) < 0.5 && Math.abs(after.height - before.height) < 0.5 &&
-        (!holder || Math.abs(holder.getBoundingClientRect().height - held) < 0.5)) {
+        (!holder || Math.abs(holder.getBoundingClientRect().height - held) < 0.5) &&
+        beside.every(([child, was]) => {
+          const now = child.getBoundingClientRect();
+          return ['left', 'top', 'width', 'height'].every((key) => Math.abs(now[key] - was[key]) < 0.5);
+        })) {
       return true;
     }
     undo();
@@ -812,8 +833,9 @@
   // A box of controls ended at the safe area's edge, its insides laying
   // themselves out inside it: one that stands apart from the window's
   // edges (a card) by a margin on the strip's side, kept from growing past
-  // its row by a greatest width as well; one as wide as the window (a
-  // header's ground) by padding instead, its ground still under the glass.
+  // its row by a greatest width as well, never more than its own; one as
+  // wide as the window (a header's ground) by padding instead, its ground
+  // still under the glass.
   // Whatever was given room or moved inside it before gives it back. Where
   // it may be laid out anew, or where it keeps its height (inPlace);
   // whether it was.
@@ -834,10 +856,14 @@
       } else {
         const property = m.right ? 'margin-right' : 'margin-left';
         const margin = (parseFloat(m.right ? style.marginRight : style.marginLeft) || 0) + reach;
+        // The page's own greatest width still holds, so the box never grows
+        // for this (a centred card); a keyword (max-content) can't go in min().
+        const most = `calc(100% - ${margin}px)`;
+        const own = /^([\d.]|calc\(|min\(|max\(|clamp\()/.test(style.maxWidth) ? style.maxWidth : null;
         room = { kind: 'box', property, saved: keep(box, [property, 'max-width']), fresh: false, sized: true };
         if (busy()) unsteady++;
         box.style.setProperty(property, `${margin}px`, 'important');
-        box.style.setProperty('max-width', `calc(100% - ${margin}px)`, 'important');
+        box.style.setProperty('max-width', own ? `min(${own}, ${most})` : most, 'important');
         given.set(box, room);
       }
     }, () => {
@@ -1278,9 +1304,11 @@
   }
 
   // The observer over the strip's column, from the safe area's edge to the
-  // window's, as wide as the window is now; made anew when that changes.
+  // window's, as wide as the window is now; made anew when that changes,
+  // the boxes round the controls given to the new one too.
   function observeColumn() {
     if (observer) observer.disconnect();
+    boxes = new WeakSet();
     const shy = m.right ? Math.max(0, Math.floor(m.edge - m.left)) : 0;
     const shyRight = m.right ? 0 : Math.max(0, Math.floor(m.left + m.width - m.edge));
     column = `${shy}|${shyRight}`;
@@ -1428,7 +1456,12 @@
       const need = text && textRoom(text);
       if (need) found.push(need);
     }
+    const blocks = new Set(found.map((one) => one.block));
     for (const { block, room } of found) {
+      // Inside another found here (a paragraph walked before its section's own text): that one's room is its room.
+      let outer = false;
+      for (let up = block.parentElement; up && !outer; up = up.parentElement) outer = blocks.has(up);
+      if (outer) continue;
       if (given.has(block) || inGiven(block)) continue;
       if (layable(room.top)) give(block, room);
       else deferred.add(block);
