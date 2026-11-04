@@ -155,9 +155,11 @@ final class Extensions: NSObject, ObservableObject {
     func asksForNativeOnlyOptionally(_ id: String) -> Bool { nativeOptional.contains(id) }
 
     /// Whether it asks for cookies, outright or as an optional permission:
-    /// a choice its settings give.
+    /// a choice its settings give. Once allowed, the choice shows even
+    /// before its manifest is read (on in no space), so it can be taken back.
     func asksForCookies(_ item: Installed) -> Bool {
-        item.granted?.contains("cookies") == true || manifests[item.id]?.optionalPermissions.contains("cookies") == true
+        item.granted?.contains("cookies") == true || item.readsCookies == true
+            || manifests[item.id]?.optionalPermissions.contains("cookies") == true
     }
 
     /// Whether the person let it read cookies: not until they do.
@@ -559,7 +561,8 @@ final class Extensions: NSObject, ObservableObject {
             context.baseURL = URL(string: "\(Self.scheme)://\(item.id)/")!
             context.isInspectable = true
             context.inspectionName = item.name
-            allow(context, package, access: item.siteAccess, cookies: item.readsCookies == true)
+            // The cookie choice as it is now: it may have changed while the package was read.
+            allow(context, package, access: item.siteAccess, cookies: now.readsCookies == true)
             watch(context, item, in: space)
             try controller(for: space).load(context)
             // Its commands' keys: the person's, or none (ExtensionKeys).
