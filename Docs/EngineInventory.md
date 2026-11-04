@@ -8,14 +8,14 @@
 | a. Imports (Mac/) | 44 | 42 |
 | a. Imports (Shared/) | 12 | 11 |
 | b. Reach-ins into page view (app) | 57 | 16 |
-| b. Reach-ins (tests) | 62 | 9 |
+| b. Reach-ins (tests) | 69 | 10 |
 | b. Reach-ins (Page.swift self-references) | 1 | 1 |
-| c. WebKit types in declarations | 155 | 31 |
+| c. WebKit types in declarations | 154 | 31 |
 | c. Declarations (Extension* files) | 258 | 16 |
 | d. Private WebKit API | 33 | 13 |
 | e. Hidden web views | 19 | 11 |
 | f. Script bridges | 7 | 7 |
-| **Total** | **585** | **71** |
+| **Total** | **584** | **71** |
 
 ## Details
 
@@ -209,7 +209,7 @@
   - L70: `page.view.superview?.addSubview(view, positioned: .below, relativeTo: page.view)`
   - L77: `page.view.superview?.insertSubview(view, belowSubview: page.view)`
 
-#### Tests (62 lines in 9 files)
+#### Tests (69 lines in 10 files)
 - `Tests/Crashes/CrashRegressionTests.swift` (5):
   - L94: `page.view.frame = CGRect(x: 0, y: 0, width: 320, height: 480)`
   - L95: `container.view.addSubview(page.view)`
@@ -245,6 +245,14 @@
   - L293: `_ = try await page.view.evaluateJavaScript("document.getElementById('go').click(); 1")`
   - L298: `moved = try await page.view.evaluateJavaScript(frame) as? String == "about:blank#moved"`
   - L302: `XCTAssertEqual(page.view.url, url)`
+- `Tests/MacPage/PageResponsePolicyTests.swift` (7):
+  - L54: `XCTAssertNil(page.view.url, "an answer went to WebKit")`
+  - L55: `XCTAssertFalse(page.view.isLoading)`
+  - L220: `page.view.appearance = NSAppearance(named: .darkAqua)`
+  - L221: `XCTAssertEqual(page.view.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]), .darkAqua,`
+  - L244: `XCTAssertNil(page.view.url, "the page was loaded again")`
+  - L245: `XCTAssertFalse(page.view.isLoading, "the page was loaded again")`
+  - L330: `page.webView(page.view, didCommit: nil)`
 - `Tests/MacPage/PageSmokeTests.swift` (5):
   - L11: `XCTAssertEqual(page.view.title, "One")`
   - L12: `XCTAssertFalse(page.view.canGoBack)`
@@ -284,9 +292,9 @@
 
 #### Page.swift (self-references, excluded from count: 1 lines)
 - `Mac/Sources/Page.swift` (1):
-  - L1633: `return openPeek(navigationAction.request.url, configuration: configuration).page.view`
+  - L1601: `return openPeek(navigationAction.request.url, configuration: configuration).page.view`
 
-### c. WebKit types in declarations (155 lines in 31 files)
+### c. WebKit types in declarations (154 lines in 31 files)
 - `Mac/Sources/ApplePasswords.swift` (3):
   - L226: `final class ApplePasswordsHandler: NSObject, WKScriptMessageHandler {`
   - L233: `nonisolated func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {`
@@ -299,7 +307,7 @@
   - L13: `case supplied(WKWebViewConfiguration, extensionPage: Bool)`
   - L22: `func configuration(space: UUID) -> WKWebViewConfiguration`
   - L50: `func configuration(space: UUID) -> WKWebViewConfiguration {`
-- `Mac/Sources/Page.swift` (35):
+- `Mac/Sources/Page.swift` (34):
   - L25: `func page(_ page: Page, open configuration: WKWebViewConfiguration, for action: WKNavigationAction,`
   - L42: `final class PageView: WKWebView {`
   - L66: `let newTab = menu.items.first(where: { $0.identifier?.rawValue == "WKMenuItemIdentifierOpenLinkInNewWindow" }) {`
@@ -318,23 +326,22 @@
   - L1441: `extension Page: WKNavigationDelegate, WKUIDelegate {`
   - L1445: `@objc func _webView(_ webView: WKWebView, getContextMenuFromProposedMenu menu: NSMenu,`
   - L1465: `@objc func _webView(_ webView: WKWebView, didNotHandleWheelEvent event: NSEvent) {`
-  - L1473: `func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,`
-  - L1505: `func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {`
-  - L1509: `func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) {`
-  - L1515: `private func downloading(_ download: WKDownload) {`
-  - L1520: `func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {`
-  - L1524: `func webView(_ webView: WKWebView, didReceiveServerRedirectForProvisionalNavigation navigation: WKNavigation!) {`
-  - L1528: `func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {`
-  - L1555: `func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {`
-  - L1565: `func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {`
-  - L1569: `func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {`
-  - L1598: `func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {`
-  - L1602: `func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,`
-  - L1643: `func webViewDidClose(_ webView: WKWebView) {`
-  - L1647: `func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String,`
-  - L1656: `func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String,`
-  - L1666: `func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String, defaultText: String?,`
-  - L1693: `func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters,`
+  - L1473: `func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {`
+  - L1477: `func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) {`
+  - L1483: `private func downloading(_ download: WKDownload) {`
+  - L1488: `func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {`
+  - L1492: `func webView(_ webView: WKWebView, didReceiveServerRedirectForProvisionalNavigation navigation: WKNavigation!) {`
+  - L1496: `func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {`
+  - L1523: `func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {`
+  - L1533: `func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {`
+  - L1537: `func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {`
+  - L1566: `func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {`
+  - L1570: `func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,`
+  - L1611: `func webViewDidClose(_ webView: WKWebView) {`
+  - L1615: `func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String,`
+  - L1624: `func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String,`
+  - L1634: `func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String, defaultText: String?,`
+  - L1661: `func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters,`
 - `Mac/Sources/PageSwipe.swift` (2):
   - L49: `private var from: WKBackForwardListItem?`
   - L59: `static func works(on view: WKWebView) -> Bool {`

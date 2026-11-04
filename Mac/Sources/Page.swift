@@ -1470,38 +1470,6 @@ extension Page: WKNavigationDelegate, WKUIDelegate {
         view.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
     }
 
-    func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,
-                 decisionHandler: @escaping @MainActor (WKNavigationResponsePolicy) -> Void) {
-        // A page from a host that asks for the screen's light or dark, which came light on a dark screen: again, dark.
-        if navigationResponse.isForMainFrame, let response = navigationResponse.response as? HTTPURLResponse,
-           let url = response.url, !HandsOff.covers(url),
-           let value = Self.colorHint.answered(url: url, acceptCH: response.value(forHTTPHeaderField: "Accept-CH"),
-                                               criticalCH: response.value(forHTTPHeaderField: "Critical-CH"),
-                                               requestCarried: hintCarried, repeatable: hintRepeatable, dark: isDark) {
-            decisionHandler(.cancel)
-            var again = URLRequest(url: url)
-            again.setValue(value, forHTTPHeaderField: ColorSchemeHint.header)
-            webView.load(again)
-            return
-        }
-        // What WebKit can't show (a ZIP, an installer) and what the server says to save is a download.
-        let attachment = (navigationResponse.response as? HTTPURLResponse)?
-            .value(forHTTPHeaderField: "Content-Disposition")?.lowercased().hasPrefix("attachment") == true
-        let shows = navigationResponse.canShowMIMEType && !attachment
-        // The kind of what the tab shows, which Handoff reads it by: a download leaves the page as it was.
-        if navigationResponse.isForMainFrame, shows {
-            mimeType = navigationResponse.response.mimeType
-            // What the document is, known only now, before it commits: a PDF
-            // or a picture gets no writing script, and a page after one gets
-            // it back; a JSON page gets its view's script.
-            prepare(for: preparedFor)
-        }
-        if navigationResponse.isForMainFrame {
-            if shows { status.answered(navigationResponse.response) } else { status.dropped() }
-        }
-        decisionHandler(shows ? .allow : .download)
-    }
-
     func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {
         downloading(download)
     }
@@ -1707,7 +1675,7 @@ extension Page: WKNavigationDelegate, WKUIDelegate {
     }
 }
 
-// MARK: Action policy
+// MARK: Navigation policy
 
 extension Page: WebNavigationPolicy {
     func decideNavigation(_ navigation: WebNavigation,
@@ -1787,6 +1755,38 @@ extension Page: WebNavigationPolicy {
             askingForPage = (navigation.request.httpMethod ?? "GET").uppercased() == "GET"
         }
         reply(.allow)
+    }
+
+    func decideResponse(_ response: WebResponse,
+                        reply: @MainActor (WebResponseDecision) -> Void) {
+        // A page from a host that asks for the screen's light or dark, which came light on a dark screen: again, dark.
+        if response.isForMainFrame, let http = response.response as? HTTPURLResponse,
+           let url = http.url, !HandsOff.covers(url),
+           let value = Self.colorHint.answered(url: url, acceptCH: http.value(forHTTPHeaderField: "Accept-CH"),
+                                               criticalCH: http.value(forHTTPHeaderField: "Critical-CH"),
+                                               requestCarried: hintCarried, repeatable: hintRepeatable, dark: isDark) {
+            reply(.cancel)
+            var again = URLRequest(url: url)
+            again.setValue(value, forHTTPHeaderField: ColorSchemeHint.header)
+            navigationAdapter.load(again)
+            return
+        }
+        // What WebKit can't show (a ZIP, an installer) and what the server says to save is a download.
+        let attachment = (response.response as? HTTPURLResponse)?
+            .value(forHTTPHeaderField: "Content-Disposition")?.lowercased().hasPrefix("attachment") == true
+        let shows = response.canShowMIMEType && !attachment
+        // The kind of what the tab shows, which Handoff reads it by: a download leaves the page as it was.
+        if response.isForMainFrame, shows {
+            mimeType = response.response.mimeType
+            // What the document is, known only now, before it commits: a PDF
+            // or a picture gets no writing script, and a page after one gets
+            // it back; a JSON page gets its view's script.
+            prepare(for: preparedFor)
+        }
+        if response.isForMainFrame {
+            if shows { status.answered(response.response) } else { status.dropped() }
+        }
+        reply(shows ? .allow : .download)
     }
 
     /// The request again with the screen's light or dark, for a host that

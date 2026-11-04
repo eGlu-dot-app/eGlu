@@ -26,6 +26,40 @@ final class WebNavigationTests: XCTestCase {
         XCTAssertEqual(navigation.contentRuleRedirect?.originalSite, site)
     }
 
+    func testResponsePreservesFoundationObjectAndEveryField() throws {
+        let url = URL(string: "https://example.com/file")!
+        let foundation = try XCTUnwrap(HTTPURLResponse(url: url, statusCode: 201, httpVersion: "HTTP/1.1",
+                                                      headerFields: ["Content-Type": "text/html",
+                                                                     "Content-Disposition": "attachment; filename=test.html"]))
+        for mainFrame in [true, false] {
+            for displayable in [true, false] {
+                let response = WebResponse(response: foundation, isForMainFrame: mainFrame,
+                                           canShowMIMEType: displayable)
+                XCTAssertTrue(response.response === foundation)
+                XCTAssertEqual(response.isForMainFrame, mainFrame)
+                XCTAssertEqual(response.canShowMIMEType, displayable)
+                let http = try XCTUnwrap(response.response as? HTTPURLResponse)
+                XCTAssertEqual(http.statusCode, 201)
+                XCTAssertEqual(http.value(forHTTPHeaderField: "content-disposition"), "attachment; filename=test.html")
+                XCTAssertEqual(response.response.mimeType, "text/html")
+            }
+        }
+        let foundationOnly = URLResponse(url: url, mimeType: nil, expectedContentLength: -1, textEncodingName: nil)
+        XCTAssertTrue(WebResponse(response: foundationOnly, isForMainFrame: false,
+                                  canShowMIMEType: false).response === foundationOnly)
+    }
+
+    func testResponseDecisionCases() {
+        func value(_ decision: WebResponseDecision) -> Int {
+            switch decision {
+            case .allow: return 0
+            case .cancel: return 1
+            case .download: return 2
+            }
+        }
+        XCTAssertEqual([WebResponseDecision.allow, .cancel, .download].map(value), [0, 1, 2])
+    }
+
     func testAbsentTargetAndMarkedRedirectRemainDistinctFromNoRedirect() {
         func navigation(_ redirect: WebContentRuleRedirect?) -> WebNavigation {
             WebNavigation(request: URLRequest(url: URL(string: "about:blank")!), sourceOrigin: .opaque,

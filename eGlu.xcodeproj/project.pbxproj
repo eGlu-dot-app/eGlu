@@ -362,6 +362,7 @@
 		F0C3DB70AC4C1DC1F1E34B29 /* WritingLists.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60E0E184FDC4719DE7A49AAF /* WritingLists.swift */; };
 		F31659A26DBDF0AAFB214C00 /* ExtensionBlankPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAFD2CD58CB77403F5C8C6E8 /* ExtensionBlankPage.swift */; };
 		F4D93391592B1F2675AA1B41 /* SiteIcons.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA58432FCB7289B0C712A1F6 /* SiteIcons.swift */; };
+		F54CDCA09B5788AC0B178059 /* PageResponsePolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9ECD234B9C8069BE12CA9A8C /* PageResponsePolicyTests.swift */; };
 		F6520ECAAC5830F36D4235F9 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 2A8F5E88372432895BD856FC /* Localizable.xcstrings */; };
 		F665566460F3D74840BEFBA8 /* LeavingTheSandbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28B78B32954158F8434D6030 /* LeavingTheSandbox.swift */; };
 		F68C66964CE0BBA852DFDA61 /* ExtensionPopupWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1F2F878F154521F64EF667 /* ExtensionPopupWindow.swift */; };
@@ -567,6 +568,7 @@
 		9B74FED0AD192E3766DF8BC9 /* BookmarkImport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookmarkImport.swift; sourceTree = "<group>"; };
 		9DADDB2DEFC948E6DF9498EF /* Menus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Menus.swift; sourceTree = "<group>"; };
 		9DFF333867A252485BC8A3B6 /* SyncLegacy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncLegacy.swift; sourceTree = "<group>"; };
+		9ECD234B9C8069BE12CA9A8C /* PageResponsePolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageResponsePolicyTests.swift; sourceTree = "<group>"; };
 		9EEFA634027141E9C11F9DD8 /* Session.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Session.swift; sourceTree = "<group>"; };
 		9F66F0340300C67A64807FA9 /* WritingHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WritingHandler.swift; sourceTree = "<group>"; };
 		A05DD395DF344F3E7FF53A1E /* ExtensionAsk.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionAsk.swift; sourceTree = "<group>"; };
@@ -1022,6 +1024,7 @@
 				1D36C6CE512B1C7506C63C09 /* PageCommandTests.swift */,
 				0EC5B76D8B45ABDBB17A59B3 /* PageEngineTests.swift */,
 				363CCE6E471185496431C4D5 /* PageNavigationPolicyTests.swift */,
+				9ECD234B9C8069BE12CA9A8C /* PageResponsePolicyTests.swift */,
 				E30CB251854948770DEA0AB5 /* PageSmokeTests.swift */,
 				CDA75ABB2561F1385185244F /* PageStateTests.swift */,
 				AABF017230ADCFB4CF4F1928 /* PageSurfaceTests.swift */,
@@ -1430,6 +1433,7 @@
 				F89C24434B16340F6AD92122 /* PageCommandTests.swift in Sources */,
 				B17B4E6C0800D80806AE320F /* PageEngineTests.swift in Sources */,
 				06DDF515B807A3D09E47430E /* PageNavigationPolicyTests.swift in Sources */,
+				F54CDCA09B5788AC0B178059 /* PageResponsePolicyTests.swift in Sources */,
 				08F3C6AA45A087FF1759282B /* PageSmokeTests.swift in Sources */,
 				DFB4C56BE491CAEFD634AF2E /* PageStateTests.swift in Sources */,
 				C749FF9965680903796AA5E3 /* PageSurfaceTests.swift in Sources */,

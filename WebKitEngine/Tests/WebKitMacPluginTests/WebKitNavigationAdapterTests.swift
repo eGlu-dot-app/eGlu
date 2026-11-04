@@ -1,7 +1,7 @@
 import AppKit
 import WebEngineCore
 import WebKit
-import WebKitMacPlugin
+@testable import WebKitMacPlugin
 import XCTest
 
 private final class WeakReference<Value: AnyObject> {
@@ -12,19 +12,36 @@ private final class WeakReference<Value: AnyObject> {
 @MainActor
 private final class CaptureDelegate: NSObject, WKNavigationDelegate {
     var action: ((WKNavigationAction) -> WKNavigationActionPolicy)?
+    var response: ((WKNavigationResponse) -> WKNavigationResponsePolicy)?
     var finished: (() -> Void)?
+    var failed: ((Error) -> Void)?
 
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
                  decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void) {
         decisionHandler(action?(navigationAction) ?? .allow)
     }
 
+    func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,
+                 decisionHandler: @escaping @MainActor (WKNavigationResponsePolicy) -> Void) {
+        decisionHandler(response?(navigationResponse) ?? .allow)
+    }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { finished?() }
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { failed?(error) }
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        failed?(error)
+    }
 }
 
 @MainActor
 private final class Policy: WebNavigationPolicy {
     var decide: (WebNavigation, @MainActor (WebNavigationDecision) -> Void) -> Void = { _, reply in reply(.allow) }
+
+    var response: (WebResponse, @MainActor (WebResponseDecision) -> Void) -> Void = { _, reply in reply(.allow) }
+
+    func decideResponse(_ response: WebResponse, reply: @MainActor (WebResponseDecision) -> Void) {
+        self.response(response, reply)
+    }
 
     func decideNavigation(_ navigation: WebNavigation, reply: @MainActor (WebNavigationDecision) -> Void) {
         decide(navigation, reply)
@@ -35,17 +52,56 @@ private final class Policy: WebNavigationPolicy {
 private final class LegacyDelegate: NSObject, WKNavigationDelegate {
     var finished: (() -> Void)?
     var wheel: ((NSEvent) -> Void)?
+    var responseCalls = 0
+
+    func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,
+                 decisionHandler: @escaping @MainActor (WKNavigationResponsePolicy) -> Void) {
+        responseCalls += 1
+        decisionHandler(.cancel)
+    }
+
+    @objc func webView(_ webView: WKWebView, decidePolicyForNavigationResponse response: WKNavigationResponse,
+                       unusedVariant: AnyObject) {}
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { finished?() }
 
     @objc func _webView(_ webView: WKWebView, didNotHandleWheelEvent event: NSEvent) { wheel?(event) }
 }
 
+/// Every fixture is local; WebKit supplies the real navigation response.
+private final class ResponseSchemeHandler: NSObject, WKURLSchemeHandler {
+    static let scheme = "eglu-response-test"
+
+    static func url(_ path: String) -> URL { URL(string: "\(scheme)://fixture/\(path)")! }
+
+    func webView(_ webView: WKWebView, start urlSchemeTask: any WKURLSchemeTask) {
+        let url = urlSchemeTask.request.url!
+        var headers = ["Content-Type": "text/html", "X-Eglu-Test": "kept",
+                       "Accept-CH": "Sec-CH-Prefers-Color-Scheme", "Critical-CH": "Sec-CH-Prefers-Color-Scheme"]
+        var body = "<!doctype html><title>response</title><p>fixture</p>"
+        if url.lastPathComponent == "attachment" {
+            headers["Content-Disposition"] = "attachment; filename=test.html"
+        } else if url.lastPathComponent == "unsupported" {
+            headers["Content-Type"] = "application/x-eglu-test"
+            body = "unsupported content"
+        } else if url.lastPathComponent == "frames" {
+            body += "<iframe src='\(Self.url("child"))'></iframe>"
+        }
+        let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: headers)!
+        urlSchemeTask.didReceive(response)
+        urlSchemeTask.didReceive(Data(body.utf8))
+        urlSchemeTask.didFinish()
+    }
+
+    func webView(_ webView: WKWebView, stop urlSchemeTask: any WKURLSchemeTask) {}
+}
+
 final class WebKitNavigationAdapterTests: XCTestCase {
     @MainActor
-    private func makeView() -> WKWebView {
+    private func makeView(schemeHandler: ResponseSchemeHandler? = nil) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .nonPersistent()
+        if let schemeHandler { config.setURLSchemeHandler(schemeHandler, forURLScheme: ResponseSchemeHandler.scheme) }
         config.preferences.javaScriptCanOpenWindowsAutomatically = true
         return WKWebView(frame: .zero, configuration: config)
     }
@@ -113,6 +169,182 @@ final class WebKitNavigationAdapterTests: XCTestCase {
         XCTAssertEqual(snapshot.modifiers.contains(.shift), action.modifierFlags.contains(.shift), file: file, line: line)
         XCTAssertEqual(snapshot.modifiers.contains(.option), action.modifierFlags.contains(.option), file: file, line: line)
         XCTAssertEqual(snapshot.modifiers.contains(.control), action.modifierFlags.contains(.control), file: file, line: line)
+    }
+
+    /// Lets the response through and waits for WebKit to finish or report that
+    /// it cannot display it, so capture never leaves a load mid-change.
+    @MainActor
+    private func captureResponse(_ path: String) async throws -> (WKWebView, WKNavigationResponse) {
+        let view = makeView(schemeHandler: ResponseSchemeHandler())
+        let delegate = CaptureDelegate()
+        let seen = expectation(description: "offline response captured: \(path)")
+        let settled = expectation(description: "offline response settled: \(path)")
+        var captured: WKNavigationResponse?
+        delegate.response = { response in
+            captured = response
+            seen.fulfill()
+            return .allow
+        }
+        delegate.finished = { settled.fulfill() }
+        delegate.failed = { _ in settled.fulfill() }
+        view.navigationDelegate = delegate
+        defer { view.stopLoading(); view.navigationDelegate = nil }
+        view.load(URLRequest(url: ResponseSchemeHandler.url(path)))
+        await fulfillment(of: [seen, settled], timeout: 10)
+        return (view, try XCTUnwrap(captured))
+    }
+
+    @MainActor
+    func testResponseTranslationKeepsDisplayableAttachmentAndUnsupportedResponses() async throws {
+        for path in ["html", "attachment", "unsupported"] {
+            let (view, original) = try await captureResponse(path)
+            let policy = Policy()
+            let legacy = LegacyDelegate()
+            let adapter = WebKitNavigationAdapter(view: view, policy: policy, legacy: legacy)
+            defer { adapter.tearDown() }
+            var decisions = 0
+            policy.response = { response, reply in
+                decisions += 1
+                XCTAssertTrue(response.response === original.response)
+                XCTAssertEqual(response.isForMainFrame, original.isForMainFrame)
+                XCTAssertTrue(response.isForMainFrame)
+                XCTAssertEqual(response.canShowMIMEType, original.canShowMIMEType)
+                XCTAssertEqual(response.canShowMIMEType, path != "unsupported")
+                // WebKit hands a custom scheme's response to the navigation
+                // delegate as a plain URLResponse (macOS 27), without the
+                // handler's status and headers; whatever it hands over is
+                // passed on as the same object, so headers WebKit does give
+                // (an http page's) read as before.
+                if let http = original.response as? HTTPURLResponse {
+                    XCTAssertEqual((response.response as? HTTPURLResponse)?.statusCode, http.statusCode)
+                    XCTAssertEqual((response.response as? HTTPURLResponse)?.allHeaderFields.count, http.allHeaderFields.count)
+                }
+                XCTAssertEqual(response.response.mimeType, path == "unsupported" ? "application/x-eglu-test" : "text/html")
+                reply(.allow)
+            }
+            var replies: [WKNavigationResponsePolicy] = []
+            adapter.webView(view, decidePolicyFor: original) { replies.append($0) }
+            XCTAssertEqual(decisions, 1)
+            XCTAssertEqual(replies, [.allow])
+            XCTAssertEqual(legacy.responseCalls, 0)
+        }
+    }
+
+    @MainActor
+    func testResponseAdapterRepliesSynchronouslyOnceAndCancelsMissingRepliesOrPolicy() async throws {
+        let (view, original) = try await captureResponse("html")
+        var policy: Policy? = Policy()
+        let legacy = LegacyDelegate()
+        let adapter = WebKitNavigationAdapter(view: view, policy: policy!, legacy: legacy)
+        defer { adapter.tearDown() }
+        for expected in [WKNavigationResponsePolicy.allow, .cancel, .download] {
+            var events: [String] = []
+            policy!.response = { _, reply in
+                events.append("policy")
+                switch expected {
+                case .allow: reply(.allow)
+                case .download: reply(.download)
+                default: reply(.cancel)
+                }
+                events.append("after reply")
+                reply(.cancel)
+            }
+            var replies: [WKNavigationResponsePolicy] = []
+            adapter.webView(view, decidePolicyFor: original) {
+                replies.append($0)
+                events.append("handler")
+            }
+            XCTAssertEqual(replies, [expected])
+            XCTAssertEqual(events, ["policy", "handler", "after reply"])
+        }
+        policy!.response = { _, _ in }
+        var replies: [WKNavigationResponsePolicy] = []
+        adapter.webView(view, decidePolicyFor: original) { replies.append($0) }
+        XCTAssertEqual(replies, [.cancel])
+        let weakPolicy = WeakReference(policy!)
+        policy = nil
+        XCTAssertNil(weakPolicy.value)
+        replies = []
+        adapter.webView(view, decidePolicyFor: original) { replies.append($0) }
+        XCTAssertEqual(replies, [.cancel])
+    }
+
+    @MainActor
+    func testResponseGuardMapsDecisionsAndIgnoresDuplicateAndLateReplies() {
+        // The public policy's reply cannot escape in safe Swift. Exercise the
+        // adapter's same guard through its escaping entry, without unsafe casts.
+        let response = WebResponse(response: URLResponse(url: ResponseSchemeHandler.url("html"), mimeType: "text/html",
+                                                        expectedContentLength: 0, textEncodingName: nil),
+                                   isForMainFrame: true, canShowMIMEType: true)
+        let cases: [(WebResponseDecision, WKNavigationResponsePolicy)] = [(.allow, .allow), (.cancel, .cancel), (.download, .download)]
+        for (decision, expected) in cases {
+            var late: (@MainActor (WebResponseDecision) -> Void)?
+            var replies: [WKNavigationResponsePolicy] = []
+            var events: [String] = []
+            WebKitNavigationAdapter.decideResponse(response, ask: { _, reply in
+                events.append("policy")
+                late = reply
+                reply(decision)
+                events.append("after reply")
+                reply(.cancel)
+            }) {
+                replies.append($0)
+                events.append("handler")
+            }
+            XCTAssertEqual(replies, [expected])
+            XCTAssertEqual(events, ["policy", "handler", "after reply"])
+            late?(.allow)
+            late?(.download)
+            XCTAssertEqual(replies, [expected])
+            late = nil
+        }
+        var late: (@MainActor (WebResponseDecision) -> Void)?
+        var replies: [WKNavigationResponsePolicy] = []
+        WebKitNavigationAdapter.decideResponse(response, ask: { _, reply in late = reply }) { replies.append($0) }
+        XCTAssertEqual(replies, [.cancel])
+        late?(.allow)
+        late?(.download)
+        XCTAssertEqual(replies, [.cancel])
+        late = nil
+    }
+
+    @MainActor
+    func testResponseSelectorsBelongToAdapterEvenWhenLegacyImplementsThem() {
+        let view = makeView()
+        let policy = Policy()
+        let legacy = LegacyDelegate()
+        let adapter = WebKitNavigationAdapter(view: view, policy: policy, legacy: legacy)
+        defer { adapter.tearDown() }
+        let responseSelector = NSSelectorFromString("webView:decidePolicyForNavigationResponse:decisionHandler:")
+        let variant = NSSelectorFromString("webView:decidePolicyForNavigationResponse:unusedVariant:")
+        XCTAssertTrue(legacy.responds(to: responseSelector))
+        XCTAssertTrue(adapter.responds(to: responseSelector))
+        XCTAssertTrue(legacy.responds(to: variant))
+        XCTAssertFalse(adapter.responds(to: variant))
+    }
+
+    @MainActor
+    func testResponsePolicyHandlesMainAndChildFramesWithoutForwardingToLegacy() async {
+        let view = makeView(schemeHandler: ResponseSchemeHandler())
+        let policy = Policy()
+        let legacy = LegacyDelegate()
+        let adapter = WebKitNavigationAdapter(view: view, policy: policy, legacy: legacy)
+        view.navigationDelegate = adapter
+        defer { view.stopLoading(); adapter.tearDown() }
+        let done = expectation(description: "main and child frames finished through adapter")
+        legacy.finished = { done.fulfill() }
+        var frames: [String: Bool] = [:]
+        policy.response = { response, reply in
+            let path = response.response.url!.lastPathComponent
+            XCTAssertNil(frames[path], "one policy request per response")
+            frames[path] = response.isForMainFrame
+            XCTAssertTrue(response.canShowMIMEType)
+            reply(.allow)
+        }
+        adapter.load(URLRequest(url: ResponseSchemeHandler.url("frames")))
+        await fulfillment(of: [done], timeout: 10)
+        XCTAssertEqual(frames, ["frames": true, "child": false])
+        XCTAssertEqual(legacy.responseCalls, 0)
     }
 
     @MainActor

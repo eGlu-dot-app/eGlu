@@ -61,11 +61,35 @@ public enum WebNavigationDecision: Sendable {
     case allow, cancel, download
 }
 
+/// A response to a navigation, as the engine has it, before the page shows it.
+public struct WebResponse: Sendable {
+    /// Foundation's own response, so header lookups (case-insensitive) and the
+    /// status read exactly as before.
+    public let response: URLResponse
+    public let isForMainFrame: Bool
+    /// Whether the engine can show this kind of content itself.
+    public let canShowMIMEType: Bool
+
+    public init(response: URLResponse, isForMainFrame: Bool, canShowMIMEType: Bool) {
+        self.response = response
+        self.isForMainFrame = isForMainFrame
+        self.canShowMIMEType = canShowMIMEType
+    }
+}
+
+public enum WebResponseDecision: Sendable {
+    case allow, cancel, download
+}
+
 @MainActor
 public protocol WebNavigationPolicy: AnyObject {
     /// Reply exactly once, before returning. No suspension.
     func decideNavigation(_ navigation: WebNavigation,
                           reply: @MainActor (WebNavigationDecision) -> Void)
+
+    /// Reply exactly once, before returning. No suspension.
+    func decideResponse(_ response: WebResponse,
+                        reply: @MainActor (WebResponseDecision) -> Void)
 }
 
 @MainActor

@@ -1,7 +1,7 @@
 import WebEngineCore
 import WebKit
 
-/// Translates action policy only. All other delegate selectors still belong to the page.
+/// Translates action and response policy. All other delegate selectors still belong to the page.
 ///
 /// It must not outlive its legacy delegate: WebKit remembers which selectors
 /// a delegate answers when it is assigned, and one forwarded to a delegate
@@ -26,7 +26,10 @@ public final class WebKitNavigationAdapter: NSObject, WKNavigationDelegate, WebR
         if super.responds(to: selector) { return true }
         // Every form of the decision on a navigation is the policy's, never
         // the legacy delegate's: WebKit asks the `preferences:` form first.
-        if NSStringFromSelector(selector).contains("decidePolicyForNavigationAction") { return false }
+        let name = NSStringFromSelector(selector)
+        if name.contains("decidePolicyForNavigationAction") || name.contains("decidePolicyForNavigationResponse") {
+            return false
+        }
         // WebKit asks on the main thread; anything asking elsewhere gets the
         // adapter's own answer rather than a crash.
         guard Thread.isMainThread else { return false }
@@ -36,6 +39,11 @@ public final class WebKitNavigationAdapter: NSObject, WKNavigationDelegate, WebR
     public override func forwardingTarget(for selector: Selector!) -> Any? {
         guard Thread.isMainThread else { return super.forwardingTarget(for: selector) }
         let target = MainActor.assumeIsolated { () -> (any WKNavigationDelegate)? in
+            // As in responds(to:): a decision is never the legacy delegate's.
+            let name = NSStringFromSelector(selector)
+            if name.contains("decidePolicyForNavigationAction") || name.contains("decidePolicyForNavigationResponse") {
+                return nil
+            }
             if let legacy, legacy.responds(to: selector) { return legacy }
             return nil as (any WKNavigationDelegate)?
         }
@@ -121,6 +129,39 @@ public final class WebKitNavigationAdapter: NSObject, WKNavigationDelegate, WebR
                         decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void) {
         var replied = false
         policy?.decideNavigation(snapshot(navigationAction)) { decision in
+            guard !replied else { return }
+            replied = true
+            switch decision {
+            case .allow: decisionHandler(.allow)
+            case .cancel: decisionHandler(.cancel)
+            case .download: decisionHandler(.download)
+            }
+        }
+        // A missing policy or a policy that returned without replying must not
+        // leave WebKit waiting; and a late reply must not answer WebKit twice.
+        if !replied {
+            replied = true
+            decisionHandler(.cancel)
+        }
+    }
+
+    public func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,
+                        decisionHandler: @escaping @MainActor (WKNavigationResponsePolicy) -> Void) {
+        let response = WebResponse(response: navigationResponse.response,
+                                   isForMainFrame: navigationResponse.isForMainFrame,
+                                   canShowMIMEType: navigationResponse.canShowMIMEType)
+        Self.decideResponse(response, ask: { [self] response, reply in
+            policy?.decideResponse(response, reply: reply)
+        }, decisionHandler: decisionHandler)
+    }
+
+    // The escaping callback here lets the guard cover even a policy that
+    // violates its synchronous contract. The public policy stays nonescaping.
+    static func decideResponse(_ response: WebResponse,
+                               ask: (WebResponse, @escaping @MainActor (WebResponseDecision) -> Void) -> Void,
+                               decisionHandler: @escaping @MainActor (WKNavigationResponsePolicy) -> Void) {
+        var replied = false
+        ask(response) { decision in
             guard !replied else { return }
             replied = true
             switch decision {

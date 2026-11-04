@@ -1,6 +1,6 @@
 # Engine split: implementation plan (eGlu for Mac)
 
-Status: planned on 4 November 2026 at commit 75fcca2, narrowed to the Mac app and validated the same day. Claude wrote the draft. Codex (gpt-6.1-sol) read the repository over two rounds, corrected the draft and sketched the contracts, then validated the Mac plan in two independent runs. Gemini researched what a Chromium engine would face and then checked that research against primary sources. Section 11 records the validation and what it changed. Steps 0 and 1 were built and committed on 4 November 2026 (cf0049e6, 7.3); steps 2 and 3 the same day (6f21a0fc, 7.4); step 4a the same day, not yet committed (7.5). The decisions left open are in section 9.
+Status: planned on 4 November 2026 at commit 75fcca2, narrowed to the Mac app and validated the same day. Claude wrote the draft. Codex (gpt-6.1-sol) read the repository over two rounds, corrected the draft and sketched the contracts, then validated the Mac plan in two independent runs. Gemini researched what a Chromium engine would face and then checked that research against primary sources. Section 11 records the validation and what it changed. Steps 0 and 1 were built and committed on 4 November 2026 (cf0049e6, 7.3); steps 2 and 3 the same day (6f21a0fc, 7.4); step 4a the same day (8fca31ff, 7.5); step 4b the same day, not yet committed (7.6). The decisions left open are in section 9.
 
 **Scope:** eGlu for Mac only (`Mac/`, and the `Shared/` and PadCore code it compiles). The iPad and iPhone app is out of scope. It still compiles `Shared/` and PadCore, so it must keep building and behaving the same; it adopts nothing new (section 4).
 
@@ -609,7 +609,7 @@ Reviews: `/codex review` found no defects. Gemini (gemini-3.8-flash-high, which 
 
 ### 7.5 Step 4a (4 November 2026)
 
-Built on top of 6f21a0fc, not yet committed. Codex designed the slice (read-only), then wrote it in a worktree of its own; a Claude subagent wrote the hosted tests; Claude merged, fixed, built and tested; `/codex` and Gemini (gemini-4-argon-high) reviewed it.
+Built on top of 6f21a0fc and committed as 8fca31ff. Codex designed the slice (read-only), then wrote it in a worktree of its own; a Claude subagent wrote the hosted tests; Claude merged, fixed, built and tested; `/codex` and Gemini (gemini-4-argon-high) reviewed it.
 
 - `WebEngineCore` gains the navigation contract: `WebNavigation` (the request kept whole, the source origin, `targetIsMainFrame: Bool?`, `WebNavigationKind` with `.unknown`, modifiers, the raw button number, the download flag, a server redirect and an extension rule's redirect as separate facts), `WebNavigationDecision` and `WebNavigationPolicy`, whose reply is synchronous and exactly once.
 - `WebKitMacPlugin` gains `WebKitNavigationAdapter`, the web view's navigation delegate. It translates each `WKNavigationAction` (the private redirect calls moved here from `Page`, comment and all), asks `Page`, and passes every other callback on to `Page` unchanged (responses, downloads, the lifecycle). The swipe's and context menu's private callbacks are the UI delegate's and keep their route.
@@ -620,6 +620,18 @@ Built on top of 6f21a0fc, not yet committed. Codex designed the slice (read-only
 Result: all three schemes build with no new warnings; 14 package tests, stable over repeated runs once a flaky back-and-forward test was rewritten; 41 hosted tests, twice in a row (10 new: `PageNavigationPolicyTests`, among them 1,344 combinations checked against `NewTabClick`). The test host never had a file of the real data folder open (13 `lsof` samples). Not covered: links to other apps, extension sign-ins and rule redirects, extension pages, the colour-hint retry on real websites, Peek from pinned tabs, and real ⌘- and middle-clicks from WebKit.
 
 Found on the way, older than this work and not fixed (4a keeps behaviour as it was): `Page` takes `buttonNumber == 2` as the middle button, but WebKit's `buttonNumber` appears to report the middle button as 4 and the right as 2 (read from WebKit's code on this Mac, not tried with a mouse). If so, a middle-click on a link opens it in place instead of in a new tab.
+
+### 7.6 Step 4b (4 November 2026)
+
+Built on top of 8fca31ff, not yet committed. Codex wrote the slice in a worktree of its own from a design Claude gave it, with a line-by-line map of the old callback to the new code; a Claude subagent wrote the hosted tests; Claude merged, fixed, built and tested; `/codex` and Gemini reviewed it.
+
+- `WebEngineCore` gains the response contract: `WebResponse` (Foundation's `URLResponse` kept whole, so header lookups and the status read as before; whether it is for the main frame; whether the engine can show its type), `WebResponseDecision` (`allow`, `cancel`, `download`), and `decideResponse` on `WebNavigationPolicy`, with the same synchronous, exactly-once reply as the decision on a navigation.
+- `WebKitNavigationAdapter` decides responses the way it decides navigations: it describes each `WKNavigationResponse`, asks `Page`, answers WebKit once, cancels when there is no policy or no reply, and ignores a late reply. It never passes the response decision on to `Page`. The download callbacks and the lifecycle still go to `Page` unchanged.
+- `Page.decideResponse` is the old callback, branch for branch: the colour-hint retry still cancels before it loads again, now through the adapter's `load` (the same view and request); the page's kind, its status and the download rule are unchanged.
+- Changes on review and testing: a local name that shadowed the response is now `http`; `forwardingTarget(for:)` now also refuses both decision selectors, as `responds(to:)` already did. WebKit hands a custom scheme's response to the navigation delegate as a plain `URLResponse`, without the status or headers the test handler gave it, so the package tests check those only when the response is HTTP.
+- Reviews: `/codex` (codex exec, gpt-6.1-sol, read-only) found nothing. Gemini (gemini-3.8-flash-high; Argon's quota had run out) passed it with two changes, both made as above, and a third concern the new tests cover.
+
+Result: all three schemes build with no new warnings; 21 package tests (8 and 13), three runs each; 52 hosted tests, twice in a row (11 new: `PageResponsePolicyTests`). The test host never had a file of the real data folder open (18 and 16 `lsof` samples, which saw its own scratch files). Not covered: the colour-hint retry on a real website, hosts eGlu leaves alone (`HandsOff`), a real download to disk, a real HTTP status through WebKit, and a `Content-Disposition` with leading spaces (the old check did not trim them either, and still does not).
 
 ## 8. What a Chromium plugin would face
 
