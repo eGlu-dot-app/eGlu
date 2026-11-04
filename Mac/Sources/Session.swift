@@ -206,6 +206,7 @@ final class Session: ObservableObject {
             workspace = copy
             save()
             Sync.shared.changed(from: old, to: copy)
+            ExtensionEvents.shared.workspaceChanged(from: old, to: copy)
             // A split begun, ended or changed: each window's page beside, as it now is.
             for window in allWindows { window.workspaceChanged() }
         }

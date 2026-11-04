@@ -453,6 +453,7 @@ final class Page: NSObject {
     // MARK: Loading
 
     func load(_ url: URL) {
+        let url = ExtensionURL.normalized(url)
         beginNavigation(url)
         exhausted = false
         askedHere = url
@@ -1475,6 +1476,22 @@ extension Page: WKNavigationDelegate, WKUIDelegate {
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
                  decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void) {
         let mainFrame = navigationAction.targetFrame?.isMainFrame ?? true
+        if let url = navigationAction.request.url, ExtensionURL.isPage(url),
+           Extensions.shared.configuration(for: url, in: space) == nil {
+            if mainFrame {
+                failure = String(localized: "This extension is unavailable in this space. Turn it on in Extensions to open this page.")
+                host?.pageDidChange(self)
+            }
+            return decisionHandler(.cancel)
+        }
+        if mainFrame, let url = navigationAction.request.url, ExtensionURL.isPage(url),
+           ExtensionURL.normalized(url).absoluteString != url.absoluteString {
+            var request = navigationAction.request
+            request.url = ExtensionURL.normalized(url)
+            decisionHandler(.cancel)
+            webView.load(request)
+            return
+        }
         if let url = navigationAction.request.url, AppLink.isOne(scheme: url.scheme), !Extensions.shared.isExtensionPage(url) {
             decisionHandler(.cancel)
             openElsewhere(url, clicked: navigationAction.navigationType == .linkActivated, mainFrame: mainFrame)

@@ -25,6 +25,17 @@ final class Downloads: NSObject, ObservableObject, WKDownloadDelegate {
     private var running: [ObjectIdentifier: Running] = [:]
     private var retryViews: [UUID: WKWebView] = [:]
     private var stopping: Set<UUID> = []
+    private var nextBrowserID = 1
+    #if os(macOS)
+    private var extensionNames: [UUID: String] = [:]
+    private var extensionSaveAs: Set<UUID> = []
+    private func takeBrowserID() -> Int {
+        let id = max(nextBrowserID, UserDefaults.standard.integer(forKey: "nextDownloadBrowserID"))
+        nextBrowserID = id + 1
+        UserDefaults.standard.set(nextBrowserID, forKey: "nextDownloadBrowserID")
+        return id
+    }
+    #endif
     private static var folder: URL { Session.folder.appendingPathComponent("Downloads", isDirectory: true) }
     private static var index: URL { folder.appendingPathComponent("activity.json") }
 
@@ -67,8 +78,12 @@ final class Downloads: NSObject, ObservableObject, WKDownloadDelegate {
     func adopt(_ download: WKDownload, from page: Page) {
         let request = download.originalRequest
         let suggested = request?.url?.lastPathComponent ?? ""
-        let item = Item(name: suggested.isEmpty ? String(localized: "Download") : suggested,
+        var item = Item(name: suggested.isEmpty ? String(localized: "Download") : suggested,
                         source: request?.url, space: page.space, method: request?.httpMethod ?? "GET")
+        #if os(macOS)
+        assignBrowserIDs()
+        item.browserID = takeBrowserID()
+        #endif
         items.insert(item, at: 0)
         attach(download, item: item.id, page: ObjectIdentifier(page))
         persist()
@@ -79,7 +94,8 @@ final class Downloads: NSObject, ObservableObject, WKDownloadDelegate {
         running[ObjectIdentifier(download)] = Running(download: download, item: item, page: page)
         let watch = download.progress.observe(\.fractionCompleted, options: [.initial, .new]) { [weak self] progress, _ in
             let fraction = progress.totalUnitCount > 0 ? min(1, max(0, progress.fractionCompleted)) : nil
-            Task { @MainActor in self?.update(download) { $0.fraction = fraction } }
+            let received = max(0, progress.completedUnitCount), total = progress.totalUnitCount
+            Task { @MainActor in self?.update(download) { $0.fraction = fraction; $0.bytesReceived = received; $0.totalBytes = total > 0 ? total : nil } }
         }
         running[ObjectIdentifier(download)]?.watch = watch
     }
@@ -95,6 +111,10 @@ final class Downloads: NSObject, ObservableObject, WKDownloadDelegate {
         guard let ended = running.removeValue(forKey: ObjectIdentifier(download)) else { return }
         ended.watch?.invalidate()
         retryViews[ended.item] = nil
+        #if os(macOS)
+        extensionNames[ended.item] = nil
+        extensionSaveAs.remove(ended.item)
+        #endif
         persist()
     }
     private func persist() {
@@ -116,6 +136,50 @@ final class Downloads: NSObject, ObservableObject, WKDownloadDelegate {
         persist()
     }
     func exported(_ id: UUID) { change(id) { $0.exported = true } }
+
+    #if os(macOS)
+    func assignBrowserIDs() {
+        nextBrowserID = max(nextBrowserID, (items.compactMap(\.browserID).max() ?? 0) + 1)
+        var changed = false
+        for index in items.indices where items[index].browserID == nil {
+            items[index].browserID = takeBrowserID()
+            changed = true
+        }
+        if changed { persist() }
+    }
+
+    func startExtensionDownload(_ request: URLRequest, in space: UUID, name: String?, saveAs: Bool) async -> Item {
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = Stores.store(for: space)
+        let view = WKWebView(frame: .zero, configuration: configuration)
+        var item = Item(name: name ?? request.url?.lastPathComponent ?? String(localized: "Download"),
+                        source: request.url, space: space, method: request.httpMethod ?? "GET")
+        assignBrowserIDs()
+        item.browserID = takeBrowserID()
+        item.extensionInitiated = true
+        items.insert(item, at: 0)
+        retryViews[item.id] = view
+        extensionNames[item.id] = name
+        if saveAs { extensionSaveAs.insert(item.id) }
+        persist()
+        let id = item.id
+        await withCheckedContinuation { done in
+            view.startDownload(using: request) { [weak self] download in
+                self?.attach(download, item: id, page: nil)
+                done.resume()
+            }
+        }
+        return items.first { $0.id == id } ?? item
+    }
+
+    func eraseExtensionActivity(_ ids: Set<UUID>, in space: UUID) {
+        items.removeAll { $0.space == space && ids.contains($0.id) && $0.phase != .downloading }
+        removedActivity.formUnion(ids)
+        persist()
+    }
+
+    func extensionFileRemoved(_ id: UUID) { change(id) { $0.file = nil } }
+    #endif
 
     func cancel(_ item: Item) {
         guard !stopping.contains(item.id), let active = running.values.first(where: { $0.item == item.id }) else { return }
@@ -159,6 +223,21 @@ final class Downloads: NSObject, ObservableObject, WKDownloadDelegate {
     func download(_ download: WKDownload, decideDestinationUsing response: URLResponse, suggestedFilename: String,
                   completionHandler: @escaping @MainActor (URL?) -> Void) {
         guard let id = running[ObjectIdentifier(download)]?.item else { return completionHandler(nil) }
+        #if os(macOS)
+        let suggestedFilename = extensionNames[id] ?? suggestedFilename
+        if extensionSaveAs.contains(id) {
+            extensionSaveAs.remove(id)
+            let panel = NSSavePanel()
+            panel.nameFieldStringValue = DownloadName.free(for: suggestedFilename) { _ in false }
+            panel.begin { [weak self] response in
+                let file = response == .OK ? panel.url : nil
+                if let file { self?.update(download) { $0.name = file.lastPathComponent; $0.file = file } }
+                else { self?.update(download) { $0.phase = .cancelled; $0.problem = String(localized: "Download cancelled.") } }
+                completionHandler(file)
+            }
+            return
+        }
+        #endif
         let destination: URL
         #if os(macOS)
         let overrides = [ProcessInfo.processInfo.environment["EGLU_DATA_ROOT"], Bundle.main.object(forInfoDictionaryKey: "EGLU_DATA_ROOT") as? String]
@@ -185,6 +264,18 @@ final class Downloads: NSObject, ObservableObject, WKDownloadDelegate {
         update(download) { $0.name = name; $0.file = file }
         persist(); completionHandler(file)
     }
+    #if os(macOS)
+    func download(_ download: WKDownload, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest,
+                  decisionHandler: @escaping @MainActor (WKDownload.RedirectPolicy) -> Void) {
+        guard let id = running[ObjectIdentifier(download)]?.item,
+              items.first(where: { $0.id == id })?.extensionInitiated == true else { return decisionHandler(.allow) }
+        let url = request.url
+        guard let url, ["http", "https"].contains(url.scheme?.lowercased() ?? ""), url.user == nil, url.password == nil,
+              url.host().map(ExtensionPolicy.mayTouchData(ofDomain:)) ?? false else { return decisionHandler(.cancel) }
+        decisionHandler(.allow)
+    }
+    #endif
+
     func downloadDidFinish(_ download: WKDownload) {
         update(download) { $0.phase = .finished; $0.fraction = 1; $0.problem = nil; $0.resumeData = nil }
         #if os(macOS)

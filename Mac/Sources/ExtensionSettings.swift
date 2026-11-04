@@ -242,6 +242,9 @@ private struct ExtensionDetail: View {
                     extensions.setLooksWrong(item.id, true)
                 }
             }
+            if OnePasswordSignInHelp.applies(to: item.id) {
+                OnePasswordSignInHelp()
+            }
         }
         Section {
             ForEach(session.workspace.spaces) { space in
@@ -252,7 +255,7 @@ private struct ExtensionDetail: View {
                     }
                     .disabled(incompatible && !on)
                     if on, let warning = extensions.warning(item.id, in: space.id) {
-                        Text(([warning.title] + warning.lines).joined(separator: " "))
+                        Text(warning.lines.joined(separator: "\n"))
                             .font(.callout)
                             .foregroundStyle(.orange)
                             .fixedSize(horizontal: false, vertical: true)
@@ -356,6 +359,24 @@ private struct AccessLabel: View {
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(tint)
         }
+    }
+}
+
+/// Recovery advice and a service restriction, separate from API compatibility.
+struct OnePasswordSignInHelp: View {
+    static func applies(to id: String) -> Bool {
+        id.lowercased() == "aeblfdkhhhdcdjpifhhbdiojplfjncoa"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("If autofill stops after connecting the desktop app, reload the page.")
+            Text("1Password can't provide Apple Account passkeys. Use Apple's passkey option or your account password.")
+            Link("Read about Apple Account passkeys", destination: URL(string: "https://www.1password.community/1password-at-home-31/saving-apple-id-as-passkey-1704")!)
+        }
+        .font(.callout)
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 

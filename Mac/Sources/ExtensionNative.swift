@@ -18,7 +18,9 @@ import WebKit
 
 enum ExtensionNative {
     struct Refused: LocalizedError {
+        enum Reason { case other, missingHost, missingApp, forbidden }
         let why: String
+        var reason: Reason = .other
         var errorDescription: String? { why }
     }
 
@@ -48,24 +50,25 @@ enum ExtensionNative {
         guard name.range(of: #"^[a-z0-9_]+(\.[a-z0-9_]+)*$"#, options: .regularExpression) != nil else {
             throw Refused(why: "Invalid native messaging host name")
         }
-        let origin = "chrome-extension://\(extensionID)/"
+        let origin = "chrome-extension://\(extensionID.lowercased())/"
         for folder in folders {
             let file = folder.appendingPathComponent(name + ".json")
             guard let data = try? Data(contentsOf: file),
                   let manifest = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let path = manifest["path"] as? String
+                  manifest["name"] as? String == name, manifest["type"] as? String == "stdio",
+                  let path = manifest["path"] as? String, path.hasPrefix("/")
             else { continue }
             let allowed = manifest["allowed_origins"] as? [String] ?? []
             guard allowed.contains(origin) else {
-                throw Refused(why: "Access to the specified native messaging host is forbidden.")
+                throw Refused(why: "Access to the specified native messaging host is forbidden.", reason: .forbidden)
             }
             let program = path.hasPrefix("/") ? URL(fileURLWithPath: path) : folder.appendingPathComponent(path)
             guard FileManager.default.isExecutableFile(atPath: program.path) else {
-                throw Refused(why: "Specified native messaging host not found.")
+                throw Refused(why: "The registered desktop app helper is missing. Open or reinstall the desktop app.", reason: .missingApp)
             }
             return program
         }
-        throw Refused(why: "Specified native messaging host not found.")
+        throw Refused(why: "Specified native messaging host not found.", reason: .missingHost)
     }
 
     /// `runtime.sendNativeMessage`: run, send one, read one, stop.
@@ -80,7 +83,8 @@ enum ExtensionNative {
     /// `runtime.connectNative`: run, and keep the two talking until either
     /// end lets go.
     @MainActor
-    static func connect(_ port: WKWebExtension.MessagePort, from extensionID: String) throws {
+    static func connect(_ port: WKWebExtension.MessagePort, from extensionID: String,
+                        connectionChanged: @escaping @MainActor (Bool) -> Void) throws {
         guard let name = port.applicationIdentifier else { throw Refused(why: "No host named") }
         let program = try host(name, for: extensionID)
         // A new port is often a worker starting over; the one before may
@@ -88,10 +92,15 @@ enum ExtensionNative {
         stopOrphans()
         let pipe = HostPipe(program: program, origin: "chrome-extension://\(extensionID)/")
         pipe.onMessage = { message in
-            DispatchQueue.main.async { port.sendMessage(message, completionHandler: nil) }
+            DispatchQueue.main.async {
+                connectionChanged(true)
+                port.sendMessage(message, completionHandler: nil)
+            }
         }
         pipe.onExit = {
-            DispatchQueue.main.async { if !port.isDisconnected { port.disconnect() } }
+            DispatchQueue.main.async {
+                if !port.isDisconnected { connectionChanged(false); port.disconnect() }
+            }
         }
         // Listened to before it runs: a host may answer at once. One that
         // can't run is let go as one that has exited.

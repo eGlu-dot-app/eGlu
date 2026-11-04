@@ -3,6 +3,15 @@ import Testing
 @testable import PadCore
 
 struct DownloadRecordTests {
+    @Test func oldActivityLoadsWithoutExtensionFields() throws {
+        let item = DownloadRecord(name: "legacy.txt", source: nil, space: UUID())
+        var json = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(item)) as? [String: Any])
+        for key in ["browserID", "bytesReceived", "totalBytes", "extensionInitiated"] { json[key] = nil }
+        let restored = try JSONDecoder().decode(DownloadRecord.self, from: JSONSerialization.data(withJSONObject: json))
+        #expect(restored.id == item.id)
+        #expect(restored.browserID == nil)
+        #expect(restored.extensionInitiated == nil)
+    }
     @Test func interruptedActivitySurvivesAStoredRoundTrip() throws {
         var item = DownloadRecord(name: "export.zip", source: URL(string: "https://example.com/export"), space: UUID())
         item.resumeData = Data([1, 2, 3])

@@ -1,0 +1,9 @@
+{
+  "manifest_version": 3,
+  "name": "Extension API validation",
+  "description": "Synthetic checks in an isolated browser profile.",
+  "version": "1.0.0",
+  "permissions": ["storage", "tabs", "bookmarks", "history", "downloads", "notifications", "sessions", "topSites", "search", "browsingData", "fontSettings", "system.cpu", "system.memory", "system.display", "system.storage", "tts", "tabCapture"],
+  "background": { "service_worker": "worker.js" },
+  "action": { "default_title": "API validation" }
+}

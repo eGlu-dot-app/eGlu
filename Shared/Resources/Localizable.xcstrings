@@ -1,6 +1,182 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "If autofill stops after connecting the desktop app, reload the page." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "If autofill stops after connecting the desktop app, reload the page."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "데스크톱 앱에 연결한 뒤 자동 완성이 작동하지 않으면 페이지를 새로고침하세요."
+          }
+        }
+      }
+    },
+    "1Password can't provide Apple Account passkeys. Use Apple's passkey option or your account password." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1Password can't provide Apple Account passkeys. Use Apple's passkey option or your account password."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1Password에서는 Apple 계정 패스키로 로그인할 수 없습니다. Apple의 패스키 옵션이나 계정 암호를 사용하세요."
+          }
+        }
+      }
+    },
+    "Read about Apple Account passkeys" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Read about Apple Account passkeys"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple 계정 패스키 안내"
+          }
+        }
+      }
+    },
+    "This extension is unavailable in this space. Turn it on in Extensions to open this page." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This extension is unavailable in this space. Turn it on in Extensions to open this page."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 공간에서 이 확장 프로그램을 사용할 수 없습니다. 이 페이지를 열려면 확장 프로그램을 켜세요."
+          }
+        }
+      }
+    },
+    "Its registered desktop app helper is missing. Open or reinstall the desktop app to reconnect." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Its registered desktop app helper is missing. Open or reinstall the desktop app to reconnect."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "등록된 데스크톱 앱 연결 도구가 없습니다. 다시 연결하려면 데스크톱 앱을 열거나 다시 설치하세요."
+          }
+        }
+      }
+    },
+    "Open or reinstall its desktop app so it can register its browser connection." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open or reinstall its desktop app so it can register its browser connection."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "브라우저 연결을 등록할 수 있도록 데스크톱 앱을 열거나 다시 설치하세요."
+          }
+        }
+      }
+    },
+    "The desktop app does not allow this extension to connect. Check its browser integration settings." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The desktop app does not allow this extension to connect. Check its browser integration settings."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "데스크톱 앱에서 이 확장 프로그램의 연결을 허용하지 않습니다. 데스크톱 앱의 브라우저 연동 설정을 확인하세요."
+          }
+        }
+      }
+    },
+    "Open 1Password and add eGlu in Settings > Browser > Add Browser. You can also turn off desktop app integration in the extension and sign in separately." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open 1Password and add eGlu in Settings > Browser > Add Browser. You can also turn off desktop app integration in the extension and sign in separately."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1Password를 열고 설정 > 브라우저 > 브라우저 추가에서 eGlu를 추가하세요. 확장 프로그램에서 데스크톱 앱 연동을 끄고 별도로 로그인할 수도 있습니다."
+          }
+        }
+      }
+    },
+    "Open its desktop app and allow this browser in its browser integration settings." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open its desktop app and allow this browser in its browser integration settings."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "데스크톱 앱을 열고 브라우저 연동 설정에서 이 브라우저를 허용하세요."
+          }
+        }
+      }
+    },
+    "You can also turn off desktop app integration in the extension and sign in separately." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You can also turn off desktop app integration in the extension and sign in separately."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "확장 프로그램에서 데스크톱 앱 연동을 끄고 별도로 로그인할 수도 있습니다."
+          }
+        }
+      }
+    },
+    "Download cancelled." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Download cancelled."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다운로드가 취소되었습니다."
+          }
+        }
+      }
+    },
     "Moves the cursor" : {
 
     },
@@ -2152,7 +2328,20 @@
 
     },
     "Download" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Download"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다운로드"
+          }
+        }
+      }
     },
     "Download activity has not been saved on this device. Existing files are retained. Check available storage and file access, then retry." : {
 

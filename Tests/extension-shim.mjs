@@ -532,7 +532,8 @@ const attempt = (f) => { try { return f(); } catch (e) { return `${e.name}: ${e.
   check('WebKit\'s own privacy, if it has one, is kept', world({ permissions: ['privacy'], namespaces: { privacy: own } }).run('chrome.privacy') === own);
 }
 {
-  const w = world({ background: true, permissions: ['notifications'] });
+  const w = world({ background: true, permissions: ['notifications'], nativeReply: ({ api, args }) => ({ value:
+    api === 'notifications.create' ? args[0] : api === 'notifications.getPermissionLevel' ? 'denied' : null }) });
   const started = attempt(() => w.run(`(() => {
     chrome.notifications.onClicked.addListener(() => {});
     chrome.notifications.onButtonClicked.addListener(() => {});
@@ -545,9 +546,55 @@ const attempt = (f) => { try { return f(); } catch (e) { return `${e.name}: ${e.
   const made = await new Promise((done) => w.run('chrome.notifications').create({ type: 'basic', title: 't', message: 'm' }, done));
   check('or one of its own, through a callback', typeof made === 'string' && made.length > 0, made);
   check('the permission level reads denied', await w.run('chrome.notifications').getPermissionLevel() === 'denied');
-  check('notifications ask eGlu nothing', !w.native.some((n) => String(n.message?.api).startsWith('notifications')));
+  check('notifications are actually sent to the native service', w.native.filter((n) => n.message?.api === 'notifications.create').length === 2);
   }
   check('no notifications namespace without its permission', world({ background: true }).run('chrome.notifications') === undefined);
+}
+
+// Native browser APIs retain callback errors, permissions, and live event delivery.
+{
+  const permissions = ['bookmarks', 'history', 'downloads', 'sessions', 'topSites', 'search', 'browsingData', 'system.memory', 'fontSettings'];
+  const w = world({ background: true, permissions, nativeReply: ({ api }) => ({ value: api === 'downloads.download' ? 42 : [] }) });
+  for (const [name, method] of [['bookmarks', 'getTree'], ['history', 'search'], ['downloads', 'download'], ['sessions', 'getRecentlyClosed'], ['topSites', 'get'], ['search', 'query'], ['browsingData', 'removeCache'], ['fontSettings', 'getFontList']]) {
+    check(`${name}.${method} is supplied when requested`, typeof w.run(`chrome.${name}.${method}`) === 'function');
+  }
+  check('system memory is supplied by its dotted permission', typeof w.run('chrome.system.memory.getInfo') === 'function');
+  check('system CPU is absent without its permission', w.run('chrome.system.cpu') === undefined);
+  const id = await w.run('chrome.downloads.download({ url: "data:text/plain,example" })');
+  const viaCallback = await new Promise((done) => w.run('chrome.downloads').download({ url: 'https://example.com/file' }, done));
+  check('downloads return native ids through promises and callbacks', id === 42 && viaCallback === 42);
+  const failure = world({ permissions: ['downloads', 'notifications'], nativeReply: () => ({ error: 'Notifications are off for eGlu.' }) });
+  const rejected = await failure.run('chrome.notifications.create("a", { type: "basic", title: "A", message: "B" })').then(() => false, (e) => /Notifications are off/.test(e.message));
+  const callbackError = await new Promise((done) => failure.run('chrome.downloads').search({}, () => done(failure.chrome.runtime.lastError?.message)));
+  check('native failures never fabricate successful results', rejected && callbackError === 'Notifications are off for eGlu.' && failure.chrome.runtime.lastError === undefined);
+  const missing = world({ background: true });
+  check('browser data APIs are absent without manifest permissions', ['bookmarks', 'history', 'downloads', 'sessions', 'topSites', 'search'].every((name) => missing.run(`chrome.${name}`) === undefined));
+  const content = world({ protocol: 'https:', permissions });
+  check('browser data APIs are not exposed to content scripts', content.run('chrome.bookmarks') === undefined && content.run('chrome.downloads') === undefined);
+  const original = async () => 'native';
+  const retained = world({ permissions: ['downloads'], namespaces: { downloads: { download: original } } });
+  check('existing native download support is retained', await retained.run('chrome.downloads.download({url:"https://example.com/"})') === 'native');
+  const limited = world({ permissions: ['tabCapture'] });
+  const message = await limited.run('chrome.tabCapture.getMediaStreamId()').then(() => '', (e) => e.message);
+  check('unavailable capabilities explain the effect in plain language', /cannot record an individual tab/.test(message) && !message.includes('tabCapture'));
+  check('unavailable calls report the API for compatibility warnings', limited.native.some((n) => n.message.api === 'unsupported' && n.message.args[0] === 'tabCapture.getMediaStreamId'));
+
+  const event = () => ({ listeners: [], addListener(f) { this.listeners.push(f); }, removeListener(f) { this.listeners = this.listeners.filter((g) => g !== f); }, hasListener(f) { return this.listeners.includes(f); } });
+  const ports = [];
+  const streamed = world({ background: true, permissions: ['downloads', 'bookmarks'], runtimeExtra: { connectNative(name) {
+    const port = { name, onMessage: event(), onDisconnect: event(), posted: [], postMessage(value) { this.posted.push(value); }, disconnect() {} };
+    ports.push(port); return port;
+  } } });
+  check('native event ports open lazily', ports.length === 0);
+  streamed.run('globalThis.received = []; chrome.downloads.onCreated.addListener((item) => received.push(item.id)); chrome.bookmarks.onRemoved.addListener((id) => received.push(id))');
+  check('native events share one extension-only port', ports.length === 1 && ports[0].name === 'eglu.events');
+  check('event subscriptions stay attached to their own port', ports[0].posted.some((message) => message.__egluEvents?.events.includes('downloads.onCreated') && message.__egluEvents?.events.includes('bookmarks.onRemoved')));
+  for (const f of ports[0].onMessage.listeners) {
+    f({ event: 'downloads.onCreated', args: [{ id: 7 }] });
+    f({ event: 'bookmarks.onRemoved', args: ['bookmark', {}] });
+    f({ event: 'downloads.onCreated', args: 'invalid' });
+  }
+  check('native events dispatch only valid event arguments', JSON.stringify(streamed.run('received')) === '[7,"bookmark"]');
 }
 
 // Search's list of members WebKit leaves out.
@@ -559,7 +606,7 @@ const attempt = (f) => { try { return f(); } catch (e) { return `${e.name}: ${e.
   check('a worker listens to windows.onBoundsChanged (Session Buddy)', attempt(() => { w.run('chrome.windows.onBoundsChanged.addListener(() => {})'); return 'ok'; }) === 'ok');
   check('windows\' enums are there', w.run('chrome.windows.WindowState.MAXIMIZED') === 'maximized' && w.run('chrome.windows.CreateType.POPUP') === 'popup');
   const refused = await w.run('chrome.declarativeNetRequest').updateStaticRules({ rulesetId: 'a', disableRuleIds: [1] }).then(() => 'done', (e) => e.message);
-  check('what eGlu doesn\'t do is refused, not answered as done', /isn't available in eGlu/.test(refused), refused);
+  check('what eGlu doesn\'t do is refused, not answered as done', /cannot/.test(refused), refused);
   check('declarativeNetRequest\'s constants are there', w.run('chrome.declarativeNetRequest.RuleActionType.UPGRADE_SCHEME') === 'upgradeScheme'
     && w.run('chrome.declarativeNetRequest.ResourceType.XMLHTTPREQUEST') === 'xmlhttprequest');
   check('tabs\' zoom reads as Chrome\'s default', (await w.run('chrome.tabs').getZoomSettings()).mode === 'automatic');

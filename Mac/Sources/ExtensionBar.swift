@@ -398,7 +398,7 @@ private struct ManageRow: View {
                                 .font(.caption.weight(.medium))
                                 .foregroundStyle(.secondary)
                         } else if let warning {
-                            Text(([warning.title] + warning.lines).joined(separator: " "))
+                            Text(warning.lines.joined(separator: "\n"))
                                 .fixedSize(horizontal: false, vertical: true)
                                 .font(.caption.weight(.medium))
                                 .foregroundStyle(.orange)
@@ -567,6 +567,11 @@ private struct DetailPage: View {
                     Finding(title: String(localized: "Incompatible with eGlu on this Mac"), text: extensions.incompatibility(id))
                 } else if let warning {
                     Finding(title: warning.title, text: warning.lines.joined(separator: " "))
+                }
+                if OnePasswordSignInHelp.applies(to: id) {
+                    OnePasswordSignInHelp()
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 8)
                 }
                 VStack(spacing: 0) {
                     SettingLine(title: String(localized: "Use in This Space")) {

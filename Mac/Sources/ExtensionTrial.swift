@@ -99,7 +99,10 @@ extension ExtensionTrial {
     /// popup is a tab (ExtensionPopups). They read as Bitwarden's popup and
     /// 1Password's failing.
     static func copysOwn(_ words: String) -> Bool {
-        words.localizedCaseInsensitiveContains("Tab not found") || words.localizedCaseInsensitiveContains("Window not found")
+        if words.localizedCaseInsensitiveContains("Tab not found") || words.localizedCaseInsensitiveContains("Window not found") { return true }
+        // The trial delegate deliberately cannot create tabs or windows.
+        // A refusal here does not describe the real browser's support.
+        return ["Invalid call to tabs.create(", "Invalid call to windows.create("].contains { words.contains($0) }
     }
 
     static func check(_ folder: URL, id: String, manifest: ExtensionManifest, missing: Set<String>) async -> Checked {

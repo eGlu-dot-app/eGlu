@@ -54,6 +54,7 @@ final class ExtensionTabs {
     /// an extension's own page gets a page made from the extension's
     /// configuration, as WebKit needs.
     func open(_ url: URL?, in space: UUID, active: Bool, pinned: Bool, context: WKWebExtensionContext) -> ExtensionTab? {
+        let url = url.map(ExtensionURL.normalized)
         let session = Session.shared
         let selected = session.workspace.space(space)?.selected
         guard let id = session.change({ $0.openTab(url, in: space) }), let record = session.workspace.tab(id) else { return nil }
@@ -272,8 +273,14 @@ final class ExtensionTab: NSObject, WKWebExtensionTab {
 
     func loadURL(_ url: URL, for context: WKWebExtensionContext, completionHandler: @escaping ((any Error)?) -> Void) {
         if let refused = Extensions.refusal(opening: url, by: context) { return completionHandler(refused) }
-        guard let record else { return completionHandler(nil) }
-        Session.shared.pages.page(for: record, in: space).load(url)
+        guard record != nil else { return completionHandler(nil) }
+        let url = ExtensionURL.normalized(url)
+        let session = Session.shared
+        if let page = session.pages.live[id], page.isExtensionPage == Extensions.shared.isExtensionPage(url) {
+            page.load(url)
+        } else {
+            session.replacePage(of: id, in: space, with: url, keepingOld: false)
+        }
         completionHandler(nil)
     }
 

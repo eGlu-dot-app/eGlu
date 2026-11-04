@@ -42,6 +42,8 @@ public enum ExtensionError {
         // Only a Chrome API's path is ever kept: a message can name anything,
         // an address or an account included ("Invalid call to alice@…(").
         guard let found = parsed(message, missing: missing), isAPIPath(found.api) || missing.contains(found.api) else { return nil }
+        // A refused desktop host is a connection failure, not a missing API.
+        if found.kind == .wrongArguments, ["runtime.connectNative", "runtime.sendNativeMessage"].contains(found.api) { return nil }
         return found
     }
 
@@ -182,9 +184,13 @@ public struct ExtensionEvidence: Equatable, Sendable {
     public var problems: Set<ExtensionError.Problem> = []
     /// The desktop app it talks to, when a call to it failed: "Bitwarden".
     public var unreachableApp: String?
+    /// A fixed recovery instruction, never a native host's raw error text.
+    public var nativeAppHelp: String?
     /// From reading the code: APIs used with no test first, that nothing
     /// on this Mac answers.
     public var mayNotWork: [String] = []
+    /// Requested capabilities whose absence is known, rather than inferred from source code.
+    public var unavailableCapabilities: [String] = []
     /// It asked for `cookies`, which no extension gets (hands-off).
     public var cookiesKeptBack = false
     /// Its entry in the list of extensions tried by hand for this release.
@@ -229,7 +235,9 @@ public struct ExtensionVerdict: Equatable, Sendable {
             (evidence.popup, BrowserText.localized("Its popup didn't open.")),
             (evidence.optionsPage, BrowserText.localized("Its settings page didn't open.")),
         ].filter { $0.0 == .failed }.map(\.1)
-        let features = evidence.problems.map { Self.words(for: $0.api) }.sorted()
+        let features = Set(evidence.problems.filter {
+            evidence.unreachableApp == nil || !["runtime.connectNative", "runtime.sendNativeMessage"].contains($0.api)
+        }.map { Self.words(for: $0.api) }).sorted()
 
         switch evidence.start {
         case .checking:
@@ -239,10 +247,13 @@ public struct ExtensionVerdict: Equatable, Sendable {
             lines.append(BrowserText.localized("eGlu tried starting it again."))
         case .started:
             let probes = [evidence.testPage, evidence.popup, evidence.optionsPage]
-            if !features.isEmpty || !failedProbes.isEmpty || evidence.unreachableApp != nil {
+            if !features.isEmpty || !failedProbes.isEmpty || evidence.unreachableApp != nil || !evidence.unavailableCapabilities.isEmpty {
                 status = .someFeaturesDontWork
-                lines += features.map { String(format: BrowserText.localized("Can't %@."), $0) } + failedProbes
+                let observed = evidence.problems.filter { evidence.unreachableApp == nil || !["runtime.connectNative", "runtime.sendNativeMessage"].contains($0.api) }
+                lines += Set(observed.map { ExtensionLimitations.explanation(for: $0.api) ?? String(format: BrowserText.localized("Can't %@."), Self.words(for: $0.api)) }).sorted() + failedProbes
+                lines += Array(Set(evidence.unavailableCapabilities.compactMap(ExtensionLimitations.explanation))).sorted().filter { !lines.contains($0) }
                 if let app = evidence.unreachableApp { lines.append(String(format: BrowserText.localized("Can't reach the %@ app."), app)) }
+                if let help = evidence.nativeAppHelp { lines.append(help) }
             } else if probes.contains(.checking) {
                 status = .checking
             } else if let tried = evidence.tried {
@@ -292,6 +303,34 @@ public struct ExtensionVerdict: Equatable, Sendable {
         "debugger": BrowserText.localized("inspect pages"),
         "identity": BrowserText.localized("sign in"),
         "identity.getAuthToken": BrowserText.localized("sign in with your Google account"),
+        "runtime.connectNative": BrowserText.localized("connect to its desktop app"),
+        "runtime.sendNativeMessage": BrowserText.localized("send messages to its desktop app"),
+        "nativeMessaging": BrowserText.localized("connect to its desktop app"),
+        "cookies": BrowserText.localized("read or change website cookies"),
+        "scripting": BrowserText.localized("run scripts on websites"),
+        "userScripts": BrowserText.localized("run user scripts on websites"),
+        "webNavigation": BrowserText.localized("follow page navigation"),
+        "webRequest": BrowserText.localized("observe website requests"),
+        "declarativeNetRequest": BrowserText.localized("apply its network filtering rules"),
+        "tabs": BrowserText.localized("manage tabs"),
+        "windows": BrowserText.localized("manage browser windows"),
+        "storage": BrowserText.localized("save its settings and data"),
+        "i18n": BrowserText.localized("use language features"),
+        "alarms": BrowserText.localized("schedule background tasks"),
+        "contextMenus": BrowserText.localized("add items to page menus"),
+        "commands": BrowserText.localized("use keyboard shortcuts"),
+        "action": BrowserText.localized("use its toolbar button"),
+        "permissions": BrowserText.localized("request additional access"),
+        "idle": BrowserText.localized("detect when this Mac is idle or locked"),
+        "power": BrowserText.localized("keep this Mac awake"),
+        "browsingData": BrowserText.localized("clear browsing data"),
+        "system": BrowserText.localized("read this Mac's system information"),
+        "search": BrowserText.localized("search the web"),
+        "omnibox": BrowserText.localized("add suggestions to the address field"),
+        "devtools": BrowserText.localized("add panels to developer tools"),
+        "declarativeContent": BrowserText.localized("change its button based on page contents"),
+        "webAuthenticationProxy": BrowserText.localized("handle passkeys for another device"),
+        "enterprise": BrowserText.localized("use managed device features"),
         "notifications": BrowserText.localized("show notifications"),
         "bookmarks": BrowserText.localized("read your bookmarks"),
         "history": BrowserText.localized("read your history"),
@@ -314,7 +353,7 @@ public struct ExtensionVerdict: Equatable, Sendable {
     ]
 
     static func words(for api: String) -> String {
-        features[api] ?? features[api.split(separator: ".").first.map(String.init) ?? api] ?? String(format: BrowserText.localized("use %@"), api)
+        features[api] ?? features[api.split(separator: ".").first.map(String.init) ?? api] ?? BrowserText.localized("use a feature this browser does not provide")
     }
 
     static func list(_ items: [String]) -> String {

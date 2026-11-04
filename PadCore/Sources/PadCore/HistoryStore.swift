@@ -197,6 +197,27 @@ public actor HistoryStore {
 
     // MARK: Finding
 
+    /// Extension searches use literal title/address text and visit time, without handoffs or semantic search.
+    public func extensionSearch(space: UUID, text: String, from: Date, to: Date, limit: Int, mostVisited: Bool = false) throws -> [HistoryPage] {
+        var pages: [HistoryPage] = []
+        let like = "%" + Self.escaped(text) + "%"
+        let order = mostVisited ? "p.count DESC, p.last DESC" : "p.last DESC"
+        try query("""
+            SELECT p.space, p.page, p.url, p.title, p.summary, p.last, p.count, p.frecency, p.search
+            FROM pages p WHERE p.space = ? AND p.last >= ? AND p.last <= ?
+            AND (p.title LIKE ? ESCAPE '\\' OR p.url LIKE ? ESCAPE '\\') ORDER BY \(order) LIMIT ?
+            """, [.text(space.uuidString), .real(from.timeIntervalSince1970), .real(to.timeIntervalSince1970),
+                  .text(like), .text(like), .int(max(0, min(limit, 10_000)))]) { row in
+            if let page = Self.page(row) { pages.append(page) }
+        }
+        return pages
+    }
+
+    public func extensionVisits(space: UUID, url: URL) throws -> [HistoryVisit] {
+        try visits(where: "v.space = ? AND v.page = ?", [.text(space.uuidString), .text(History.pageKey(url))])
+            .sorted { $0.time > $1.time }
+    }
+
     /// The space's pages whose name, address or description has every one
     /// of the words in it (anywhere inside, as History.searchable keeps
     /// them), gone to within the query's stretch of time if it names one;

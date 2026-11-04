@@ -15,6 +15,11 @@ public struct DownloadRecord: Codable, Identifiable, Sendable {
     public var resumeData: Data?
     public var exported = false
     public let created: Date
+    /// Stable numeric id used by browser extensions; older activity is assigned one on demand.
+    public var browserID: Int?
+    public var bytesReceived: Int64?
+    public var totalBytes: Int64?
+    public var extensionInitiated: Bool?
 
     public init(id: UUID = UUID(), name: String, source: URL?, space: UUID, method: String = "GET") {
         self.id = id; self.name = name; self.source = source; self.space = space; self.method = method

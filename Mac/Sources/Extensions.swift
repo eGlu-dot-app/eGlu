@@ -478,7 +478,7 @@ final class Extensions: NSObject, ObservableObject {
 
     /// Whether a URL is one of the extensions' own pages.
     func isExtensionPage(_ url: URL?) -> Bool {
-        guard let url, url.scheme == Self.scheme, let host = url.host() else { return false }
+        guard let url, url.scheme?.lowercased() == Self.scheme, let host = ExtensionURL.identifier(in: url) else { return false }
         return installed.contains { $0.id == host }
     }
 
@@ -572,6 +572,8 @@ final class Extensions: NSObject, ObservableObject {
         // page; and its hosts once WebKit has had a turn to let its ports go.
         ExtensionOffscreen.close(id, in: space)
         ExtensionSocket.close(id, in: space)
+        ExtensionEvents.shared.close(id, in: space)
+        ExtensionSpeech.close(id, in: space)
         DispatchQueue.main.async { ExtensionNative.stopOrphans() }
     }
 
@@ -726,6 +728,9 @@ final class Extensions: NSObject, ObservableObject {
         let missing = missing(for: manifest, package)
         lacking[id] = missing
         seen.mayNotWork = Self.notes(in: archive, manifest, missing: missing)
+        seen.unavailableCapabilities = manifest.permissions.filter {
+            ExtensionAPITable.shims[$0] == .refused && ExtensionLimitations.explanation(for: $0) != nil
+        }
         // On the list of those tried by hand, for its version.
         if let item = installed.first(where: { $0.id == id }), item.source == .store,
            let tried = ExtensionTried.shipped.entry(for: id, version: item.version) {
@@ -1819,7 +1824,7 @@ final class Extensions: NSObject, ObservableObject {
     /// Whether a website at `source` may send its tab to `url`, a page of
     /// an extension loaded in `space` (ExtensionPolicy.webAccessible).
     func webAccessible(_ url: URL, from source: URL, in space: UUID, fromRule: Bool = false) -> Bool {
-        guard isExtensionPage(url), let id = url.host(), let context = contexts[space]?[id] else { return false }
+        guard isExtensionPage(url), let id = ExtensionURL.identifier(in: url), let context = contexts[space]?[id] else { return false }
         // WebKit doesn't say whose rule it was: only an extension that can
         // make rules gets what its own rule would, so another's rule naming
         // its page gets no more than a site's link.
@@ -1839,7 +1844,7 @@ final class Extensions: NSObject, ObservableObject {
     /// The configuration an extension's own page needs, in a space where
     /// the extension is loaded.
     func configuration(for url: URL, in space: UUID) -> WKWebViewConfiguration? {
-        guard isExtensionPage(url), let id = url.host() else { return nil }
+        guard isExtensionPage(url), let id = ExtensionURL.identifier(in: url) else { return nil }
         return contexts[space]?[id]?.webViewConfiguration
     }
 
@@ -2113,6 +2118,11 @@ extension Extensions {
                 for page in opened where page.space == space {
                     let live = session.pages.live[page.tab]
                     lines.append("space \(number + 1) page \(live?.view.url?.host() ?? "-"): \(live?.view.title ?? "-")")
+                    if Session.dataRootOverride != nil, UserDefaults.standard.bool(forKey: "extensionInspectPages"), let live {
+                        let script = "JSON.stringify({ready:document.readyState,title:document.title,body:document.body?.innerText.slice(0,6000)})"
+                        do { lines.append("space \(number + 1) inspection \(try await live.view.evaluateJavaScript(script) ?? "-")") }
+                        catch { lines.append("space \(number + 1) inspection failed \(error.localizedDescription)") }
+                    }
                     if let label = await live?.storeButtonLabel() { lines.append("space \(number + 1) store button: \(label)") }
                 }
             }
@@ -2152,6 +2162,7 @@ extension Extensions: WKWebExtensionControllerDelegate {
     /// check websites are held to.
     static func refusal(opening url: URL?, by context: WKWebExtensionContext) -> Error? {
         if let refused = refusal(opening: url) { return refused }
+        if ExtensionURL.isPage(url), ExtensionURL.identifier(in: url) == nil { return Unanswered(why: "Cannot open this extension address.") }
         guard othersPage(url, for: context) else { return nil }
         return Unanswered(why: "Cannot navigate to another extension's page.")
     }
@@ -2297,6 +2308,7 @@ extension Extensions: WKWebExtensionControllerDelegate {
             Task {
                 do {
                     let value = try await answer(api, call["args"] as? [Any] ?? [], context: extensionContext, in: space)
+                    guard contexts[space]?[id] === extensionContext else { return replyHandler(["error": "The extension was turned off."], nil) }
                     replyHandler(["value": value ?? NSNull()], nil)
                 } catch {
                     replyHandler(["error": error.localizedDescription], nil)
@@ -2307,9 +2319,11 @@ extension Extensions: WKWebExtensionControllerDelegate {
         guard reachesApps(id) else { return replyHandler(nil, Unanswered(why: "Specified native messaging host not found.")) }
         Task {
             do {
-                replyHandler(try await ExtensionNative.send(message, to: name, from: id), nil)
+                let reply = try await ExtensionNative.send(message, to: name, from: id)
+                nativeConnection(name, error: nil, context: extensionContext, in: space)
+                replyHandler(reply, nil)
             } catch {
-                update(id, in: space) { $0.unreachableApp = Self.appName(ofHost: name) }
+                nativeConnection(name, error: error, context: extensionContext, in: space)
                 replyHandler(nil, error)
             }
         }
@@ -2330,15 +2344,23 @@ extension Extensions: WKWebExtensionControllerDelegate {
             ExtensionSocket.connect(port, from: id, in: space, policy: policy)
             return completionHandler(nil)
         }
+        if port.applicationIdentifier == ExtensionEvents.application {
+            ExtensionEvents.shared.connect(port, context: extensionContext, space: space)
+            return completionHandler(nil)
+        }
         // The shim's own, opened only to find what WebKit's ports are
         // made of, and let go at once.
         if port.applicationIdentifier == Self.shimApplication { return completionHandler(nil) }
         guard reachesApps(id) else { return completionHandler(Unanswered(why: "Specified native messaging host not found.")) }
         do {
-            try ExtensionNative.connect(port, from: id)
+            try ExtensionNative.connect(port, from: id) { [weak self, weak extensionContext] connected in
+                guard let self, let extensionContext else { return }
+                self.nativeConnection(port.applicationIdentifier ?? "", error: connected ? nil : Unanswered(why: "The desktop app closed the connection."),
+                                      context: extensionContext, in: space)
+            }
             completionHandler(nil)
         } catch {
-            update(id, in: space) { $0.unreachableApp = Self.appName(ofHost: port.applicationIdentifier ?? "") }
+            nativeConnection(port.applicationIdentifier ?? "", error: error, context: extensionContext, in: space)
             completionHandler(error)
         }
     }

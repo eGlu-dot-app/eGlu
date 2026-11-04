@@ -82,7 +82,7 @@ final class ExtensionCheckTests: XCTestCase {
     func testTheShimsListWhatTheyAnswer() {
         XCTAssertEqual(ExtensionAPITable.shims["sidePanel"], .shim)
         XCTAssertEqual(ExtensionAPITable.shims["offscreen"], .shim)
-        XCTAssertNil(ExtensionAPITable.shims["tabCapture"])
+        XCTAssertEqual(ExtensionAPITable.shims["tabCapture"], .refused)
     }
 
     func testWhatThePasswordManagersReachForIsListedAsItIs() {
@@ -90,9 +90,9 @@ final class ExtensionCheckTests: XCTestCase {
         XCTAssertEqual(table.answer(for: "webNavigation.onHistoryStateUpdated"), .stub, "there to listen to, never fired")
         XCTAssertEqual(table.answer(for: "webNavigation.onBeforeNavigate"), .native)
         XCTAssertTrue(table.works("privacy.services.passwordSavingEnabled"), "read as eGlu has it")
-        XCTAssertFalse(table.works("notifications.create"), "nothing is shown")
+        XCTAssertTrue(table.works("notifications.create"), "macOS delivers notifications")
         XCTAssertEqual(table.missing(asked: ["privacy", "notifications", "webNavigation"], kept: ["privacy", "notifications", "webNavigation"]),
-                       ["notifications"])
+                       [])
     }
 
     func testWhatInstallingAllowsIsWrittenDown() throws {
@@ -180,7 +180,7 @@ final class ExtensionCheckTests: XCTestCase {
                      "webRequestBlocking", "unlimitedStorage", "cookies", "history"]
         // WebKit kept notifications, unlimitedStorage and the rest; it dropped history and webRequestBlocking.
         let kept: Set<String> = ["tabs", "storage", "notifications", "declarativeNetRequestWithHostAccess", "unlimitedStorage", "cookies"]
-        XCTAssertEqual(table.missing(asked: asked, kept: kept), ["notifications", "history", "webRequestBlocking"],
+        XCTAssertEqual(table.missing(asked: asked, kept: kept), ["webRequestBlocking"],
                        "a kept permission whose namespace isn't there counts; a shim's doesn't; cookies is the hands-off rules'")
     }
 

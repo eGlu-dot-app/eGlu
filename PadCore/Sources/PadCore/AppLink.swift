@@ -18,7 +18,7 @@ public enum AppLink {
 
     public static func isOne(scheme: String?) -> Bool {
         guard let scheme = scheme?.lowercased(), !scheme.isEmpty else { return false }
-        return !pages.contains(scheme)
+        return !pages.contains(scheme) && !ExtensionURL.schemes.contains(scheme)
     }
 
     public enum Answer: Equatable, Sendable {

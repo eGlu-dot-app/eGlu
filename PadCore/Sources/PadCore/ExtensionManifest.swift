@@ -307,7 +307,8 @@ public struct ExtensionAPITable: Equatable, Sendable {
     /// What eGlu's shims answer that WebKit lacks (Scripts/extension-shim.js,
     /// ExtensionAnswers.swift): kept beside them, read on top of what this
     /// Mac's WebKit has.
-    public static let shims: [String: Answer] = [
+    public static let shims: [String: Answer] = {
+        var answers: [String: Answer] = [
         "sidePanel": .shim,
         "offscreen": .shim,
         "management": .part,
@@ -317,8 +318,6 @@ public struct ExtensionAPITable: Equatable, Sendable {
         "i18n.detectLanguage": .shim,
         // Read as eGlu has them; a change is refused.
         "privacy": .part,
-        // There to listen to and to ask; nothing is shown.
-        "notifications": .stub,
         "webNavigation.onCreatedNavigationTarget": .stub,
         "webNavigation.onHistoryStateUpdated": .stub,
         "webNavigation.onReferenceFragmentUpdated": .stub,
@@ -348,7 +347,33 @@ public struct ExtensionAPITable: Equatable, Sendable {
         "identity.getAuthToken": .refused,
         // Through WebKit's registered content scripts (ExtensionAnswers).
         "userScripts": .shim,
-    ]
+        ]
+        let supplied: [String: [String]] = [
+            "bookmarks": ["get", "getTree", "getChildren", "getSubTree", "search", "create", "update", "move", "remove", "removeTree", "onCreated", "onChanged", "onMoved", "onRemoved"],
+            "history": ["search", "getVisits", "addUrl", "deleteUrl", "deleteRange", "deleteAll", "onVisited", "onVisitRemoved"],
+            "downloads": ["download", "search", "cancel", "resume", "erase", "show", "showDefaultFolder", "removeFile", "getFileIcon", "onCreated", "onChanged", "onErased"],
+            "notifications": ["create", "update", "clear", "getAll", "getPermissionLevel", "onClicked", "onButtonClicked", "onClosed"],
+            "sessions": ["getRecentlyClosed", "restore", "onChanged"],
+            "topSites": ["get"], "search": ["query"],
+            "browsingData": ["settings", "remove", "removeCache", "removeLocalStorage", "removeIndexedDB", "removeServiceWorkers", "removeHistory", "removeDownloads"],
+            "fontSettings": ["getFontList"],
+            "system.cpu": ["getInfo"], "system.memory": ["getInfo"], "system.display": ["getInfo"], "system.storage": ["getInfo"],
+            "tts": ["speak", "stop", "pause", "resume", "isSpeaking", "getVoices"],
+        ]
+        for (namespace, members) in supplied {
+            answers[namespace] = .part
+            for member in members { answers[namespace + "." + member] = .shim }
+        }
+        answers["system"] = .part
+        for namespace in ["tabCapture", "pageCapture", "debugger", "gcm", "instanceID", "readingList", "proxy", "contentSettings", "declarativeContent", "devtools", "webAuthenticationProxy", "ttsEngine",
+                          "accessibilityFeatures", "audio", "certificateProvider", "documentScan", "enterprise", "fileBrowserHandler", "fileSystemProvider", "input", "loginState", "platformKeys", "printerProvider", "printing", "printingMetrics", "vpnProvider", "wallpaper"] {
+            answers[namespace] = .refused
+        }
+        for path in ["bookmarks.getRecent", "sessions.getDevices", "downloads.pause", "downloads.open", "downloads.setUiOptions", "downloads.setShelfEnabled", "downloads.acceptDanger",
+                     "management.getAll", "management.setEnabled", "management.uninstall"] { answers[path] = .refused }
+        for path in ["downloads.onDeterminingFilename", "notifications.onPermissionLevelChanged", "notifications.onShowSettings", "bookmarks.onChildrenReordered", "bookmarks.onImportBegan", "bookmarks.onImportEnded"] { answers[path] = .stub }
+        return answers
+    }()
 
     public init(answers: [String: Answer]) {
         self.answers = answers
@@ -368,12 +393,15 @@ public struct ExtensionAPITable: Equatable, Sendable {
 
     public func answer(for path: String) -> Answer? {
         if let answer = answers[path] { return answer }
-        guard let dot = path.firstIndex(of: ".") else { return nil }
-        let namespace = String(path[..<dot])
-        // A member of a namespace WebKit has natively, not in its list, is
-        // missing; a member of a shim's namespace is the shim's to answer.
-        guard let whole = answers[namespace], whole != .native else { return nil }
-        return whole
+        var prefix = path
+        while let dot = prefix.lastIndex(of: ".") {
+            prefix = String(prefix[..<dot])
+            guard let whole = answers[prefix] else { continue }
+            if prefix == "privacy" { return whole }
+            // Partial namespaces list the members they actually supply.
+            return whole == .native || whole == .part ? nil : whole
+        }
+        return nil
     }
 
     /// Whether a call to `path` does what it says: nothing answering it, a
@@ -390,6 +418,7 @@ public struct ExtensionAPITable: Equatable, Sendable {
     static let namespaces: [String: String?] = [
         "declarativeNetRequestWithHostAccess": "declarativeNetRequest",
         "declarativeNetRequestFeedback": "declarativeNetRequest",
+        "downloads.open": "downloads", "downloads.ui": "downloads", "identity.email": "identity",
         "activeTab": nil, "background": nil, "clipboardRead": nil, "clipboardWrite": nil,
         "favicon": nil, "geolocation": nil, "nativeMessaging": nil, "unlimitedStorage": nil,
         "webRequestBlocking": nil, "webRequestAuthProvider": nil,

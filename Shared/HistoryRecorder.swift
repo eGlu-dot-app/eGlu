@@ -123,7 +123,12 @@ final class HistoryRecorder: ObservableObject {
         HistoryCloud.shared.recorded(visit.id)
         then { store in
             try await store.record(visit)
-            await MainActor.run { HistoryCloud.shared.visited(space: space, time: visit.time) }
+            await MainActor.run {
+                HistoryCloud.shared.visited(space: space, time: visit.time)
+                #if os(macOS)
+                ExtensionEvents.shared.visited(visit)
+                #endif
+            }
         }
         prune()
         return visit.id

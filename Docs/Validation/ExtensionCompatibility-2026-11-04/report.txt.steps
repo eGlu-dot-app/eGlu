@@ -1,0 +1,71 @@
+hook
+task
+installing in 2
+installed
+validation 3419CEE7-433C-46B7-94AF-CD193293769E: API fixture started
+validation 606014F0-305B-41AB-B3F5-F772DE12C54D: API fixture started
+validation 3419CEE7-433C-46B7-94AF-CD193293769E: {"name":"isolated bookmark tree starts empty","ok":true}
+validation 606014F0-305B-41AB-B3F5-F772DE12C54D: {"name":"isolated bookmark tree starts empty","ok":true}
+validation 606014F0-305B-41AB-B3F5-F772DE12C54D: {"name":"create bookmark folder","ok":true}
+validation 3419CEE7-433C-46B7-94AF-CD193293769E: {"name":"create bookmark folder","ok":true}
+validation 606014F0-305B-41AB-B3F5-F772DE12C54D: {"name":"create and find bookmark","ok":true}
+validation 3419CEE7-433C-46B7-94AF-CD193293769E: {"name":"create and find bookmark","ok":true}
+validation 606014F0-305B-41AB-B3F5-F772DE12C54D: {"name":"update and move bookmark","ok":true}
+validation 3419CEE7-433C-46B7-94AF-CD193293769E: {"name":"update and move bookmark","ok":true}
+validation 3419CEE7-433C-46B7-94AF-CD193293769E: {"name":"fixed bookmark root cannot be removed","ok":true}
+validation 606014F0-305B-41AB-B3F5-F772DE12C54D: {"name":"fixed bookmark root cannot be removed","ok":true}
+validation 3419CEE7-433C-46B7-94AF-CD193293769E: {"name":"write and search history","ok":true}
+validation 606014F0-305B-41AB-B3F5-F772DE12C54D: {"name":"write and search history","ok":true}
+validation 3419CEE7-433C-46B7-94AF-CD193293769E: {"name":"read history visits","ok":true}
+validation 606014F0-305B-41AB-B3F5-F772DE12C54D: {"name":"read history visits","ok":true}
+validation 3419CEE7-433C-46B7-94AF-CD193293769E: {"name":"top sites uses space history","ok":true}
+validation 606014F0-305B-41AB-B3F5-F772DE12C54D: {"name":"top sites uses space history","ok":true}
+validation 606014F0-305B-41AB-B3F5-F772DE12C54D: {"name":"read notification permission without prompting","ok":true}
+validation 3419CEE7-433C-46B7-94AF-CD193293769E: {"name":"read notification permission without prompting","ok":true}
+validation 606014F0-305B-41AB-B3F5-F772DE12C54D: {"name":"unsupported notification templates reject","ok":true}
+validation 3419CEE7-433C-46B7-94AF-CD193293769E: {"name":"unsupported notification templates reject","ok":true}
+validation 606014F0-305B-41AB-B3F5-F772DE12C54D: {"name":"download actual bytes","ok":true}
+validation 606014F0-305B-41AB-B3F5-F772DE12C54D: {"name":"reject download path traversal","ok":true}
+validation 606014F0-305B-41AB-B3F5-F772DE12C54D: {"name":"remove and erase a synthetic download","ok":true}
+validation 606014F0-305B-41AB-B3F5-F772DE12C54D: {"name":"processor information","ok":true}
+validation 606014F0-305B-41AB-B3F5-F772DE12C54D: {"name":"memory information","ok":true}
+validation 606014F0-305B-41AB-B3F5-F772DE12C54D: {"name":"display information","ok":true}
+validation 606014F0-305B-41AB-B3F5-F772DE12C54D: {"name":"storage information","ok":true}
+validation 606014F0-305B-41AB-B3F5-F772DE12C54D: {"name":"installed fonts","ok":true}
+validation 3419CEE7-433C-46B7-94AF-CD193293769E: {"name":"download actual bytes","ok":true}
+validation 3419CEE7-433C-46B7-94AF-CD193293769E: {"name":"reject download path traversal","ok":true}
+validation 606014F0-305B-41AB-B3F5-F772DE12C54D: {"name":"installed speech voices without playing audio","ok":true}
+validation 3419CEE7-433C-46B7-94AF-CD193293769E: {"name":"remove and erase a synthetic download","ok":true}
+validation 606014F0-305B-41AB-B3F5-F772DE12C54D: {"name":"website data settings","ok":true}
+validation 3419CEE7-433C-46B7-94AF-CD193293769E: {"name":"processor information","ok":true}
+validation 606014F0-305B-41AB-B3F5-F772DE12C54D: {"name":"protected cookies cannot be cleared","ok":true}
+validation 3419CEE7-433C-46B7-94AF-CD193293769E: {"name":"memory information","ok":true}
+validation 3419CEE7-433C-46B7-94AF-CD193293769E: {"name":"display information","ok":true}
+validation 3419CEE7-433C-46B7-94AF-CD193293769E: {"name":"storage information","ok":true}
+validation 606014F0-305B-41AB-B3F5-F772DE12C54D: {"name":"clear synthetic cache","ok":true}
+validation 3419CEE7-433C-46B7-94AF-CD193293769E: {"name":"installed fonts","ok":true}
+validation 606014F0-305B-41AB-B3F5-F772DE12C54D: {"name":"closed tab sessions","ok":true}
+validation 606014F0-305B-41AB-B3F5-F772DE12C54D: {"name":"tab capture explains its limitation","ok":true}
+validation 3419CEE7-433C-46B7-94AF-CD193293769E: {"name":"installed speech voices without playing audio","ok":true}
+validation 3419CEE7-433C-46B7-94AF-CD193293769E: {"name":"website data settings","ok":true}
+validation 3419CEE7-433C-46B7-94AF-CD193293769E: {"name":"protected cookies cannot be cleared","ok":true}
+validation 3419CEE7-433C-46B7-94AF-CD193293769E: {"name":"clear synthetic cache","ok":true}
+validation 3419CEE7-433C-46B7-94AF-CD193293769E: {"name":"closed tab sessions","ok":true}
+validation 3419CEE7-433C-46B7-94AF-CD193293769E: {"name":"tab capture explains its limitation","ok":true}
+validation 606014F0-305B-41AB-B3F5-F772DE12C54D: {"name":"native bookmark and history events","ok":true}
+validation 606014F0-305B-41AB-B3F5-F772DE12C54D: {"name":"native download lifecycle events","ok":true}
+validation 3419CEE7-433C-46B7-94AF-CD193293769E: {"name":"native bookmark and history events","ok":true}
+validation 3419CEE7-433C-46B7-94AF-CD193293769E: {"name":"native download lifecycle events","ok":true}
+validation 606014F0-305B-41AB-B3F5-F772DE12C54D: {"name":"tab updates open extension pages in the same tab","ok":true}
+validation 3419CEE7-433C-46B7-94AF-CD193293769E: {"name":"tab updates open extension pages in the same tab","ok":true}
+validation 606014F0-305B-41AB-B3F5-F772DE12C54D: {"name":"data removal respects excluded website data","ok":true}
+validation 3419CEE7-433C-46B7-94AF-CD193293769E: {"name":"data removal respects excluded website data","ok":true}
+validation 606014F0-305B-41AB-B3F5-F772DE12C54D: {"name":"remove history through browsing data","ok":true}
+validation 3419CEE7-433C-46B7-94AF-CD193293769E: {"name":"remove history through browsing data","ok":true}
+validation 606014F0-305B-41AB-B3F5-F772DE12C54D: {"name":"clear finished download activity through browsing data","ok":true}
+validation 606014F0-305B-41AB-B3F5-F772DE12C54D: API fixture finished: 30/30
+validation 3419CEE7-433C-46B7-94AF-CD193293769E: {"name":"clear finished download activity through browsing data","ok":true}
+validation 3419CEE7-433C-46B7-94AF-CD193293769E: API fixture finished: 30/30
+pages opened
+window 24614
+reporting

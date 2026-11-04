@@ -51,6 +51,7 @@
 		1BC1FE50CB7735DFD611F0C0 /* DesktopPad.swift in Sources */ = {isa = PBXBuildFile; fileRef = 677BEFA22271235E2AB37C24 /* DesktopPad.swift */; };
 		20414776A87DBBEAA9C372D8 /* LaunchState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FC63C0DE72374C50E6D0ACE /* LaunchState.swift */; };
 		20C89BD2A8A1283837FDCA32 /* HandoffSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = F43D22C7DFFF0F0EF06FEF4B /* HandoffSource.swift */; };
+		220BDC42E501EA5BD7513744 /* ExtensionBrowserData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D3AF2C22156F38EEC210109 /* ExtensionBrowserData.swift */; };
 		2215A00501FFCA2F38827F43 /* PageSwipe.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCCF96E8E646BB3BE834BB1 /* PageSwipe.swift */; };
 		233AF883F8C807FD10D40849 /* Menus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DADDB2DEFC948E6DF9498EF /* Menus.swift */; };
 		23B8F6A064849DA9E72EDB6D /* WorkspaceBookmarkImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71AB2073EE8A5C3C04DCE734 /* WorkspaceBookmarkImport.swift */; };
@@ -87,6 +88,7 @@
 		3A001779E80627A6B6C3A6AE /* CommandBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1151121F9FD7091DD5CF7E0 /* CommandBar.swift */; };
 		3A0AD4D555122864570C4870 /* HandingOff.swift in Sources */ = {isa = PBXBuildFile; fileRef = 485265A2B3E02CF1C3205560 /* HandingOff.swift */; };
 		3B55657FEA9926D984C8BF7E /* Updates.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBFB0D78527781DD2B86C793 /* Updates.swift */; };
+		3B5BFE14288C340EB0525FE0 /* ExtensionNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF01CFDD5EC6B1CAD141034D /* ExtensionNotifications.swift */; };
 		3B832A6B8020C365C3D65788 /* BrowserCloseCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08D13001F4C3BB92D71D9B82 /* BrowserCloseCommands.swift */; };
 		3C885CF19F98FB5A9A162027 /* SyncLegacy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DFF333867A252485BC8A3B6 /* SyncLegacy.swift */; };
 		3CD3EA95AE1B414628F5BF21 /* BarBackdrop.swift in Sources */ = {isa = PBXBuildFile; fileRef = 014166C835AEBA7142F5CB18 /* BarBackdrop.swift */; };
@@ -99,6 +101,7 @@
 		3FD06F35CD3DC51B8CECC1F8 /* PictureWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A69D2C69B958B4B92FB35D1B /* PictureWindow.swift */; };
 		3FD5922E6F18BB3CE9BCD170 /* BrowserCloseCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08D13001F4C3BB92D71D9B82 /* BrowserCloseCommands.swift */; };
 		3FEE67330F5C6A5BCA0E3514 /* HistoryCloud.swift in Sources */ = {isa = PBXBuildFile; fileRef = E485660AE45A3F89FFCA8F7B /* HistoryCloud.swift */; };
+		417EAE9E8C11BFEC3C3842C4 /* ExtensionDownloads.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0091AB41C923CCB1D2540B82 /* ExtensionDownloads.swift */; };
 		41E5A1E1B37E4058D2410423 /* PageMind.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3952C9D2525F5A5A03FE520D /* PageMind.swift */; };
 		4219D8D41EB8B2E10F4EE0AD /* Controls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 268FEAD7A20DFD6A75D22FA5 /* Controls.swift */; };
 		42E0F721582F38DD32C48D6A /* TopTabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = A24EC5EDA42F21F933A49A16 /* TopTabs.swift */; };
@@ -115,6 +118,7 @@
 		49821ABEFFC624BEC817E55E /* WritingMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = C667ABE2CB97ACB0FDA06CF1 /* WritingMenu.swift */; };
 		49EABC19EB2FFCBFAEABBDAF /* SyncStored.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA1616264381A958239FB0B1 /* SyncStored.swift */; };
 		4A77FECA220E871CEE845B34 /* HandoffPicture.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3F113E61795114C1E040F4D /* HandoffPicture.swift */; };
+		4AF36BFF64E71D20CBCD2D58 /* ExtensionBrowserData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D3AF2C22156F38EEC210109 /* ExtensionBrowserData.swift */; };
 		4B4B9F59E87F63C9C1EA026F /* WorkspaceRecoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 836D811F61B46FE395B73A95 /* WorkspaceRecoveryView.swift */; };
 		4B6C5029B7BDC7DBDD8293F6 /* LocalServers.swift in Sources */ = {isa = PBXBuildFile; fileRef = D80D6278E40F4CDF398DAEE3 /* LocalServers.swift */; };
 		4B72D0566D681CC8B1FAFE04 /* Globe.icon in Resources */ = {isa = PBXBuildFile; fileRef = 1B70EF23A163A13878E63AC8 /* Globe.icon */; };
@@ -126,6 +130,7 @@
 		4EDE7159A2B2D62FBE1482CE /* eGlu.icon in Resources */ = {isa = PBXBuildFile; fileRef = F74A481F35078203E6778C29 /* eGlu.icon */; };
 		4F3E8B02D0942D47B38DB531 /* ChromeConstraints.swift in Sources */ = {isa = PBXBuildFile; fileRef = D896D70ADD5EAC460A0FC79D /* ChromeConstraints.swift */; };
 		4F5CA22F1494EF83FAAA3ABD /* ExtensionSocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D0F94B94438655C61A3705F /* ExtensionSocket.swift */; };
+		4FA30A77EA8A4EA509AD56FF /* ExtensionEvents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A51F718082EED9C66166EBC /* ExtensionEvents.swift */; };
 		506F9ADE39F76818FD8D8359 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72B8D3EF80D9D91D89771548 /* HistoryView.swift */; };
 		520EB4E9694D3C4C3700C507 /* MeasurePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 295F884323DB72655D014BD3 /* MeasurePanel.swift */; };
 		52F3C417852BBDC0255229E6 /* DeveloperBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E20BDB914E83BD7060BB461 /* DeveloperBar.swift */; };
@@ -199,6 +204,7 @@
 		84F787F441E7CAB113BEC0AB /* Intelligence.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4996B7C50A6BD2F6DF4BC27 /* Intelligence.swift */; };
 		850F19731244A4AB96CEDBEC /* HandoffDocumentSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7928413F1DE4B3B456E6F1BC /* HandoffDocumentSource.swift */; };
 		86458E19D2F96D9BA01EAB54 /* ExtensionBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A6A5A6DB770BCC4BE191C79 /* ExtensionBar.swift */; };
+		87833989147158F99D20D944 /* ExtensionNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF01CFDD5EC6B1CAD141034D /* ExtensionNotifications.swift */; };
 		882FAEC36F368D20E4EC4426 /* WindowCommandTitles.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4C34059071E098F2FC93365 /* WindowCommandTitles.swift */; };
 		895ADB7BDE966A8088B9C4BE /* Menus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DADDB2DEFC948E6DF9498EF /* Menus.swift */; };
 		8AA086469EF62A7BFFA7EE52 /* ExtensionBlankPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAFD2CD58CB77403F5C8C6E8 /* ExtensionBlankPage.swift */; };
@@ -256,7 +262,9 @@
 		BB6AFAD2DC5112AEFCD02BFD /* WorkspaceSaveStatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D8EE6F279FA3A9B803774D0 /* WorkspaceSaveStatusView.swift */; };
 		BB73762F867D0E895011DD6B /* eGlu.icon in Resources */ = {isa = PBXBuildFile; fileRef = F74A481F35078203E6778C29 /* eGlu.icon */; };
 		BBAE849A08CB9855B5871A55 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = AF4E3E40C591C44EA5F55F41 /* Sparkle */; };
+		BBB663799BEB7FCA06CE268E /* ExtensionSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 456605D70A7A93119DB17AAC /* ExtensionSystem.swift */; };
 		BBC0DC9F732B4F162184C6B6 /* SessionPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDB808F0F91E544C0928D496 /* SessionPreferences.swift */; };
+		BC5324817A476AD7209518D9 /* ExtensionEvents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A51F718082EED9C66166EBC /* ExtensionEvents.swift */; };
 		BDC9FCD86C9FC50F74E77B97 /* ExtensionTrial.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB3E8D291B631D986F3762D0 /* ExtensionTrial.swift */; };
 		BE574B23235458C0AAE99FEC /* StoreButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F57EF6B25A3B579A9BB7CC9 /* StoreButton.swift */; };
 		BE5F42954D0BA3650D4BA64C /* ExtensionSidePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DD32861463C3576F820119D /* ExtensionSidePanel.swift */; };
@@ -297,11 +305,13 @@
 		D7470F2CB3E70BA949600BF1 /* ExtensionUpdates.swift in Sources */ = {isa = PBXBuildFile; fileRef = 210589C96919CFE141110E25 /* ExtensionUpdates.swift */; };
 		D77AA5EE26B9C721F31C2140 /* WritingSpelling.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F233DEE77A5F9BCAD75B794 /* WritingSpelling.swift */; };
 		D9253AAD4420218D0DD5E1B1 /* Intelligence.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4996B7C50A6BD2F6DF4BC27 /* Intelligence.swift */; };
+		D99018C8CE0EBEBD0336604B /* ExtensionDownloads.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0091AB41C923CCB1D2540B82 /* ExtensionDownloads.swift */; };
 		D9A0CFCCEB856AD57BF4AEB0 /* Window.swift in Sources */ = {isa = PBXBuildFile; fileRef = 879CF644BDF286752225F650 /* Window.swift */; };
 		D9CC7E48CB41D156502608D8 /* WindowCommandTitles.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4C34059071E098F2FC93365 /* WindowCommandTitles.swift */; };
 		DA72B893FF0D403089B7E4AC /* HistoryRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA8EF70A3F39EB2FDFED8BAD /* HistoryRecorder.swift */; };
 		DA74924D4E0115B4BD4B088C /* WritingLists.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60E0E184FDC4719DE7A49AAF /* WritingLists.swift */; };
 		DAF70D4E61B9013063FF520C /* TabRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0808B6070C3D95EC5BF66566 /* TabRow.swift */; };
+		DC34101E5356BFF688EFC2D9 /* ExtensionSpeech.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B6B76CC2AEE2A13556560B4 /* ExtensionSpeech.swift */; };
 		DCA1726AACC1B5BBAE7D86C1 /* Bars.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AAA52F03DA564A02BC99D3A /* Bars.swift */; };
 		DDAFB0026D44F8248F1679B0 /* WorkspacePersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = B65AB179CB6A243492A55644 /* WorkspacePersistence.swift */; };
 		DDFB2FDFB54475CB1999BB87 /* ExtensionPopup.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDDEBCA9718C0EBE81685E79 /* ExtensionPopup.swift */; };
@@ -339,6 +349,7 @@
 		EF08E14F4E44D3E662748728 /* WritingLists.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60E0E184FDC4719DE7A49AAF /* WritingLists.swift */; };
 		F07F92265E14DCA9668A346E /* SyncLegacy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DFF333867A252485BC8A3B6 /* SyncLegacy.swift */; };
 		F0C3DB70AC4C1DC1F1E34B29 /* WritingLists.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60E0E184FDC4719DE7A49AAF /* WritingLists.swift */; };
+		F1BC604AB335E940F6555427 /* ExtensionSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 456605D70A7A93119DB17AAC /* ExtensionSystem.swift */; };
 		F31659A26DBDF0AAFB214C00 /* ExtensionBlankPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAFD2CD58CB77403F5C8C6E8 /* ExtensionBlankPage.swift */; };
 		F4D93391592B1F2675AA1B41 /* SiteIcons.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA58432FCB7289B0C712A1F6 /* SiteIcons.swift */; };
 		F6520ECAAC5830F36D4235F9 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 2A8F5E88372432895BD856FC /* Localizable.xcstrings */; };
@@ -359,6 +370,7 @@
 		FBFED4E4695DF4722A494F35 /* WritingHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F66F0340300C67A64807FA9 /* WritingHandler.swift */; };
 		FCF273A94676E2B7095C94BC /* Pages.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8CF2A3A921F7506994D255C /* Pages.swift */; };
 		FD6F507EDD98485F1D2E829E /* ExtensionCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AA47374F100620B5D221A40 /* ExtensionCapture.swift */; };
+		FE4E665311156CD7CCB394EC /* ExtensionSpeech.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B6B76CC2AEE2A13556560B4 /* ExtensionSpeech.swift */; };
 		FEE1DA390CD5FB77258B1162 /* EgluApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 347EDC395F093B60F66EE23C /* EgluApp.swift */; };
 		FEE91FB5E101622B9EAA69D9 /* ContentBlocker.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6D8D2E159368BB0EB9BE7F1 /* ContentBlocker.swift */; };
 		FEFB7377FDD301F37F9B0A1E /* ExtensionSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D3F65E6A920CEB086F43C4C /* ExtensionSettings.swift */; };
@@ -408,6 +420,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		0091AB41C923CCB1D2540B82 /* ExtensionDownloads.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionDownloads.swift; sourceTree = "<group>"; };
 		014166C835AEBA7142F5CB18 /* BarBackdrop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BarBackdrop.swift; sourceTree = "<group>"; };
 		025507F365079C670C10BE41 /* Designer.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = Designer.icon; sourceTree = "<group>"; };
 		04FA69EDE3EEE4B6AAB23745 /* Page.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Page.swift; sourceTree = "<group>"; };
@@ -460,6 +473,7 @@
 		443DA6326D16B4F266B7B208 /* Underlines.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Underlines.swift; sourceTree = "<group>"; };
 		4518B3683CE6F8557B129178 /* Vista.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = Vista.icon; sourceTree = "<group>"; };
 		4534809B22FD14712F83DF57 /* MeasureHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeasureHandler.swift; sourceTree = "<group>"; };
+		456605D70A7A93119DB17AAC /* ExtensionSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionSystem.swift; sourceTree = "<group>"; };
 		4603EDA1129218A8E10248FF /* Design.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Design.swift; sourceTree = "<group>"; };
 		46D532F1CA9E9FE8DAAC84A8 /* TabSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabSheet.swift; sourceTree = "<group>"; };
 		4839EEAB8E817B4166E6DDDE /* WritingScript.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WritingScript.swift; sourceTree = "<group>"; };
@@ -489,6 +503,7 @@
 		67D1622D20840F5386645C79 /* SVGRaster.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SVGRaster.swift; sourceTree = "<group>"; };
 		693A65403D1C84623B614098 /* Punk.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = Punk.icon; sourceTree = "<group>"; };
 		6A93321341B1F29FAC9F67B5 /* DockTile.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = DockTile.xcconfig; sourceTree = "<group>"; };
+		6D3AF2C22156F38EEC210109 /* ExtensionBrowserData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionBrowserData.swift; sourceTree = "<group>"; };
 		6DE1911440614E5B875748F1 /* SyncStatusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncStatusView.swift; sourceTree = "<group>"; };
 		6FB23F5456C5C95CD3962648 /* ExtensionTable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionTable.swift; sourceTree = "<group>"; };
 		70C038D7C9366DD4C79FBAC9 /* WritingHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WritingHandler.swift; sourceTree = "<group>"; };
@@ -499,6 +514,7 @@
 		78C9E868A57B67626745DAEB /* Deflate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Deflate.swift; sourceTree = "<group>"; };
 		7928413F1DE4B3B456E6F1BC /* HandoffDocumentSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandoffDocumentSource.swift; sourceTree = "<group>"; };
 		7ABE80FB9DB8DADE9C982526 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		7B6B76CC2AEE2A13556560B4 /* ExtensionSpeech.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionSpeech.swift; sourceTree = "<group>"; };
 		7BB47E33CC439730A294794A /* BookmarkImportStatusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookmarkImportStatusView.swift; sourceTree = "<group>"; };
 		7BC366E0F8E9F2632480E342 /* ExtensionNative.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionNative.swift; sourceTree = "<group>"; };
 		7D3F65E6A920CEB086F43C4C /* ExtensionSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionSettings.swift; sourceTree = "<group>"; };
@@ -522,6 +538,7 @@
 		905513BDE88D793B2A06F935 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		96454C4458CB7CB240807E73 /* Peek.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Peek.swift; sourceTree = "<group>"; };
 		979AD767A1E50195F11316AD /* PinnedLook.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinnedLook.swift; sourceTree = "<group>"; };
+		9A51F718082EED9C66166EBC /* ExtensionEvents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionEvents.swift; sourceTree = "<group>"; };
 		9A6A5A6DB770BCC4BE191C79 /* ExtensionBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionBar.swift; sourceTree = "<group>"; };
 		9AAA52F03DA564A02BC99D3A /* Bars.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Bars.swift; sourceTree = "<group>"; };
 		9AB69345C5CC38C73C7D4690 /* WritingAsked.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WritingAsked.swift; sourceTree = "<group>"; };
@@ -553,6 +570,7 @@
 		BC1AB4644B617A408C5773D1 /* PageActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageActions.swift; sourceTree = "<group>"; };
 		BDB2462136DEDBFA50899FAF /* Diagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Diagnostics.swift; sourceTree = "<group>"; };
 		BDFE00C3523F162439D9FECE /* Stores.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stores.swift; sourceTree = "<group>"; };
+		BF01CFDD5EC6B1CAD141034D /* ExtensionNotifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionNotifications.swift; sourceTree = "<group>"; };
 		C3CFF5DE706D5A2E39CB3728 /* ExtensionLanguage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionLanguage.swift; sourceTree = "<group>"; };
 		C3F113E61795114C1E040F4D /* HandoffPicture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandoffPicture.swift; sourceTree = "<group>"; };
 		C616BF3DD906A7B37D7BD28D /* WritingChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WritingChecker.swift; sourceTree = "<group>"; };
@@ -882,10 +900,14 @@
 				350EB51F36EDA73FD343F885 /* ExtensionAuth.swift */,
 				9A6A5A6DB770BCC4BE191C79 /* ExtensionBar.swift */,
 				DAFD2CD58CB77403F5C8C6E8 /* ExtensionBlankPage.swift */,
+				6D3AF2C22156F38EEC210109 /* ExtensionBrowserData.swift */,
 				1AA47374F100620B5D221A40 /* ExtensionCapture.swift */,
+				0091AB41C923CCB1D2540B82 /* ExtensionDownloads.swift */,
+				9A51F718082EED9C66166EBC /* ExtensionEvents.swift */,
 				48C063273C199A209263756F /* ExtensionKeys.swift */,
 				C3CFF5DE706D5A2E39CB3728 /* ExtensionLanguage.swift */,
 				7BC366E0F8E9F2632480E342 /* ExtensionNative.swift */,
+				BF01CFDD5EC6B1CAD141034D /* ExtensionNotifications.swift */,
 				62BA7F974F541EAAABE62B2D /* ExtensionOffscreen.swift */,
 				DDDEBCA9718C0EBE81685E79 /* ExtensionPopup.swift */,
 				0B1F2F878F154521F64EF667 /* ExtensionPopupWindow.swift */,
@@ -894,6 +916,8 @@
 				7D3F65E6A920CEB086F43C4C /* ExtensionSettings.swift */,
 				7DD32861463C3576F820119D /* ExtensionSidePanel.swift */,
 				0D0F94B94438655C61A3705F /* ExtensionSocket.swift */,
+				7B6B76CC2AEE2A13556560B4 /* ExtensionSpeech.swift */,
+				456605D70A7A93119DB17AAC /* ExtensionSystem.swift */,
 				6FB23F5456C5C95CD3962648 /* ExtensionTable.swift */,
 				CDEB5BABE9D909C725D3A5E1 /* ExtensionTabs.swift */,
 				EB3E8D291B631D986F3762D0 /* ExtensionTrial.swift */,
@@ -1183,10 +1207,14 @@
 				193210B5B371866DFC7C6488 /* ExtensionAuth.swift in Sources */,
 				6F4EB7B1A30093D290664B19 /* ExtensionBar.swift in Sources */,
 				F31659A26DBDF0AAFB214C00 /* ExtensionBlankPage.swift in Sources */,
+				4AF36BFF64E71D20CBCD2D58 /* ExtensionBrowserData.swift in Sources */,
 				FD6F507EDD98485F1D2E829E /* ExtensionCapture.swift in Sources */,
+				417EAE9E8C11BFEC3C3842C4 /* ExtensionDownloads.swift in Sources */,
+				4FA30A77EA8A4EA509AD56FF /* ExtensionEvents.swift in Sources */,
 				8BE8BA136696B219B6BF9468 /* ExtensionKeys.swift in Sources */,
 				6FD06ECCB44883476E8FDAE1 /* ExtensionLanguage.swift in Sources */,
 				EC457814C3937BF7C761751E /* ExtensionNative.swift in Sources */,
+				3B5BFE14288C340EB0525FE0 /* ExtensionNotifications.swift in Sources */,
 				489B8BB3FC9FEB453F73DC58 /* ExtensionOffscreen.swift in Sources */,
 				DDFB2FDFB54475CB1999BB87 /* ExtensionPopup.swift in Sources */,
 				F68C66964CE0BBA852DFDA61 /* ExtensionPopupWindow.swift in Sources */,
@@ -1194,6 +1222,8 @@
 				FEFB7377FDD301F37F9B0A1E /* ExtensionSettings.swift in Sources */,
 				46097914C22DFA959340B934 /* ExtensionSidePanel.swift in Sources */,
 				4F5CA22F1494EF83FAAA3ABD /* ExtensionSocket.swift in Sources */,
+				FE4E665311156CD7CCB394EC /* ExtensionSpeech.swift in Sources */,
+				BBB663799BEB7FCA06CE268E /* ExtensionSystem.swift in Sources */,
 				14362B98F2235BB90EA39E63 /* ExtensionTable.swift in Sources */,
 				6A52532E1DFF8E7A3E38B27B /* ExtensionTabs.swift in Sources */,
 				7C76BF76399C57CCED8878F2 /* ExtensionTrial.swift in Sources */,
@@ -1310,10 +1340,14 @@
 				E0A5C6D48AD5E040C89E07DA /* ExtensionAuth.swift in Sources */,
 				86458E19D2F96D9BA01EAB54 /* ExtensionBar.swift in Sources */,
 				8AA086469EF62A7BFFA7EE52 /* ExtensionBlankPage.swift in Sources */,
+				220BDC42E501EA5BD7513744 /* ExtensionBrowserData.swift in Sources */,
 				D065467D032B1B11F08FEF9D /* ExtensionCapture.swift in Sources */,
+				D99018C8CE0EBEBD0336604B /* ExtensionDownloads.swift in Sources */,
+				BC5324817A476AD7209518D9 /* ExtensionEvents.swift in Sources */,
 				3D909A333A7014139B3AEDF3 /* ExtensionKeys.swift in Sources */,
 				0C8268EC10D2727F8976DB3B /* ExtensionLanguage.swift in Sources */,
 				30B12C20254A6867B2BC9865 /* ExtensionNative.swift in Sources */,
+				87833989147158F99D20D944 /* ExtensionNotifications.swift in Sources */,
 				16C9D557EA9DB50A702F4EB6 /* ExtensionOffscreen.swift in Sources */,
 				57EA9750A7F0099BFB1FCB04 /* ExtensionPopup.swift in Sources */,
 				B82DED3F4620A724C83AA828 /* ExtensionPopupWindow.swift in Sources */,
@@ -1321,6 +1355,8 @@
 				A34AD719E7A62C9D7E481850 /* ExtensionSettings.swift in Sources */,
 				BE5F42954D0BA3650D4BA64C /* ExtensionSidePanel.swift in Sources */,
 				EB03068C29FC9068494AF98C /* ExtensionSocket.swift in Sources */,
+				DC34101E5356BFF688EFC2D9 /* ExtensionSpeech.swift in Sources */,
+				F1BC604AB335E940F6555427 /* ExtensionSystem.swift in Sources */,
 				F857A9CDD87673F1D351F26D /* ExtensionTable.swift in Sources */,
 				6C41972B0A8D699A299C4486 /* ExtensionTabs.swift in Sources */,
 				BDC9FCD86C9FC50F74E77B97 /* ExtensionTrial.swift in Sources */,

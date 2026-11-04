@@ -46,12 +46,20 @@ extension Extensions {
         let id = context.uniqueIdentifier
         let first = args.first
         switch api {
+        case "unsupported":
+            guard let path = first as? String, ExtensionError.isAPIPath(path) else { return nil }
+            update(id, in: space) { $0.problems.insert(.init(kind: .missing, api: path)) }
+            return nil
         case "report":
             // An error nobody caught: [kind, its words, file, line]. Only
             // the API it names is kept, as for WebKit's own errors.
             let problem = args.count > 1 ? (args[1] as? String).flatMap { ExtensionError.problem(in: $0, missing: lacking[id] ?? []) } : nil
             #if DEBUG
-            Self.note("shim report: \(problem?.api ?? "no API named")" + Self.words(args.count > 1 ? args[1] as? String : nil))
+            if Session.dataRootOverride != nil, first as? String == "validation" {
+                Self.note("validation \(space.uuidString)" + Self.words(args.count > 1 ? args[1] as? String : nil))
+            } else {
+                Self.note("shim report: \(problem?.api ?? "no API named")" + Self.words(args.count > 1 ? args[1] as? String : nil))
+            }
             #endif
             if let problem {
                 update(id, in: space) { $0.problems.insert(problem) }
@@ -329,6 +337,14 @@ extension Extensions {
             return try await ExtensionAuth.run(url, extension: id, context: context, in: space).absoluteString
 
         default:
+            let namespace = String(api.prefix { $0 != "." })
+            if ["bookmarks", "history", "topSites", "sessions", "search", "browsingData"].contains(namespace) {
+                return try await browserData(api, args, context: context, in: space)
+            }
+            if namespace == "downloads" { return try await ExtensionDownloads.shared.answer(api, args, context: context, in: space) }
+            if namespace == "notifications" { return try await ExtensionNotifications.shared.answer(api, args, context: context, in: space) }
+            if namespace == "system" || namespace == "fontSettings" { return try systemAPI(api, args, context: context) }
+            if namespace == "tts" { return try ExtensionSpeech.answer(api, args, context: context, in: space) }
             throw Unanswered(why: "eGlu doesn't answer \(api).")
         }
     }
@@ -640,5 +656,34 @@ extension Extensions {
         let known = ["com.8bit.bitwarden": "Bitwarden", "com.1password": "1Password", "com.apple.passwordmanager": String(localized: "iCloud Passwords"),
                      "com.dashlane": "Dashlane", "com.lastpass": "LastPass", "com.keepassxc": "KeePassXC", "org.keepassxc": "KeePassXC"]
         return known.first { host.hasPrefix($0.key) }?.value ?? host
+    }
+
+    func nativeConnection(_ host: String, error: Error?, context: WKWebExtensionContext, in space: UUID) {
+        let id = context.uniqueIdentifier
+        guard contexts[space]?[id] === context else { return }
+        update(id, in: space) { evidence in
+            guard let error else {
+                evidence.unreachableApp = nil
+                evidence.nativeAppHelp = nil
+                evidence.problems = evidence.problems.filter { !["runtime.connectNative", "runtime.sendNativeMessage"].contains($0.api) }
+                return
+            }
+            evidence.unreachableApp = Self.appName(ofHost: host)
+            switch (error as? ExtensionNative.Refused)?.reason {
+            case .missingApp:
+                evidence.nativeAppHelp = String(localized: "Its registered desktop app helper is missing. Open or reinstall the desktop app to reconnect.")
+            case .missingHost:
+                evidence.nativeAppHelp = String(localized: "Open or reinstall its desktop app so it can register its browser connection.")
+            case .forbidden:
+                evidence.nativeAppHelp = String(localized: "The desktop app does not allow this extension to connect. Check its browser integration settings.")
+            default:
+                evidence.nativeAppHelp = host.hasPrefix("com.1password")
+                    ? String(localized: "Open 1Password and add eGlu in Settings > Browser > Add Browser. You can also turn off desktop app integration in the extension and sign in separately.")
+                    : String(localized: "Open its desktop app and allow this browser in its browser integration settings.")
+            }
+            if host.hasPrefix("com.1password"), [.missingApp, .missingHost].contains((error as? ExtensionNative.Refused)?.reason) {
+                evidence.nativeAppHelp = (evidence.nativeAppHelp ?? "") + " " + String(localized: "You can also turn off desktop app integration in the extension and sign in separately.")
+            }
+        }
     }
 }

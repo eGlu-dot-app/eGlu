@@ -1251,7 +1251,10 @@
   };
   // Something eGlu doesn't do, refused the way Chrome refuses what it can't:
   // a rejection, or lastError for a callback; never a yes that did nothing.
-  const refuse = (what) => answered(() => { throw new Error(what + " isn't available in eGlu"); });
+  const refuse = (what, reason = "This browser cannot perform this extension action.") => answered(() => {
+    try { native("unsupported", [what]).catch(() => {}); } catch (e) {}
+    throw new Error(reason);
+  });
 
   // Members Chrome has on namespaces WebKit has too, that WebKit leaves
   // out. Plenty are read at the top of a worker, an event to listen to or
@@ -2018,6 +2021,124 @@
     put(chrome, name, api);
     if (root.browser && root.browser !== chrome && !root.browser[name]) put(root.browser, name, api);
   };
+  // Native events use an extension-only port. Opening it lazily avoids
+  // keeping workers alive for APIs an extension never listens to.
+  const nativeEvents = new Map();
+  let eventsPort = null, eventReconnects = 0;
+  const sendEventSubscriptions = () => {
+    try { eventsPort?.postMessage({ __egluEvents: { background, events: [...nativeEvents].filter(([, e]) => e.hasListeners()).map(([name]) => name) } }); } catch (e) {}
+  };
+  const listenToNativeEvents = () => {
+    if (eventsPort || typeof runtime.connectNative !== "function") return;
+    try {
+      const port = runtime.connectNative("eglu.events");
+      eventsPort = port;
+      port.onMessage.addListener((message) => {
+        if (!message || typeof message.event !== "string" || !Array.isArray(message.args)) return;
+        const target = nativeEvents.get(message.event);
+        if (!target) return;
+        for (const f of [...target.listeners]) {
+          try { f(...message.args); } catch (error) { setTimeout(() => { throw error; }); }
+        }
+      });
+      port.onDisconnect.addListener(() => {
+        if (eventsPort !== port) return;
+        eventsPort = null;
+        if (++eventReconnects <= 3 && [...nativeEvents.values()].some((e) => e.hasListeners())) setTimeout(listenToNativeEvents, 1000);
+      });
+      sendEventSubscriptions();
+    } catch (error) { eventsPort = null; }
+  };
+  const nativeEvent = (path) => {
+    if (nativeEvents.has(path)) return nativeEvents.get(path);
+    const target = event(), addListener = target.addListener, removeListener = target.removeListener;
+    target.addListener = (f) => { addListener(f); if (target.hasListeners()) { if (eventsPort) sendEventSubscriptions(); else listenToNativeEvents(); } };
+    target.removeListener = (f) => { removeListener(f); sendEventSubscriptions(); };
+    nativeEvents.set(path, target);
+    return target;
+  };
+  const bridge = (name, methods, events = [], extra = {}) => {
+    const members = { ...extra };
+    for (const method of methods) members[method] = call(name + "." + method);
+    for (const nameOfEvent of events) members[nameOfEvent] = nativeEvent(name + "." + nameOfEvent);
+    add(name, members);
+    if (chrome[name]) fill(name, members);
+  };
+  bridge("bookmarks", ["get", "getTree", "getChildren", "getSubTree", "search", "create", "update", "move", "remove", "removeTree"],
+    ["onCreated", "onChanged", "onMoved", "onRemoved"]);
+  bridge("history", ["search", "getVisits", "addUrl", "deleteUrl", "deleteRange", "deleteAll"], ["onVisited", "onVisitRemoved"]);
+  bridge("topSites", ["get"]);
+  bridge("sessions", ["getRecentlyClosed", "restore"], ["onChanged"], { MAX_SESSION_RESULTS: 25 });
+  bridge("search", ["query"], [], { Disposition: { CURRENT_TAB: "CURRENT_TAB", NEW_TAB: "NEW_TAB", NEW_WINDOW: "NEW_WINDOW" } });
+  bridge("downloads", ["download", "search", "cancel", "resume", "erase", "show", "showDefaultFolder", "removeFile", "getFileIcon"],
+    ["onCreated", "onChanged", "onErased"], { State: enumOf("in_progress", "interrupted", "complete"),
+      InterruptReason: enumOf("USER_CANCELED", "SERVER_FAILED"), FilenameConflictAction: enumOf("uniquify", "overwrite", "prompt") });
+  bridge("browsingData", ["settings", "remove", "removeCache", "removeLocalStorage", "removeIndexedDB", "removeServiceWorkers", "removeHistory", "removeDownloads"]);
+  bridge("fontSettings", ["getFontList"]);
+  if (["system.cpu", "system.memory", "system.display", "system.storage"].some(asks)) {
+    if (!chrome.system) {
+      put(chrome, "system", {});
+      if (root.browser && root.browser !== chrome && !root.browser.system) put(root.browser, "system", chrome.system);
+    }
+    for (const name of ["cpu", "memory", "display", "storage"]) {
+      if (asks("system." + name) && !chrome.system[name]) put(chrome.system, name, { getInfo: call("system." + name + ".getInfo") });
+    }
+  }
+  if (asks("tts") && !chrome.tts) {
+    const callbacks = new Map(), spoken = nativeEvent("tts.onEvent");
+    const supported = ["start", "end", "interrupted", "word", "pause", "resume"];
+    let sequence = 0;
+    let speechListening = false;
+    const speechEvent = (token, data) => {
+      const entry = callbacks.get(token);
+      if (!entry) return;
+      if (["end", "interrupted", "error"].includes(data.type)) callbacks.delete(token);
+      if (!entry.types || entry.types.includes(data.type)) entry.f(data);
+    };
+    add("tts", {
+      getVoices: call("tts.getVoices"), isSpeaking: call("tts.isSpeaking"), stop: call("tts.stop"), pause: call("tts.pause"), resume: call("tts.resume"),
+      speak: answered(async (text, options = {}) => {
+        if ((options.requiredEventTypes || []).some((type) => !supported.includes(type))) throw new Error("This browser cannot provide the requested speech events.");
+        const copy = { ...options }, token = `${me}:${++sequence}`;
+        delete copy.onEvent;
+        if (typeof options.onEvent === "function") {
+          if (!speechListening) { speechListening = true; spoken.addListener(speechEvent); }
+          copy.__egluSpeech = token; callbacks.set(token, { f: options.onEvent, types: options.desiredEventTypes });
+        }
+        try { return await native("tts.speak", [text, copy]); } catch (error) { callbacks.delete(token); throw error; }
+      }),
+      EventType: enumOf(...supported, "error"),
+    });
+  }
+
+  // These depend on Chromium services, ChromeOS, or interfaces this browser
+  // does not expose. They reject instead of claiming that an action worked.
+  const unavailable = (name, methods, reason, events = []) => {
+    const members = Object.fromEntries(methods.map((method) => [method, refuse(name + "." + method, reason)]));
+    for (const nameOfEvent of events) members[nameOfEvent] = event();
+    add(name, members);
+    if (chrome[name]) fill(name, members);
+  };
+  unavailable("tabCapture", ["capture", "getMediaStreamId", "getCapturedTabs"], "This browser cannot record an individual tab. Use screen sharing when the extension offers it.", ["onStatusChanged"]);
+  unavailable("pageCapture", ["saveAsMHTML"], "This browser cannot save pages in Chrome's MHTML format.");
+  unavailable("debugger", ["attach", "detach", "sendCommand", "getTargets"], "This browser cannot expose Chrome's debugging protocol to extensions.", ["onEvent", "onDetach"]);
+  unavailable("gcm", ["register", "unregister", "send"], "This browser cannot use Google's extension push messaging service.", ["onMessage", "onMessagesDeleted", "onSendError"]);
+  unavailable("instanceID", ["getID", "getCreationTime", "getToken", "deleteToken", "deleteID"], "This browser cannot register extensions with Google's messaging service.", ["onTokenRefresh"]);
+  unavailable("readingList", ["addEntry", "removeEntry", "updateEntry", "query"], "This browser does not have a reading list for extensions to manage.", ["onEntryAdded", "onEntryRemoved", "onEntryUpdated"]);
+  if (chrome.downloads) fill("downloads", {
+    pause: refuse("downloads.pause", "This browser cannot pause downloads. Cancel the download and resume it if the server supports it."),
+    open: refuse("downloads.open", "This browser cannot open downloaded files automatically. Open the file from Downloads or Finder."),
+    setUiOptions: refuse("downloads.setUiOptions", "Extensions cannot hide this browser's download controls."),
+    setShelfEnabled: refuse("downloads.setShelfEnabled", "Extensions cannot hide this browser's download controls."),
+    acceptDanger: refuse("downloads.acceptDanger", "Extensions cannot bypass this browser's download protections."),
+    onDeterminingFilename: event(),
+  });
+  fill("bookmarks", { getRecent: refuse("bookmarks.getRecent", "This browser does not store bookmark creation dates. Search bookmarks or read the bookmark tree instead."),
+    onChildrenReordered: event(), onImportBegan: event(), onImportEnded: event() });
+  fill("sessions", { getDevices: refuse("sessions.getDevices", "Extensions cannot read tabs from other devices. Recently closed tabs in this space are available.") });
+  fill("management", { getAll: refuse("management.getAll", "Extensions cannot manage other installed extensions."),
+    setEnabled: refuse("management.setEnabled", "Extensions cannot turn other extensions on or off."),
+    uninstall: refuse("management.uninstall", "Extensions cannot remove other extensions.") });
   // Chrome's own settings. Password managers read them as they start, and
   // ask the browser to stop offering to save and fill passwords: iCloud
   // Passwords' worker and popup stopped at chrome.privacy. eGlu for Mac
@@ -2047,20 +2168,24 @@
       IPHandlingPolicy: enumOf("default", "default_public_and_private_interfaces", "default_public_interface_only", "disable_non_proxied_udp"),
     });
   }
-  // WebKit keeps the notifications permission and gives no namespace
-  // (27.0.1); 1Password's worker listens to its events as it starts, and
-  // stopped there. Nothing is shown yet. A notification asked for is given
-  // its id, so a flow that waits on one goes on, and the permission level
-  // reads denied, which an extension that checks first finds.
+  // Notifications are delivered by macOS. Permission is requested only when
+  // an extension actually creates one; denial returns an error.
   {
     let made = 0;
-    add("notifications", {
-      create: answered((id) => typeof id === "string" && id ? id : `eglu-${++made}`),
-      update: answered(() => false), clear: answered(() => false), getAll: answered(() => ({})),
-      getPermissionLevel: answered(() => "denied"),
-      onClicked: event(), onButtonClicked: event(), onClosed: event(), onPermissionLevelChanged: event(), onShowSettings: event(),
+    const members = {
+      create: answered((id, options) => {
+        if (id && typeof id === "object") { options = id; id = ""; }
+        if (typeof id !== "string") throw new TypeError("A notification id must be a string");
+        return native("notifications.create", [id || `${me}:${++made}`, options]);
+      }),
+      update: call("notifications.update"), clear: call("notifications.clear"), getAll: call("notifications.getAll"),
+      getPermissionLevel: call("notifications.getPermissionLevel"),
+      onClicked: nativeEvent("notifications.onClicked"), onButtonClicked: nativeEvent("notifications.onButtonClicked"), onClosed: nativeEvent("notifications.onClosed"),
+      onPermissionLevelChanged: event(), onShowSettings: event(),
       TemplateType: enumOf("basic", "image", "list", "progress"), PermissionLevel: enumOf("granted", "denied"),
-    });
+    };
+    add("notifications", members);
+    if (chrome.notifications) fill("notifications", members);
   }
 
   // chrome.idle and chrome.power, the Mac's own (ExtensionAnswers), which
