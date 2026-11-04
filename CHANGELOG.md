@@ -4,6 +4,9 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+- On the Mac, the command bar's chosen row in a yellow space is in dark ink, as the space's other buttons are; its words and symbols were white on yellow.
+- On iPhone and iPad, the welcome's Writing question is in a grey dark enough to read on white, and Open Settings on its last page answers a touch as tall as its other buttons do. With the Writing question already answered, its dots, and VoiceOver, count four steps, not five.
+- On iPhone and iPad, a new tab's space name grows with the text size you set, as the bookmarks and history under it do, and wraps at the largest sizes instead of being cut short.
 - On iPhone and iPad, a header or footer the page fades with opacity no longer sets the bars' colour as if it were solid: there the bars take a picture once the page is still, so they match what shows.
 - On the iPhone Duo, a tab split with the one on screen no longer keeps making room for the strip once the Duo opens and shows both side by side.
 - On the iPhone Duo closed, a paragraph inside a block of text that wraps beside the strip no longer ends a strip's width short of it twice; a card the page keeps to a width of its own is no longer widened to clear the strip; and once the page has been touched, a header's buttons no longer push the box beside them sideways.

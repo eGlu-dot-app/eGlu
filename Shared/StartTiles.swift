@@ -40,7 +40,8 @@ nonisolated enum StartMetrics {
 /// The space's symbol on its colour, and its name under it.
 struct SpaceMark: View {
     let space: Space
-    /// 24 points at the default text size, growing with the reader's as a title does.
+    /// Scaled, so at a large text size the page's own name is never smaller
+    /// than the bookmarks and history headings under it.
     @ScaledMetric(relativeTo: .title) private var nameSize: CGFloat = 24
     @Environment(\.dynamicTypeSize) private var typeSize
 
