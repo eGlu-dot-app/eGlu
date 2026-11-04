@@ -4,6 +4,7 @@ import IOKit.pwr_mgt
 import PadCore
 import UniformTypeIdentifiers
 import WebKit
+import WebKitSupport
 
 /// Chrome extensions, run by WebKit's own extension engine
 /// (`WKWebExtension`), the one Safari uses (Docs/ExtensionsDesign.md).
@@ -377,7 +378,7 @@ final class Extensions: NSObject, ObservableObject {
             guard was != now || forced else { continue }
             kept[space.uuidString] = now
             guard forced || was.map({ ExtensionWorkerRecovery.stale(was: $0, now: now) }) == true else { continue }
-            await Stores.store(for: space).removeData(ofTypes: [WKWebsiteDataTypeServiceWorkerRegistrations], modifiedSince: .distantPast)
+            await WebKitStores.store(for: space).removeData(ofTypes: [WKWebsiteDataTypeServiceWorkerRegistrations], modifiedSince: .distantPast)
             // One found incompatible only because its worker wouldn't start
             // gets one more go, now its stale copy is gone: once a version.
             for item in on where failed[item.id] == checkStamp(item.version) {
@@ -499,7 +500,7 @@ final class Extensions: NSObject, ObservableObject {
     func controller(for space: UUID) -> WKWebExtensionController {
         if let controller = controllers[space] { return controller }
         let configuration = WKWebExtensionController.Configuration(identifier: space)
-        configuration.defaultWebsiteDataStore = Stores.store(for: space)
+        configuration.defaultWebsiteDataStore = WebKitStores.store(for: space)
         // The extensions' own pages reach eGlu's recording channel
         // (ExtensionCapture), in their own world; websites never do.
         let pages = configuration.webViewConfiguration ?? WKWebViewConfiguration()

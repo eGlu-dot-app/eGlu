@@ -1,37 +1,22 @@
+import Foundation
 import ImageIO
 import PadCore
-import WebKit
+import WebKitSupport
 #if canImport(UIKit)
 import UIKit
 #endif
 
-/// Each space's cookies, sign-ins and site data, in a WebKit store of its own.
-///
-/// Made with `WKWebsiteDataStore(forIdentifier:)` and the space's id, so a
-/// space's sign-ins survive relaunches and never mix with another space's:
-/// two Figma accounts, one per space, both signed in. One object per space
-/// for as long as the app runs, because WebKit shares processes and caches
-/// between views that are given the same store object.
+/// Records removed spaces' stores until the engine can remove them from disk.
 @MainActor
 enum Stores {
-    private static var made: [UUID: WKWebsiteDataStore] = [:]
     private static let erasingKey = "stores.erasing"
-
-    static func store(for space: UUID) -> WKWebsiteDataStore {
-        if let store = made[space] { return store }
-        let store = WKWebsiteDataStore(forIdentifier: space)
-        made[space] = store
-        return store
-    }
 
     /// A removed space's store, and everything in it, gone. What it holds is
     /// emptied at once; the store itself WebKit won't remove while a view
     /// still holds it, so it is written down and tried again at each launch
     /// until it goes.
     static func erase(_ space: UUID) {
-        if let store = made.removeValue(forKey: space) {
-            store.removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast) {}
-        }
+        WebKitStores.forget(space)
         var pending = Set(UserDefaults.standard.stringArray(forKey: erasingKey) ?? [])
         pending.insert(space.uuidString)
         UserDefaults.standard.set(pending.sorted(), forKey: erasingKey)
@@ -41,20 +26,14 @@ enum Stores {
 
     /// Removes the stores written down for removal. At launch, before any
     /// view holds one, and after an erase.
-    ///
-    /// WebKit is set up first, by making a store of its own that keeps
-    /// nothing: `remove(forIdentifier:)` doesn't do that itself, and called
-    /// before anything else of WebKit's at launch, it answered on a run loop
-    /// WebKit hadn't made yet and stopped the app, at every launch while the
-    /// removal stayed written down (iOS 27.1).
     static func sweep() {
         let pending = UserDefaults.standard.stringArray(forKey: erasingKey) ?? []
         guard !pending.isEmpty else { return }
-        _ = WKWebsiteDataStore.nonPersistent()
+        WebKitStores.prepareForRemoval()
         for text in pending {
-            guard let id = UUID(uuidString: text), made[id] == nil else { continue }
-            WKWebsiteDataStore.remove(forIdentifier: id) { error in
-                guard error == nil else { return }
+            guard let id = UUID(uuidString: text), !WebKitStores.isMade(id) else { continue }
+            WebKitStores.remove(id) { removed in
+                guard removed else { return }
                 Task { @MainActor in
                     let left = (UserDefaults.standard.stringArray(forKey: erasingKey) ?? []).filter { $0 != text }
                     UserDefaults.standard.set(left, forKey: erasingKey)
@@ -65,8 +44,8 @@ enum Stores {
 }
 
 /// Pictures of frozen tabs, and what it takes to bring their page back where
-/// it was (`WKWebView.interactionState`: the back and forward list and the
-/// scroll position). Kept in Caches: the system may empty it, and then a
+/// it was (the engine's restoration data, WebKit's interaction state: the
+/// back and forward list and the scroll position). Kept in Caches: the system may empty it, and then a
 /// tab comes back without its picture, at its address. Files only, read and
 /// written on its own queue: no actor's.
 nonisolated enum Snapshots {

@@ -54,6 +54,56 @@ final class WebKitPageServicesTests: XCTestCase {
     }
 
     @MainActor
+    private func fixtureURL(_ title: String) -> URL {
+        URL(string: "data:text/html;base64," + Data("<!doctype html><title>\(title)</title><p>\(title)</p>".utf8).base64EncodedString())!
+    }
+
+    @MainActor
+    func testCurrentEntryIsTheViewsOwnObjectBeforeAndAfterLoads() async throws {
+        let view = makeView()
+        defer { view.stopLoading() }
+        let services = WebKitPageServices(view: view)
+        XCTAssertNil(services.currentEntry)
+        XCTAssertNil(view.backForwardList.currentItem)
+        await navigate(view) { view.load(URLRequest(url: fixtureURL("first"))) }
+        let first = try XCTUnwrap(services.currentEntry)
+        XCTAssertTrue(first === view.backForwardList.currentItem)
+        await navigate(view) { view.load(URLRequest(url: fixtureURL("second"))) }
+        let second = try XCTUnwrap(services.currentEntry)
+        XCTAssertTrue(second === view.backForwardList.currentItem)
+        XCTAssertFalse(first === second)
+        XCTAssertTrue(first === view.backForwardList.backList.last)
+        await navigate(view) { view.goBack() }
+        XCTAssertTrue(services.currentEntry === view.backForwardList.currentItem)
+        XCTAssertTrue(services.currentEntry === first)
+    }
+
+    @MainActor
+    func testRestorationDataRestoresTheBackForwardListInANewView() async throws {
+        let view = makeView()
+        defer { view.stopLoading() }
+        let services = WebKitPageServices(view: view)
+        let first = fixtureURL("restored first")
+        let second = fixtureURL("restored second")
+        await navigate(view) { view.load(URLRequest(url: first)) }
+        await navigate(view) { view.load(URLRequest(url: second)) }
+        let data = try XCTUnwrap(services.restorationData as? Data)
+        let back = view.backForwardList.backList.map(\.url)
+        let current = try XCTUnwrap(view.backForwardList.currentItem).url
+        XCTAssertEqual(back, [first])
+        XCTAssertEqual(current, second)
+
+        let restored = makeView()
+        defer { restored.stopLoading() }
+        let restoredServices = WebKitPageServices(view: restored)
+        await navigate(restored) { restoredServices.restorationData = data }
+        XCTAssertEqual(restored.backForwardList.backList.map(\.url), back)
+        XCTAssertEqual(restored.backForwardList.currentItem?.url, current)
+        XCTAssertEqual(restored.url, current)
+        XCTAssertTrue(restoredServices.currentEntry === restored.backForwardList.currentItem)
+    }
+
+    @MainActor
     func testFindForwardsBackwardsMissingTextAndCaseSensitivity() async {
         let view = makeView()
         defer { view.stopLoading() }
@@ -182,6 +232,8 @@ final class WebKitPageServicesTests: XCTestCase {
             return WebKitPageServices(view: view)
         }
         XCTAssertNil(released)
+        XCTAssertNil(services.currentEntry)
+        XCTAssertNil(services.restorationData)
         var found: Bool?
         services.find("anything", backwards: true, caseSensitive: true, wraps: false) { found = $0 }
         XCTAssertEqual(found, false)

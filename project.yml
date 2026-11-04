@@ -69,6 +69,8 @@ targetTemplates:
         product: WebEngineAppKit
       - package: WebKitEngine
         product: WebKitMacPlugin
+      - package: WebKitEngine
+        product: WebKitSupport
       # In Contents/PlugIns, where the Dock looks for the plug-in Mac/Info.plist names.
       - target: eGlu Dock Tile
         embed: true

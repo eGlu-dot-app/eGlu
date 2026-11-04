@@ -3,6 +3,7 @@ import os
 import PadCore
 import SwiftUI
 import WebKit
+import WebKitSupport
 #if canImport(UIKit)
 import UIKit
 #else
@@ -142,7 +143,7 @@ final class Downloads: NSObject, ObservableObject, WKDownloadDelegate {
             return
         }
         let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = Stores.store(for: item.space)
+        configuration.websiteDataStore = WebKitStores.store(for: item.space)
         let view = WKWebView(frame: .zero, configuration: configuration)
         retryViews[item.id] = view
         change(item.id) { $0.phase = .downloading; $0.fraction = nil; $0.problem = nil }

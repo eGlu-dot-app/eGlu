@@ -150,7 +150,7 @@ final class Page: NSObject {
     private var navigationAdapter: WebKitNavigationAdapter!
     private var uiAdapter: WebKitUIAdapter!
     private let channels: any WebMessageChannels
-    private let services: any WebFind & WebZoom & WebMediaCapture & WebUserAgent & WebPrinting & WebDeveloperTools
+    private let services: any WebFind & WebZoom & WebMediaCapture & WebUserAgent & WebPrinting & WebDeveloperTools & WebBackForward & WebRestoration
     private let controller: WKUserContentController
     weak var host: PageHost?
 
@@ -159,6 +159,15 @@ final class Page: NSObject {
         PageState(url: view.url, title: view.title, isLoading: view.isLoading,
                   estimatedProgress: view.estimatedProgress, canGoBack: view.canGoBack,
                   canGoForward: view.canGoForward, hasOnlySecureContent: view.hasOnlySecureContent)
+    }
+
+    var restorationData: Any? {
+        get { services.restorationData }
+        set {
+            // Restoration only ever supplied a saved state, never nil.
+            guard let newValue else { return }
+            services.restorationData = newValue
+        }
     }
 
     var pageZoom: Double { services.pageZoom }
@@ -404,7 +413,7 @@ final class Page: NSObject {
         if let url = view.url {
             Session.shared.record(tab, url: url, title: view.title)
         }
-        history.changed(url: view.url, title: view.title, entry: view.backForwardList.currentItem,
+        history.changed(url: view.url, title: view.title, entry: services.currentEntry,
                         loading: view.isLoading, space: space, tab: tab)
         host?.pageDidChange(self)
     }
@@ -1295,7 +1304,7 @@ final class Page: NSObject {
     /// The page is a tab's now, as it was: a Peek's or a little window's,
     /// opened in a tab. What it shows goes into the space's history.
     func becameTab() {
-        history.adopted(url: view.url, title: view.title, entry: view.backForwardList.currentItem, space: space, tab: tab)
+        history.adopted(url: view.url, title: view.title, entry: services.currentEntry, space: space, tab: tab)
     }
 
     /// The Peek is gone, closed or given a tab. The tab may freeze now.
@@ -1603,13 +1612,13 @@ extension Page: WebNavigationEvents {
         videoWanted = false
         videoFloated = false
         committed = url
-        status.committed(view.backForwardList.currentItem)
+        status.committed(services.currentEntry)
         googleRefused = SignIn.googleRefused(url)
         failure = nil
         sendingFailed = false
         jsonView = nil
         refusedElsewhere = 0
-        history.committed(url: url, title: view.title, entry: view.backForwardList.currentItem,
+        history.committed(url: url, title: view.title, entry: services.currentEntry,
                           space: space, tab: tab)
         passwordField = false
         // The old document's card went with it, unannounced.

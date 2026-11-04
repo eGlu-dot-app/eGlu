@@ -4,10 +4,17 @@ import WebEngineCore
 import WebKit
 
 @MainActor
-public final class WebKitPageServices: WebFind, WebZoom, WebMediaCapture, WebUserAgent, WebPrinting, WebDeveloperTools {
+public final class WebKitPageServices: WebFind, WebZoom, WebMediaCapture, WebUserAgent, WebPrinting, WebDeveloperTools, WebBackForward, WebRestoration {
     private weak var view: WKWebView?
 
     public init(view: WKWebView) { self.view = view }
+
+    public var currentEntry: AnyObject? { view?.backForwardList.currentItem }
+
+    public var restorationData: Any? {
+        get { view?.interactionState }
+        set { view?.interactionState = newValue }
+    }
 
     public func find(_ text: String, backwards: Bool, caseSensitive: Bool, wraps: Bool,
                      found: @escaping @MainActor (Bool) -> Void) {

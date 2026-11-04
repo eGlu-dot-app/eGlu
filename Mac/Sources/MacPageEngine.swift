@@ -2,6 +2,7 @@ import Foundation
 import PadCore
 import WebEngineCore
 import WebKit
+import WebKitSupport
 import WebKitMacPlugin
 
 /// Where a new page gets its configuration.
@@ -23,6 +24,8 @@ protocol MacPageEngine: AnyObject {
     func makePage(tab: UUID, space: UUID, source: MacPageSource) -> Page
     /// A new configuration in the space's store.
     func configuration(space: UUID) -> WKWebViewConfiguration
+    /// Empties a removed space's store and schedules its removal.
+    func eraseStore(space: UUID)
     /// Removes website stores no space uses.
     func sweepStores()
     /// Starts the content blocker's lists and rules.
@@ -56,9 +59,13 @@ final class AppWebKitEngine: MacPageEngine {
 
     /// The space's store and extension controller, with the app's user agent.
     func configuration(space: UUID) -> WKWebViewConfiguration {
-        WebKitConfiguration.make(store: Stores.store(for: space),
+        WebKitConfiguration.make(store: WebKitStores.store(for: space),
                                 extensionController: Extensions.shared.controller(for: space),
                                 applicationNameForUserAgent: Identity.applicationName(for: ProcessInfo.processInfo.operatingSystemVersion))
+    }
+
+    func eraseStore(space: UUID) {
+        Stores.erase(space)
     }
 
     /// Removes website stores no space uses.

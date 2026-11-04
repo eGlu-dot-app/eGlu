@@ -6,18 +6,18 @@
 | Section | Count | Files |
 |:---|---:|---:|
 | a. Imports (Mac/) | 35 | 35 |
-| a. Imports (Shared/) | 11 | 10 |
-| b. Reach-ins into page view (app) | 43 | 12 |
-| b. Reach-ins (tests) | 132 | 16 |
+| a. Imports (Shared/) | 9 | 8 |
+| b. Reach-ins into page view (app) | 40 | 11 |
+| b. Reach-ins (tests) | 152 | 17 |
 | b. Reach-ins (Page.swift self-references) | 0 | 0 |
-| c. WebKit types in declarations | 120 | 22 |
+| c. WebKit types in declarations | 109 | 20 |
 | c. Declarations (Extension* files) | 259 | 16 |
 | d. Private WebKit API | 37 | 15 |
 | e. Hidden web views | 19 | 11 |
 | f. Script bridges (app) | 2 | 2 |
 | f. Script bridges (WebKit plugin) | 6 | 2 |
 | f. Script bridges (tests) | 3 | 1 |
-| **Total** | **526** | **62** |
+| **Total** | **510** | **59** |
 
 ## Details
 
@@ -95,7 +95,7 @@
 - `Mac/Sources/Writing/WritingSpelling.swift` (1):
   - L2: `import WebKit`
 
-#### Shared/ (11 lines in 10 files)
+#### Shared/ (9 lines in 8 files)
 - `Shared/ContentBlocker.swift` (1):
   - L3: `import WebKit`
 - `Shared/DownloadActivity.swift` (1):
@@ -105,20 +105,16 @@
   - L8: `import WebKit`
 - `Shared/HandoffFetch.swift` (1):
   - L2: `import WebKit`
-- `Shared/HistoryRecorder.swift` (1):
-  - L4: `import WebKit`
 - `Shared/PageShared.swift` (1):
   - L2: `import WebKit`
 - `Shared/SVGRaster.swift` (1):
   - L2: `import WebKit`
-- `Shared/Stores.swift` (1):
-  - L3: `import WebKit`
 - `Shared/Writing/WritingChecker.swift` (1):
   - L1: `import Engines`
 - `Shared/Writing/WritingLists.swift` (1):
   - L3: `import Engines`
 
-### b. Reach-ins into a page's web view (43 lines in 12 files)
+### b. Reach-ins into a page's web view (40 lines in 11 files)
 - `Mac/Sources/ApplePasswords.swift` (8):
   - L238: `ApplePasswords.serves(page.view.url), case let .tuple(scheme, host, _) = message.origin,`
   - L239: `host.lowercased() == page.view.url?.host()?.lowercased(),`
@@ -146,18 +142,14 @@
   - L236: `let url = page.view.url, !page.isHandsOff, context.hasAccess(to: url, in: self) else {`
   - L245: `page.view.url == url && !page.isHandsOff && context.hasAccess(to: url, in: self)`
 - `Mac/Sources/Extensions.swift` (1):
-  - L2026: `if let tab, ExtensionPolicy.grantsOnClick(window.page?.view.url) { context.userGesturePerformed(in: tab) }`
-- `Mac/Sources/Pages.swift` (8):
-  - L52: `page.view.interactionState = state`
+  - L2027: `if let tab, ExtensionPolicy.grantsOnClick(window.page?.view.url) { context.userGesturePerformed(in: tab) }`
+- `Mac/Sources/Pages.swift` (6):
   - L55: `if page.view.url == nil, let url = tab.url {`
   - L87: `addresses[page.tab] = page.view.url`
   - L157: `guard committed || addresses[page.tab] != page.view.url else { return }`
   - L158: `addresses[page.tab] = page.view.url`
-  - L164: `if let state = page.view.interactionState {`
   - L165: `states[page.tab] = KeptState(space: page.space, url: page.view.url, value: state)`
   - L168: `if !page.isSignIn, !page.isExtensionPage { Snapshots.save(state: state, url: page.view.url, using: token) }`
-- `Mac/Sources/Session.swift` (1):
-  - L395: `page.view.url.flatMap { address in page.view.interactionState.map { Replaced(space: space, url: address, state: $0) } }`
 - `Mac/Sources/StoreButton.swift` (3):
   - L27: `let url = page.view.url, Self.isStore(url), let body = message.body.foundation as? [String: Any] else { return }`
   - L42: `guard isStore(page.view.url) else { return }`
@@ -175,7 +167,7 @@
   - L70: `page.view.superview?.addSubview(view, positioned: .below, relativeTo: page.view)`
   - L77: `page.view.superview?.insertSubview(view, belowSubview: page.view)`
 
-#### Tests (132 lines in 16 files)
+#### Tests (152 lines in 17 files)
 - `Tests/Crashes/CrashRegressionTests.swift` (5):
   - L94: `page.view.frame = CGRect(x: 0, y: 0, width: 320, height: 480)`
   - L95: `container.view.addSubview(page.view)`
@@ -225,8 +217,8 @@
   - L276: `let value = try? await page.view.evaluateJavaScript(`
   - L331: `page.view.startDownload(using: URLRequest(url: url)) { download in`
 - `Tests/MacPage/PageEngineTests.swift` (2):
-  - L145: `XCTAssertTrue(page.view.configuration.websiteDataStore === configuration.websiteDataStore,`
-  - L164: `XCTAssertTrue(page.view.configuration.websiteDataStore === Stores.store(for: space),`
+  - L146: `XCTAssertTrue(page.view.configuration.websiteDataStore === configuration.websiteDataStore,`
+  - L165: `XCTAssertTrue(page.view.configuration.websiteDataStore === WebKitStores.store(for: space),`
 - `Tests/MacPage/PageLifecycleTests.swift` (13):
   - L93: `XCTAssertNil(page.view.url, "the test's commit loaded something")`
   - L254: `let form = try XCTUnwrap(page.view.url)`
@@ -297,6 +289,27 @@
   - L80: `XCTAssertEqual(state.canGoBack, view.canGoBack, "canGoBack, \(when)", file: file, line: line)`
   - L81: `XCTAssertEqual(state.canGoForward, view.canGoForward, "canGoForward, \(when)", file: file, line: line)`
   - L82: `XCTAssertEqual(state.hasOnlySecureContent, view.hasOnlySecureContent, "hasOnlySecureContent, \(when)",`
+- `Tests/MacPage/PageStorageTests.swift` (20):
+  - L59: `let one = try XCTUnwrap(page.view.backForwardList.currentItem)`
+  - L65: `let two = try XCTUnwrap(page.view.backForwardList.currentItem)`
+  - L67: `XCTAssertTrue(page.view.backForwardList.backItem === one)`
+  - L74: `page.navigationCommitted(url: page.view.url)`
+  - L87: `page.navigationCommitted(url: page.view.url)`
+  - L93: `XCTAssertTrue(page.view.backForwardList.currentItem === one, "Back made WebKit a new entry")`
+  - L100: `page.navigationCommitted(url: page.view.url)`
+  - L113: `XCTAssertTrue(page.view.backForwardList.currentItem === two, "Forward made WebKit a new entry")`
+  - L139: `page.view.loadHTMLString(html, baseURL: document)`
+  - L141: `XCTAssertEqual(page.view.url, document)`
+  - L144: `_ = try await page.view.evaluateJavaScript("history.pushState(null, '', 'one'); 1")`
+  - L147: `XCTAssertFalse(page.view.isLoading)`
+  - L152: `_ = try await page.view.evaluateJavaScript("history.pushState(null, '', 'two'); 1")`
+  - L173: `let back = page.view.backForwardList.backList.map(\.url)`
+  - L174: `XCTAssertEqual(page.view.backForwardList.backList.map(\.title), ["One"])`
+  - L175: `let shown = try XCTUnwrap(page.view.url)`
+  - L203: `let back = page.view.backForwardList.backList.map(\.url)`
+  - L204: `XCTAssertEqual(page.view.backForwardList.backList.map(\.title), ["Frozen One"])`
+  - L205: `let shown = try XCTUnwrap(page.view.url)`
+  - L236: `XCTAssertTrue(page.view.configuration.websiteDataStore === store, "the tab's page is not in its space's store")`
 - `Tests/MacPage/PageSurfaceTests.swift` (8):
   - L13: `XCTAssertTrue(page.surface.view === page.view)`
   - L23: `XCTAssertTrue(page.view.superview === holder)`
@@ -328,22 +341,22 @@
 #### Page.swift (self-references, excluded from count: 0 lines)
 _None._
 
-### c. WebKit types in declarations (120 lines in 22 files)
+### c. WebKit types in declarations (109 lines in 20 files)
 - `Mac/Sources/MacPageEngine.swift` (3):
-  - L16: `case supplied(WKWebViewConfiguration, extensionPage: Bool)`
-  - L25: `func configuration(space: UUID) -> WKWebViewConfiguration`
-  - L58: `func configuration(space: UUID) -> WKWebViewConfiguration {`
+  - L17: `case supplied(WKWebViewConfiguration, extensionPage: Bool)`
+  - L26: `func configuration(space: UUID) -> WKWebViewConfiguration`
+  - L61: `func configuration(space: UUID) -> WKWebViewConfiguration {`
 - `Mac/Sources/Page.swift` (10):
   - L41: `final class PageView: WKWebView {`
   - L65: `let newTab = menu.items.first(where: { $0.identifier?.rawValue == "WKMenuItemIdentifierOpenLinkInNewWindow" }) {`
   - L143: `static let world = WKContentWorld.world(name: "eGlu")`
   - L154: `private let controller: WKUserContentController`
-  - L325: `init(tab: UUID, space: UUID, configuration: WKWebViewConfiguration, extensionPage: Bool = false) {`
-  - L331: `let controller = extensionPage ? config.userContentController : WKUserContentController()`
-  - L557: `static func extensionPageVisible(_ web: WKWebView) async -> Bool {`
-  - L565: `static func startExtensionRecording(in web: WKWebView, token: String, video: Any) async throws -> Any? {`
-  - L932: `let configuration = WKSnapshotConfiguration()`
-  - L959: `let configuration = WKSnapshotConfiguration()`
+  - L334: `init(tab: UUID, space: UUID, configuration: WKWebViewConfiguration, extensionPage: Bool = false) {`
+  - L340: `let controller = extensionPage ? config.userContentController : WKUserContentController()`
+  - L566: `static func extensionPageVisible(_ web: WKWebView) async -> Bool {`
+  - L574: `static func startExtensionRecording(in web: WKWebView, token: String, video: Any) async throws -> Any? {`
+  - L941: `let configuration = WKSnapshotConfiguration()`
+  - L968: `let configuration = WKSnapshotConfiguration()`
 - `Mac/Sources/PageSwipe.swift` (2):
   - L49: `private var from: WKBackForwardListItem?`
   - L59: `static func works(on view: WKWebView) -> Bool {`
@@ -376,20 +389,20 @@ _None._
   - L327: `var compiled: [WKContentRuleList] = []`
   - L332: `let list = await withCheckedContinuation { (done: CheckedContinuation<WKContentRuleList?, Never>) in`
 - `Shared/DownloadActivity.swift` (14):
-  - L13: `final class Downloads: NSObject, ObservableObject, WKDownloadDelegate {`
-  - L20: `let download: WKDownload`
-  - L26: `private var retryViews: [UUID: WKWebView] = [:]`
-  - L66: `func adopt(_ download: WKDownload, for page: Page) { adopt(download, from: page) }`
-  - L67: `func adopt(_ download: WKDownload, from page: Page) {`
-  - L77: `private func attach(_ download: WKDownload, item: UUID, page: ObjectIdentifier?) {`
-  - L86: `private func update(_ download: WKDownload, _ change: (inout Item) -> Void) {`
-  - L94: `private func end(_ download: WKDownload) {`
-  - L144: `let configuration = WKWebViewConfiguration()`
-  - L146: `let view = WKWebView(frame: .zero, configuration: configuration)`
-  - L149: `let started: @MainActor @Sendable (WKDownload) -> Void = { [weak self] download in`
-  - L159: `func download(_ download: WKDownload, decideDestinationUsing response: URLResponse, suggestedFilename: String,`
-  - L188: `func downloadDidFinish(_ download: WKDownload) {`
-  - L199: `func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {`
+  - L14: `final class Downloads: NSObject, ObservableObject, WKDownloadDelegate {`
+  - L21: `let download: WKDownload`
+  - L27: `private var retryViews: [UUID: WKWebView] = [:]`
+  - L67: `func adopt(_ download: WKDownload, for page: Page) { adopt(download, from: page) }`
+  - L68: `func adopt(_ download: WKDownload, from page: Page) {`
+  - L78: `private func attach(_ download: WKDownload, item: UUID, page: ObjectIdentifier?) {`
+  - L87: `private func update(_ download: WKDownload, _ change: (inout Item) -> Void) {`
+  - L95: `private func end(_ download: WKDownload) {`
+  - L145: `let configuration = WKWebViewConfiguration()`
+  - L147: `let view = WKWebView(frame: .zero, configuration: configuration)`
+  - L150: `let started: @MainActor @Sendable (WKDownload) -> Void = { [weak self] download in`
+  - L160: `func download(_ download: WKDownload, decideDestinationUsing response: URLResponse, suggestedFilename: String,`
+  - L189: `func downloadDidFinish(_ download: WKDownload) {`
+  - L200: `func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {`
 - `Shared/HandoffDocumentSource.swift` (3):
   - L32: `private weak var view: WKWebView?`
   - L60: `init(link url: URL, view: WKWebView) {`
@@ -401,14 +414,7 @@ _None._
   - L90: `func download(_ download: WKDownload, decideDestinationUsing response: URLResponse,`
   - L98: `func downloadDidFinish(_ download: WKDownload) {`
   - L102: `func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {`
-- `Shared/HistoryRecorder.swift` (6):
-  - L511: `private var entries: [WKBackForwardListItem] = []`
-  - L513: `private mutating func entered(_ entry: WKBackForwardListItem?) {`
-  - L528: `mutating func decided(_ type: WKNavigationType, url: URL?) {`
-  - L574: `mutating func committed(url: URL?, title: String?, entry: WKBackForwardListItem?, space: UUID, tab: UUID) {`
-  - L592: `mutating func adopted(url: URL?, title: String?, entry: WKBackForwardListItem?, space: UUID, tab: UUID) {`
-  - L604: `mutating func changed(url: URL?, title: String?, entry: WKBackForwardListItem?, loading: Bool, space: UUID, tab: UUID) {`
-- `Shared/PageShared.swift` (17):
+- `Shared/PageShared.swift` (15):
   - L24: `final class Unseen: NSObject, WKNavigationDelegate {`
   - L33: `private let view: WKWebView`
   - L40: `let config = WKWebViewConfiguration()`
@@ -422,8 +428,6 @@ _None._
   - L153: `func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {`
   - L229: `mutating func apply(for url: URL?, to controller: WKUserContentController) {`
   - L241: `mutating func remove(from controller: WKUserContentController) {`
-  - L257: `private let byItem = NSMapTable<WKBackForwardListItem, NSNumber>.weakToStrongObjects()`
-  - L271: `mutating func committed(_ item: WKBackForwardListItem?) {`
   - L290: `extension WKUserContentController {`
   - L313: `static func choice(for action: WKNavigationAction, command: Bool, shift: Bool, middleButton: Bool) -> Choice {`
 - `Shared/SVGRaster.swift` (7):
@@ -434,10 +438,6 @@ _None._
   - L101: `nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {`
   - L105: `nonisolated func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {`
   - L109: `nonisolated func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {`
-- `Shared/Stores.swift` (3):
-  - L17: `private static var made: [UUID: WKWebsiteDataStore] = [:]`
-  - L20: `static func store(for space: UUID) -> WKWebsiteDataStore {`
-  - L22: `let store = WKWebsiteDataStore(forIdentifier: space)`
 - `Tests/Crashes/CrashRegressionTests.swift` (7):
   - L93: `let page = session.pages.adopt(tab: tab.id, space: space.id, configuration: WKWebViewConfiguration())`
   - L133: `let web = WKWebView(frame: CGRect(x: 0, y: 0, width: 320, height: 480))`
@@ -462,9 +462,9 @@ _None._
   - L422: `func download(_ download: WKDownload, didFailWithError error: any Error, resumeData: Data?) {`
   - L426: `func downloadDidFinish(_ download: WKDownload) {`
 - `Tests/MacPage/PageEngineTests.swift` (3):
-  - L234: `let configuration: WKWebViewConfiguration?`
-  - L245: `var supplied: WKWebViewConfiguration?`
-  - L274: `func configuration(space: UUID) -> WKWebViewConfiguration {`
+  - L235: `let configuration: WKWebViewConfiguration?`
+  - L246: `var supplied: WKWebViewConfiguration?`
+  - L275: `func configuration(space: UUID) -> WKWebViewConfiguration {`
 - `Tests/MacPage/PageTestSupport.swift` (2):
   - L55: `static func keepingNothing() -> WKWebViewConfiguration {`
   - L56: `let configuration = WKWebViewConfiguration()`
@@ -701,53 +701,53 @@ _None._
   - L248: `func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: any Error) { failed(error) }`
   - L249: `func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: any Error) { failed(error) }`
 - `Mac/Sources/Extensions.swift` (47):
-  - L105: `private var controllers: [UUID: WKWebExtensionController] = [:]`
-  - L109: `private(set) var contexts: [UUID: [String: WKWebExtensionContext]] = [:]`
-  - L499: `func controller(for space: UUID) -> WKWebExtensionController {`
-  - L501: `let configuration = WKWebExtensionController.Configuration(identifier: space)`
-  - L505: `let pages = configuration.webViewConfiguration ?? WKWebViewConfiguration()`
-  - L511: `let controller = WKWebExtensionController(configuration: configuration)`
-  - L517: `func space(of controller: WKWebExtensionController?) -> UUID? {`
-  - L521: `func context(_ id: String, in space: UUID) -> WKWebExtensionContext? {`
-  - L555: `let package = try await WKWebExtension(resourceBaseURL: folder)`
-  - L564: `let context = WKWebExtensionContext(for: package)`
-  - L680: `private func allow(_ context: WKWebExtensionContext, _ package: WKWebExtension, access: Installed.SiteAccess, cookies: Bool) {`
-  - L696: `static func holdCookies(_ context: WKWebExtensionContext, letting cookies: Bool) {`
-  - L708: `static func letRulesRedirect(_ context: WKWebExtensionContext, _ package: WKWebExtension) {`
-  - L718: `static func sites(of package: WKWebExtension) -> [WKWebExtension.MatchPattern] {`
-  - L737: `nonisolated static func withheld(_ pattern: WKWebExtension.MatchPattern) -> Bool {`
-  - L744: `nonisolated static func othersPage(_ url: URL?, for context: WKWebExtensionContext) -> Bool {`
-  - L760: `static func fence(_ context: WKWebExtensionContext) {`
-  - L772: `let own = try? WKWebExtension.MatchPattern(string: "https://\(context.uniqueIdentifier.lowercased()).chromiumapp.org/*") {`
-  - L782: `private func firstLook(at context: WKWebExtensionContext, _ package: WKWebExtension, archive file: URL, id: String) -> ExtensionEvidence {`
-  - L822: `private func missing(for manifest: ExtensionManifest, _ package: WKWebExtension) -> Set<String> {`
-  - L1030: `private func startBackground(of context: WKWebExtensionContext, _ item: Installed, in space: UUID, attempt: UUID? = nil) {`
-  - L1051: `private func recover(_ action: ExtensionWorkerRecovery.Action, context: WKWebExtensionContext, item: Installed, in space: UUID) {`
-  - L1078: `private func watch(_ context: WKWebExtensionContext, _ item: Installed, in space: UUID) {`
-  - L1094: `private func errorsChanged(_ context: WKWebExtensionContext, _ id: String, in space: UUID) {`
-  - L1287: `func commands(in space: UUID) -> [(name: String, id: String, commands: [WKWebExtension.Command])] {`
-  - L1294: `func perform(_ command: WKWebExtension.Command, of id: String, in space: UUID) {`
-  - L1387: `func action(for id: String, in window: WindowModel) -> WKWebExtension.Action? {`
-  - L1469: `func popupURL(for context: WKWebExtensionContext, in space: UUID) -> URL? {`
-  - L1884: `let types = WKWebExtensionController.allExtensionDataTypes`
-  - L1909: `let standIn = WKWebExtensionContext(for: try await WKWebExtension(resourceBaseURL: folder))`
-  - L1954: `func configuration(for url: URL, in space: UUID) -> WKWebViewConfiguration? {`
-  - L1985: `let types = WKWebExtensionController.allExtensionDataTypes`
-  - L2249: `extension Extensions: WKWebExtensionControllerDelegate {`
-  - L2250: `func webExtensionController(_ controller: WKWebExtensionController, openWindowsFor extensionContext: WKWebExtensionContext) -> [any WKWebExtensionWindow] {`
-  - L2255: `func webExtensionController(_ controller: WKWebExtensionController, focusedWindowFor extensionContext: WKWebExtensionContext) -> (any WKWebExtensionWindow)? {`
-  - L2276: `static func refusal(opening url: URL?, by context: WKWebExtensionContext) -> Error? {`
-  - L2282: `func webExtensionController(_ controller: WKWebExtensionController, openNewTabUsing configuration: WKWebExtension.TabConfiguration,`
-  - L2292: `func webExtensionController(_ controller: WKWebExtensionController, openNewWindowUsing configuration: WKWebExtension.WindowConfiguration,`
-  - L2324: `func webExtensionController(_ controller: WKWebExtensionController, openOptionsPageFor extensionContext: WKWebExtensionContext,`
-  - L2331: `private func permissionWindow(in space: UUID, tab: (any WKWebExtensionTab)?) -> WindowModel? {`
-  - L2337: `func webExtensionController(_ controller: WKWebExtensionController, promptForPermissions permissions: Set<WKWebExtension.Permission>,`
-  - L2361: `func webExtensionController(_ controller: WKWebExtensionController, promptForPermissionToAccess urls: Set<URL>,`
-  - L2367: `func webExtensionController(_ controller: WKWebExtensionController, promptForPermissionMatchPatterns matchPatterns: Set<WKWebExtension.MatchPattern>,`
-  - L2392: `func webExtensionController(_ controller: WKWebExtensionController, presentActionPopup action: WKWebExtension.Action,`
-  - L2407: `func webExtensionController(_ controller: WKWebExtensionController, didUpdate action: WKWebExtension.Action,`
-  - L2415: `func webExtensionController(_ controller: WKWebExtensionController, sendMessage message: Any, toApplicationWithIdentifier applicationIdentifier: String?,`
-  - L2449: `func webExtensionController(_ controller: WKWebExtensionController, connectUsing port: WKWebExtension.MessagePort,`
+  - L106: `private var controllers: [UUID: WKWebExtensionController] = [:]`
+  - L110: `private(set) var contexts: [UUID: [String: WKWebExtensionContext]] = [:]`
+  - L500: `func controller(for space: UUID) -> WKWebExtensionController {`
+  - L502: `let configuration = WKWebExtensionController.Configuration(identifier: space)`
+  - L506: `let pages = configuration.webViewConfiguration ?? WKWebViewConfiguration()`
+  - L512: `let controller = WKWebExtensionController(configuration: configuration)`
+  - L518: `func space(of controller: WKWebExtensionController?) -> UUID? {`
+  - L522: `func context(_ id: String, in space: UUID) -> WKWebExtensionContext? {`
+  - L556: `let package = try await WKWebExtension(resourceBaseURL: folder)`
+  - L565: `let context = WKWebExtensionContext(for: package)`
+  - L681: `private func allow(_ context: WKWebExtensionContext, _ package: WKWebExtension, access: Installed.SiteAccess, cookies: Bool) {`
+  - L697: `static func holdCookies(_ context: WKWebExtensionContext, letting cookies: Bool) {`
+  - L709: `static func letRulesRedirect(_ context: WKWebExtensionContext, _ package: WKWebExtension) {`
+  - L719: `static func sites(of package: WKWebExtension) -> [WKWebExtension.MatchPattern] {`
+  - L738: `nonisolated static func withheld(_ pattern: WKWebExtension.MatchPattern) -> Bool {`
+  - L745: `nonisolated static func othersPage(_ url: URL?, for context: WKWebExtensionContext) -> Bool {`
+  - L761: `static func fence(_ context: WKWebExtensionContext) {`
+  - L773: `let own = try? WKWebExtension.MatchPattern(string: "https://\(context.uniqueIdentifier.lowercased()).chromiumapp.org/*") {`
+  - L783: `private func firstLook(at context: WKWebExtensionContext, _ package: WKWebExtension, archive file: URL, id: String) -> ExtensionEvidence {`
+  - L823: `private func missing(for manifest: ExtensionManifest, _ package: WKWebExtension) -> Set<String> {`
+  - L1031: `private func startBackground(of context: WKWebExtensionContext, _ item: Installed, in space: UUID, attempt: UUID? = nil) {`
+  - L1052: `private func recover(_ action: ExtensionWorkerRecovery.Action, context: WKWebExtensionContext, item: Installed, in space: UUID) {`
+  - L1079: `private func watch(_ context: WKWebExtensionContext, _ item: Installed, in space: UUID) {`
+  - L1095: `private func errorsChanged(_ context: WKWebExtensionContext, _ id: String, in space: UUID) {`
+  - L1288: `func commands(in space: UUID) -> [(name: String, id: String, commands: [WKWebExtension.Command])] {`
+  - L1295: `func perform(_ command: WKWebExtension.Command, of id: String, in space: UUID) {`
+  - L1388: `func action(for id: String, in window: WindowModel) -> WKWebExtension.Action? {`
+  - L1470: `func popupURL(for context: WKWebExtensionContext, in space: UUID) -> URL? {`
+  - L1885: `let types = WKWebExtensionController.allExtensionDataTypes`
+  - L1910: `let standIn = WKWebExtensionContext(for: try await WKWebExtension(resourceBaseURL: folder))`
+  - L1955: `func configuration(for url: URL, in space: UUID) -> WKWebViewConfiguration? {`
+  - L1986: `let types = WKWebExtensionController.allExtensionDataTypes`
+  - L2250: `extension Extensions: WKWebExtensionControllerDelegate {`
+  - L2251: `func webExtensionController(_ controller: WKWebExtensionController, openWindowsFor extensionContext: WKWebExtensionContext) -> [any WKWebExtensionWindow] {`
+  - L2256: `func webExtensionController(_ controller: WKWebExtensionController, focusedWindowFor extensionContext: WKWebExtensionContext) -> (any WKWebExtensionWindow)? {`
+  - L2277: `static func refusal(opening url: URL?, by context: WKWebExtensionContext) -> Error? {`
+  - L2283: `func webExtensionController(_ controller: WKWebExtensionController, openNewTabUsing configuration: WKWebExtension.TabConfiguration,`
+  - L2293: `func webExtensionController(_ controller: WKWebExtensionController, openNewWindowUsing configuration: WKWebExtension.WindowConfiguration,`
+  - L2325: `func webExtensionController(_ controller: WKWebExtensionController, openOptionsPageFor extensionContext: WKWebExtensionContext,`
+  - L2332: `private func permissionWindow(in space: UUID, tab: (any WKWebExtensionTab)?) -> WindowModel? {`
+  - L2338: `func webExtensionController(_ controller: WKWebExtensionController, promptForPermissions permissions: Set<WKWebExtension.Permission>,`
+  - L2362: `func webExtensionController(_ controller: WKWebExtensionController, promptForPermissionToAccess urls: Set<URL>,`
+  - L2368: `func webExtensionController(_ controller: WKWebExtensionController, promptForPermissionMatchPatterns matchPatterns: Set<WKWebExtension.MatchPattern>,`
+  - L2393: `func webExtensionController(_ controller: WKWebExtensionController, presentActionPopup action: WKWebExtension.Action,`
+  - L2408: `func webExtensionController(_ controller: WKWebExtensionController, didUpdate action: WKWebExtension.Action,`
+  - L2416: `func webExtensionController(_ controller: WKWebExtensionController, sendMessage message: Any, toApplicationWithIdentifier applicationIdentifier: String?,`
+  - L2450: `func webExtensionController(_ controller: WKWebExtensionController, connectUsing port: WKWebExtension.MessagePort,`
 
 ### d. Private WebKit API (37 lines in 15 files)
 - `Mac/Sources/ExtensionAnswers.swift` (4):
@@ -775,7 +775,7 @@ _None._
 - `Mac/Sources/ExtensionPopup.swift` (1):
   - L151: `@objc(_webView:requestDisplayCapturePermissionForOrigin:initiatedByFrame:withSystemAudio:decisionHandler:)`
 - `Mac/Sources/Extensions.swift` (1):
-  - L1681: `let kept = ["\(version).zip", version, "_eglu"]`
+  - L1682: `let kept = ["\(version).zip", version, "_eglu"]`
 - `Mac/Sources/Page.swift` (1):
   - L54: `NSStringFromClass(type(of: item)) == "_WKWebExtensionMenuItem"`
 - `Mac/Sources/PageSwipe.swift` (1):
@@ -818,10 +818,10 @@ _None._
   - L139: `let web = WKWebView(frame: NSRect(x: 0, y: 0, width: 800, height: 600), configuration: page)`
   - L164: `let web = WKWebView(frame: NSRect(x: 0, y: 0, width: 400, height: 600), configuration: configuration)`
 - `Mac/Sources/Extensions.swift` (1):
-  - L505: `let pages = configuration.webViewConfiguration ?? WKWebViewConfiguration()`
+  - L506: `let pages = configuration.webViewConfiguration ?? WKWebViewConfiguration()`
 - `Shared/DownloadActivity.swift` (2):
-  - L144: `let configuration = WKWebViewConfiguration()`
-  - L146: `let view = WKWebView(frame: .zero, configuration: configuration)`
+  - L145: `let configuration = WKWebViewConfiguration()`
+  - L147: `let view = WKWebView(frame: .zero, configuration: configuration)`
 - `Shared/PageShared.swift` (2):
   - L40: `let config = WKWebViewConfiguration()`
   - L60: `view = WKWebView(frame: page.view.frame, configuration: config)`

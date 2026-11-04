@@ -254,7 +254,7 @@ struct PageStatus {
     private(set) var code: Int?
     /// The answer to the load under way, until it commits.
     private var pending: Int??
-    private let byItem = NSMapTable<WKBackForwardListItem, NSNumber>.weakToStrongObjects()
+    private let byItem = NSMapTable<AnyObject, NSNumber>.weakToStrongObjects()
 
     /// The main frame's answer, which WebKit will show.
     mutating func answered(_ response: URLResponse) {
@@ -268,7 +268,7 @@ struct PageStatus {
 
     /// A document committed as `item`: its own answer, or, with none, the
     /// one it had when it was first shown.
-    mutating func committed(_ item: WKBackForwardListItem?) {
+    mutating func committed(_ item: AnyObject?) {
         if let answer = pending {
             code = answer
             if let item {

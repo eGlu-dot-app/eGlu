@@ -296,7 +296,7 @@ final class Page: NSObject {
 
     static func configuration(space: UUID) -> WKWebViewConfiguration {
         let config = WKWebViewConfiguration()
-        config.websiteDataStore = Stores.store(for: space)
+        config.websiteDataStore = WebKitStores.store(for: space)
         // Safari on a Mac, by name and by layout: desktop pages, and the end
         // of the user agent that WebKit leaves to the app (Identity.swift).
         config.defaultWebpagePreferences.preferredContentMode = .desktop

@@ -2,6 +2,7 @@ import PadCore
 import WebEngineCore
 import WebKit
 import WebKitMacPlugin
+import WebKitSupport
 import XCTest
 @testable import eGluMac
 
@@ -161,7 +162,7 @@ final class PageEngineTests: PageTestCase {
             let page = made(engine.makePage(tab: UUID(), space: space, source: source))
             XCTAssertFalse(page.isExtensionPage, "\(what) made an extension's page")
             XCTAssertEqual(page.space, space, what)
-            XCTAssertTrue(page.view.configuration.websiteDataStore === Stores.store(for: space),
+            XCTAssertTrue(page.view.configuration.websiteDataStore === WebKitStores.store(for: space),
                           "\(what): the page is not in the space's store")
         }
     }
@@ -172,7 +173,7 @@ final class PageEngineTests: PageTestCase {
         let engine = AppWebKitEngine()
         let space = try XCTUnwrap(Session.shared.workspace.spaces.first?.id)
         let configuration = engine.configuration(space: space)
-        XCTAssertTrue(configuration.websiteDataStore === Stores.store(for: space), "not the space's store")
+        XCTAssertTrue(configuration.websiteDataStore === WebKitStores.store(for: space), "not the space's store")
         XCTAssertEqual(configuration.applicationNameForUserAgent,
                        Identity.applicationName(for: ProcessInfo.processInfo.operatingSystemVersion))
         XCTAssertTrue(configuration.webExtensionController === Extensions.shared.controller(for: space),
@@ -274,6 +275,8 @@ final class SpyEngine: MacPageEngine {
     func configuration(space: UUID) -> WKWebViewConfiguration {
         PageTestCase.keepingNothing()
     }
+
+    func eraseStore(space: UUID) { AppWebKitEngine().eraseStore(space: space) }
 
     func sweepStores() {}
 

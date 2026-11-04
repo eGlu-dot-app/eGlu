@@ -49,7 +49,7 @@ final class Pages {
         // back as it was: no new visit in its history.
         if state != nil || !tab.title.isEmpty { page.restoring() }
         if let state {
-            page.view.interactionState = state
+            page.restorationData = state
         }
         // No state, or one WebKit couldn't use: the tab's address.
         if page.view.url == nil, let url = tab.url {
@@ -161,7 +161,7 @@ final class Pages {
 
     private func release(_ page: Page, token: PageSnapshotFiles.Token) {
         guard live[page.tab] === page, Snapshots.isCurrent(token) else { return }
-        if let state = page.view.interactionState {
+        if let state = page.restorationData {
             states[page.tab] = KeptState(space: page.space, url: page.view.url, value: state)
             // Never a sign-in page's on disk: it can hold an email address;
             // nor an extension's own, which can show a password vault.
