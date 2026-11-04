@@ -651,7 +651,12 @@ public enum SyncPlan {
             workspace.spaces[s].symbol = record.symbol
             workspace.spaces[s].color = SpaceColor(rawValue: record.color) ?? workspace.spaces[s].color
             workspace.spaces[s].bookmarks = tree(of: cloud, in: mirror)
+            // A bookmark removed elsewhere lets its tab here go; one only moved keeps it,
+            // its new folder perhaps still to come.
+            workspace.spaces[s].forgetGoneBookmarks()
             applied.unpinnedTabs += applyPinned(mirror, to: &workspace.spaces[s], cloud: cloud, now: now)
+            // A tab whose bookmark came back into the bar leaves its split.
+            workspace.tidySplits(s)
         }
         let known = Set(workspace.spaces.compactMap { $0.cloudID?.uuidString })
         for record in mirror.spaces.values.sorted(by: { $0.name < $1.name }) where !known.contains(record.id) && !deleted.contains(record.id) {
@@ -710,6 +715,7 @@ public enum SyncPlan {
     public static func keepAsNew(_ space: inout Space) {
         space.cloudID = nil
         space.bookmarks = []
+        space.forgetGoneBookmarks()
         for t in space.tabs.indices where space.tabs[t].isPinned {
             space.tabs[t].pinned = nil
             space.tabs[t].cloudID = nil
@@ -757,6 +763,7 @@ public enum SyncPlan {
             var bookmarks = tree(of: match, in: remote)
             _ = Bookmarks.merge(workspace.spaces[s].bookmarks, into: &bookmarks)
             workspace.spaces[s].bookmarks = bookmarks
+            workspace.spaces[s].forgetGoneBookmarks()
             // A pinned tab here at an address pinned there is that one.
             let theirs = remote.pinned.values.filter { $0.space == match }
             for t in workspace.spaces[s].tabs.indices where workspace.spaces[s].tabs[t].isPinned {
@@ -767,6 +774,7 @@ public enum SyncPlan {
             }
             // Theirs come in as pinned tabs; ours that they haven't got stay.
             _ = applyPinnedKeepingOurs(remote, to: &workspace.spaces[s], cloud: match, now: now)
+            workspace.tidySplits(s)
         }
         // iCloud's spaces this device hasn't got.
         var incoming = remote
