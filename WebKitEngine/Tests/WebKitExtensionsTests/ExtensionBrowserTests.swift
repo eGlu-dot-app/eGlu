@@ -7,8 +7,9 @@ import WebKitMacPlugin
 import XCTest
 @testable import WebKitExtensions
 
+/// Also drives the popup and side panel surface tests (ExtensionSurfaceTests).
 @MainActor
-private final class BrowserHost: ExtensionBrowserHost {
+final class BrowserHost: ExtensionBrowserHost {
     @Published var published = ExtensionBrowserWorkspace(spaces: [])
     var workspace: ExtensionBrowserWorkspace { published }
     var live: [UUID: ExtensionBrowserPage] = [:]

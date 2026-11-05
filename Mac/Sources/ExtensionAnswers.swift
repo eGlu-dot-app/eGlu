@@ -2,6 +2,7 @@ import AppKit
 import CryptoKit
 import IOKit.pwr_mgt
 import PadCore
+import WebEngineAppKit
 import WebKit
 import WebKitExtensions
 
@@ -134,7 +135,8 @@ extension Extensions {
             guard let path = (first as? [String: Any])?["url"] as? String
             else { throw Unanswered(why: "No page for the offscreen document") }
             let reasons = Set(((first as? [String: Any])?["reasons"] as? [Any] ?? []).compactMap { $0 as? String })
-            try await ExtensionOffscreen.create(path, reasons: reasons, for: context, in: space)
+            try await ExtensionOffscreen.create(path, reasons: reasons, for: context, in: space,
+                                                scheme: Self.scheme, host: ExtensionHost.shared)
             return nil
         case "offscreen.closeDocument":
             ExtensionOffscreen.close(id, in: space)
@@ -237,8 +239,8 @@ extension Extensions {
         // MARK: which of eGlu's panes shows a page
         case "surface.kind":
             let url = first as? String
-            let shows = { (surface: ExtensionSurface) in
-                surface.extensionID == id && surface.space == space && surface.web.url?.absoluteString == url
+            let shows = { (surface: any WebExtensionSurface) in
+                surface.extensionID == id && surface.space == space && surface.url?.absoluteString == url
             }
             if ExtensionPopups.shared.shown.values.contains(where: { shows($0.surface) }) { return "popup" }
             if ExtensionSidePanels.shared.shown.values.contains(where: { shows($0.surface) }) { return "sidePanel" }
@@ -604,7 +606,7 @@ extension Extensions {
         let surfaces = ExtensionPopups.shared.shown.values.map { ($0.surface, $0.window, "POPUP") }
             + ExtensionSidePanels.shared.shown.values.map { ($0.surface, $0.window, "SIDE_PANEL") }
         for (surface, window, kind) in surfaces where surface.extensionID == id && surface.space == space {
-            guard let url = surface.web.url else { continue }
+            guard let url = surface.url else { continue }
             pages.append(["id": "\(kind.lowercased())-\(window.map { ObjectIdentifier($0).hashValue } ?? 0)", "url": url.absoluteString,
                           "visible": true, "focused": window?.window?.isKeyWindow == true, "kind": kind])
         }

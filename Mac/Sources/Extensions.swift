@@ -2387,6 +2387,17 @@ extension Extensions: WKWebExtensionControllerDelegate {
         }
     }
 
+    func sidePanelDefaultPath(_ id: String, in space: UUID) -> String? {
+        context(id, in: space).flatMap { ExtensionSurface.defaultSidePanelPath(for: $0) }
+    }
+
+    func sidePanelSource(_ id: String, in space: UUID) -> ExtensionPaneSource? {
+        guard let context = context(id, in: space) else { return nil }
+        return ExtensionPaneSource(entry: { ExtensionSurface.sidePanelEntry($0, for: context) },
+                                   makePage: { ExtensionSurface.page($0, for: context, in: $1, scheme: Self.scheme,
+                                                                     tabs: self.tabs, host: ExtensionHost.shared, fallbackID: id) })
+    }
+
     /// The popup, in eGlu's own pane (ExtensionPopup), in the window
     /// showing the tab it was asked for, or the space's front window. At
     /// the page WebKit opened for it, which is the one set for that tab if
@@ -2403,7 +2414,10 @@ extension Extensions: WKWebExtensionControllerDelegate {
                 ?? windows.first(where: { $0.window?.isKeyWindow == true }) ?? windows.first,
               let url = opened.flatMap({ $0.scheme == Self.scheme ? $0 : nil }) ?? popupURL(for: context, in: space)
         else { return completionHandler(nil) }
-        ExtensionPopups.shared.show(url, for: context, in: window)
+        ExtensionPopups.shared.show(in: window) {
+            ExtensionSurface.page(url, for: context, in: window.spaceID, scheme: Self.scheme,
+                                  tabs: tabs, host: ExtensionHost.shared)
+        }
         completionHandler(nil)
     }
 

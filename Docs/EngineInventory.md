@@ -5,27 +5,27 @@
 
 | Section | Count | Files |
 |:---|---:|---:|
-| a. Imports (Mac/) | 14 | 14 |
+| a. Imports (Mac/) | 12 | 12 |
 | a. Imports (Shared/) | 0 | 0 |
 | b. Reach-ins into page view (app) | 19 | 7 |
 | b. Reach-ins (tests) | 191 | 20 |
 | b. Reach-ins (Page.swift self-references) | 0 | 0 |
 | c. WebKit types in declarations | 44 | 14 |
-| c. Declarations (Extension* files) | 153 | 9 |
-| d. Private WebKit API | 35 | 13 |
-| e. Hidden web views | 8 | 6 |
+| c. Declarations (Extension* files) | 108 | 7 |
+| d. Private WebKit API | 32 | 11 |
+| e. Hidden web views | 6 | 4 |
 | f. Script bridges (app) | 2 | 2 |
 | f. Script bridges (WebKit plugin) | 7 | 3 |
 | f. Script bridges (tests) | 4 | 2 |
-| **Total** | **275** | **35** |
+| **Total** | **223** | **33** |
 
 ## Details
 
 ### a. Imports
 
-#### Mac/ (14 lines in 14 files)
+#### Mac/ (12 lines in 12 files)
 - `Mac/Sources/ExtensionAnswers.swift` (1):
-  - L5: `import WebKit`
+  - L6: `import WebKit`
 - `Mac/Sources/ExtensionAsk.swift` (1):
   - L4: `import WebKit`
 - `Mac/Sources/ExtensionAuth.swift` (1):
@@ -37,11 +37,7 @@
 - `Mac/Sources/ExtensionKeys.swift` (1):
   - L4: `import WebKit`
 - `Mac/Sources/ExtensionOffscreen.swift` (1):
-  - L2: `import WebKit`
-- `Mac/Sources/ExtensionPopup.swift` (1):
-  - L4: `import WebKit`
-- `Mac/Sources/ExtensionSidePanel.swift` (1):
-  - L4: `import WebKit`
+  - L3: `import WebKit`
 - `Mac/Sources/ExtensionUpdates.swift` (1):
   - L5: `import WebKit`
 - `Mac/Sources/Extensions.swift` (1):
@@ -63,8 +59,8 @@ _None._
   - L465: `FailureView(message: failure, url: focused ? model.url : page.view.url) {`
   - L483: `if paired, !focused, hovering, let host = page?.view.url?.host() {`
 - `Mac/Sources/ExtensionAnswers.swift` (2):
-  - L260: `let url = ExtensionTab.address(of: page.map { ExtensionHost.shared.snapshot($0) }, for: context, owner: { ExtensionAuth.owner(of: $0) }, else: page?.view.url ?? record.url)`
-  - L263: `var described: [String: Any] = ["url": url?.absoluteString ?? "", "title": page?.view.title ?? record.title]`
+  - L262: `let url = ExtensionTab.address(of: page.map { ExtensionHost.shared.snapshot($0) }, for: context, owner: { ExtensionAuth.owner(of: $0) }, else: page?.view.url ?? record.url)`
+  - L265: `var described: [String: Any] = ["url": url?.absoluteString ?? "", "title": page?.view.title ?? record.title]`
 - `Mac/Sources/Extensions.swift` (1):
   - L2035: `if let tab, ExtensionPolicy.grantsOnClick(window.page?.view.url) { context.userGesturePerformed(in: tab) }`
 - `Mac/Sources/PageWebKit.swift` (1):
@@ -315,8 +311,8 @@ _None._
 - `PadCore/Tests/PadCoreTests/ContentBlockingTests.swift` (1):
   - L479: `let store = try XCTUnwrap(WKContentRuleListStore(url: folder))`
 - `PadCore/Tests/PadCoreTests/ScriptAndPolicyTests.swift` (2):
-  - L364: `extension WKUserContentController {`
-  - L366: `public func addFilterScripts(blocker: String?, scriptlets: String?, appWorld: WKContentWorld) {`
+  - L365: `extension WKUserContentController {`
+  - L367: `public func addFilterScripts(blocker: String?, scriptlets: String?, appWorld: WKContentWorld) {`
 - `Tests/Crashes/CrashRegressionTests.swift` (7):
   - L93: `let page = session.pages.adopt(tab: tab.id, space: space.id, configuration: WKWebViewConfiguration())`
   - L133: `let web = WKWebView(frame: CGRect(x: 0, y: 0, width: 320, height: 480))`
@@ -360,16 +356,16 @@ _None._
   - L70: `let uiDelegate = try XCTUnwrap(objc_getProtocol("WKUIDelegate"))`
   - L339: `func getContextMenu(_ webView: WKWebView, proposedMenu: NSMenu, element: NSObject?, userInfo: Any?,`
 
-#### Declarations in Extension* files (153 lines in 9 files)
+#### Declarations in Extension* files (108 lines in 7 files)
 - `Mac/Sources/ExtensionAnswers.swift` (8):
-  - L46: `func answer(_ api: String, _ args: [Any], context: WKWebExtensionContext, in space: UUID) async throws -> Any? {`
-  - L483: `private func requestAfterClick(_ names: [String], origins: [String], context: WKWebExtensionContext, in space: UUID) async throws -> Bool {`
-  - L490: `let wanted = names.map { WKWebExtension.Permission(rawValue: $0) }`
-  - L491: `let patterns = origins.compactMap { try? WKWebExtension.MatchPattern(string: $0) }`
-  - L503: `let blocked = { (pattern: WKWebExtension.MatchPattern) in`
-  - L535: `static func asks(_ context: WKWebExtensionContext, for permission: String) -> Bool {`
-  - L542: `private func idleOrPower(_ api: String, first: Any?, id: String, context: WKWebExtensionContext, in space: UUID) throws -> Any? {`
-  - L623: `private func describe(_ context: WKWebExtensionContext) -> [String: Any] {`
+  - L47: `func answer(_ api: String, _ args: [Any], context: WKWebExtensionContext, in space: UUID) async throws -> Any? {`
+  - L485: `private func requestAfterClick(_ names: [String], origins: [String], context: WKWebExtensionContext, in space: UUID) async throws -> Bool {`
+  - L492: `let wanted = names.map { WKWebExtension.Permission(rawValue: $0) }`
+  - L493: `let patterns = origins.compactMap { try? WKWebExtension.MatchPattern(string: $0) }`
+  - L505: `let blocked = { (pattern: WKWebExtension.MatchPattern) in`
+  - L537: `static func asks(_ context: WKWebExtensionContext, for permission: String) -> Bool {`
+  - L544: `private func idleOrPower(_ api: String, first: Any?, id: String, context: WKWebExtensionContext, in space: UUID) throws -> Any? {`
+  - L625: `private func describe(_ context: WKWebExtensionContext) -> [String: Any] {`
 - `Mac/Sources/ExtensionAsk.swift` (1):
   - L45: `func askForMore(title: String, from context: WKWebExtensionContext, in space: UUID, window: WindowModel?,`
 - `Mac/Sources/ExtensionAuth.swift` (21):
@@ -397,84 +393,37 @@ _None._
 - `Mac/Sources/ExtensionBar.swift` (1):
   - L941: `let action: WKWebExtension.Action?`
 - `Mac/Sources/ExtensionCapture.swift` (29):
-  - L25: `final class ExtensionCapture: NSObject, WKScriptMessageHandlerWithReply, ObservableObject {`
-  - L53: `static func declares(_ context: WKWebExtensionContext) -> Bool {`
-  - L86: `private func consent(_ context: WKWebExtensionContext, in space: UUID) async -> Bool {`
-  - L132: `func grant(for context: WKWebExtensionContext, in space: UUID, sources: [String]) async -> String {`
-  - L141: `func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage,`
-  - L169: `static func sender(of message: WKScriptMessage) -> (WKWebExtensionContext, UUID, WKWebView)? {`
-  - L180: `private func answer(_ op: String, _ body: [String: Any], context: WKWebExtensionContext, space: UUID, in web: WKWebView) async -> [String: Any] {`
-  - L235: `func displayDecision(for web: WKWebView) -> Int {`
-  - L239: `private func record(in web: WKWebView, token: String, video: Any, window: Bool, context: WKWebExtensionContext) async -> [String: Any] {`
-  - L251: `private func force(in web: WKWebView, token: String, video: Any, context: WKWebExtensionContext) async -> [String: Any] {`
-  - L273: `private func lendAwhile(_ web: WKWebView) {`
-  - L284: `private func host(_ web: WKWebView) async {`
-  - L293: `private func giveBack(_ web: WKWebView) {`
-  - L301: `private func bringForward(_ web: WKWebView) async {`
-  - L326: `weak var web: WKWebView?`
-  - L332: `init(_ web: WKWebView, _ id: String, _ space: UUID?) { self.web = web; self.extensionID = id; self.space = space }`
-  - L340: `func watch(_ web: WKWebView, id: String) {`
-  - L351: `func unwatch(_ web: WKWebView) {`
-  - L364: `func release(_ web: WKWebView) {`
-  - L375: `static func screen(_ web: WKWebView) -> Bool {`
-  - L381: `static func capturing(_ web: WKWebView) -> Bool {`
-  - L421: `private func end(_ web: WKWebView) {`
-  - L442: `static func mockDevices(_ preferences: WKPreferences) {`
-  - L450: `static func set(_ name: String, _ on: Bool, in preferences: WKPreferences) {`
-  - L464: `final class ExtensionPageDelegate: NSObject, WKUIDelegate {`
-  - L465: `weak var next: (any WKUIDelegate)?`
-  - L467: `init(next: any WKUIDelegate) {`
-  - L480: `func displayCapture(_ web: WKWebView, origin: WKSecurityOrigin, frame: WKFrameInfo, systemAudio: Bool,`
-  - L487: `func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin,`
+  - L26: `final class ExtensionCapture: NSObject, WKScriptMessageHandlerWithReply, ObservableObject {`
+  - L54: `static func declares(_ context: WKWebExtensionContext) -> Bool {`
+  - L87: `private func consent(_ context: WKWebExtensionContext, in space: UUID) async -> Bool {`
+  - L133: `func grant(for context: WKWebExtensionContext, in space: UUID, sources: [String]) async -> String {`
+  - L142: `func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage,`
+  - L170: `static func sender(of message: WKScriptMessage) -> (WKWebExtensionContext, UUID, WKWebView)? {`
+  - L181: `private func answer(_ op: String, _ body: [String: Any], context: WKWebExtensionContext, space: UUID, in web: WKWebView) async -> [String: Any] {`
+  - L236: `func displayDecision(for web: WKWebView) -> Int {`
+  - L240: `private func record(in web: WKWebView, token: String, video: Any, window: Bool, context: WKWebExtensionContext) async -> [String: Any] {`
+  - L252: `private func force(in web: WKWebView, token: String, video: Any, context: WKWebExtensionContext) async -> [String: Any] {`
+  - L274: `private func lendAwhile(_ web: WKWebView) {`
+  - L285: `private func host(_ web: WKWebView) async {`
+  - L294: `private func giveBack(_ web: WKWebView) {`
+  - L302: `private func bringForward(_ web: WKWebView) async {`
+  - L327: `weak var web: WKWebView?`
+  - L333: `init(_ web: WKWebView, _ id: String, _ space: UUID?) { self.web = web; self.extensionID = id; self.space = space }`
+  - L341: `func watch(_ web: WKWebView, id: String) {`
+  - L352: `func unwatch(_ web: WKWebView) {`
+  - L365: `func release(_ web: WKWebView) {`
+  - L376: `static func screen(_ web: WKWebView) -> Bool {`
+  - L382: `static func capturing(_ web: WKWebView) -> Bool {`
+  - L422: `private func end(_ web: WKWebView) {`
+  - L443: `static func mockDevices(_ preferences: WKPreferences) {`
+  - L451: `static func set(_ name: String, _ on: Bool, in preferences: WKPreferences) {`
+  - L465: `final class ExtensionPageDelegate: NSObject, WKUIDelegate {`
+  - L466: `weak var next: (any WKUIDelegate)?`
+  - L468: `init(next: any WKUIDelegate) {`
+  - L481: `func displayCapture(_ web: WKWebView, origin: WKSecurityOrigin, frame: WKFrameInfo, systemAudio: Bool,`
+  - L488: `func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin,`
 - `Mac/Sources/ExtensionKeys.swift` (1):
   - L39: `func apply(to context: WKWebExtensionContext) {`
-- `Mac/Sources/ExtensionOffscreen.swift` (23):
-  - L13: `final class ExtensionOffscreen: NSObject, WKNavigationDelegate, WKUIDelegate, WKWebExtensionTab {`
-  - L23: `static func create(_ path: String, reasons: Set<String> = [], for context: WKWebExtensionContext, in space: UUID) async throws {`
-  - L30: `let preferences = configuration.preferences.copy() as? WKPreferences`
-  - L66: `static func reasons(of web: WKWebView) -> Set<String>? {`
-  - L94: `private weak var extensionContext: WKWebExtensionContext?`
-  - L98: `private let web: WKWebView`
-  - L113: `private init(context: WKWebExtensionContext, space: UUID, url: URL, key: String, configuration: WKWebViewConfiguration) {`
-  - L157: `func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {`
-  - L168: `func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,`
-  - L176: `func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,`
-  - L183: `func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {`
-  - L187: `func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {`
-  - L194: `func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin,`
-  - L224: `func displayCapture(_ web: WKWebView, origin: WKSecurityOrigin, frame: WKFrameInfo, systemAudio: Bool,`
-  - L229: `func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {`
-  - L233: `func window(for context: WKWebExtensionContext) -> (any WKWebExtensionWindow)? { nil }`
-  - L234: `func indexInWindow(for context: WKWebExtensionContext) -> Int { NSNotFound }`
-  - L235: `func webView(for context: WKWebExtensionContext) -> WKWebView? { web }`
-  - L236: `func title(for context: WKWebExtensionContext) -> String? { web.title }`
-  - L237: `func url(for context: WKWebExtensionContext) -> URL? { web.url }`
-  - L238: `func isLoadingComplete(for context: WKWebExtensionContext) -> Bool { !web.isLoading }`
-  - L239: `func isSelected(for context: WKWebExtensionContext) -> Bool { false }`
-  - L240: `func close(for context: WKWebExtensionContext) async throws { close(error: Refused(why: "The offscreen document was closed.")) }`
-- `Mac/Sources/ExtensionPopup.swift` (22):
-  - L13: `final class ExtensionSurface: NSObject, WKWebExtensionTab, WKUIDelegate, WKNavigationDelegate {`
-  - L16: `let web: WKWebView`
-  - L17: `weak var context: WKWebExtensionContext?`
-  - L20: `private weak var controller: WKWebExtensionController?`
-  - L26: `init?(_ url: URL, for context: WKWebExtensionContext, in space: UUID) {`
-  - L116: `func webViewDidClose(_ webView: WKWebView) { onClose?() }`
-  - L120: `func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,`
-  - L131: `func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,`
-  - L143: `func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin,`
-  - L152: `func displayCapture(_ web: WKWebView, origin: WKSecurityOrigin, frame: WKFrameInfo, systemAudio: Bool,`
-  - L159: `func window(for context: WKWebExtensionContext) -> (any WKWebExtensionWindow)? { Extensions.shared.tabs.window(for: space) }`
-  - L160: `func indexInWindow(for context: WKWebExtensionContext) -> Int { NSNotFound }`
-  - L161: `func webView(for context: WKWebExtensionContext) -> WKWebView? { web }`
-  - L162: `func title(for context: WKWebExtensionContext) -> String? { web.title }`
-  - L163: `func url(for context: WKWebExtensionContext) -> URL? { web.url }`
-  - L164: `func isLoadingComplete(for context: WKWebExtensionContext) -> Bool { !web.isLoading }`
-  - L165: `func isSelected(for context: WKWebExtensionContext) -> Bool { false }`
-  - L166: `func close(for context: WKWebExtensionContext) async throws { onClose?() }`
-  - L209: `func show(_ url: URL, for context: WKWebExtensionContext, in window: WindowModel) {`
-  - L524: `let web: WKWebView`
-  - L526: `func makeNSView(context: Context) -> WKWebView { web }`
-  - L527: `func updateNSView(_ view: WKWebView, context: Context) {}`
 - `Mac/Sources/Extensions.swift` (47):
   - L107: `private var controllers: [UUID: WKWebExtensionController] = [:]`
   - L111: `private(set) var contexts: [UUID: [String: WKWebExtensionContext]] = [:]`
@@ -519,36 +468,31 @@ _None._
   - L2340: `func webExtensionController(_ controller: WKWebExtensionController, promptForPermissions permissions: Set<WKWebExtension.Permission>,`
   - L2364: `func webExtensionController(_ controller: WKWebExtensionController, promptForPermissionToAccess urls: Set<URL>,`
   - L2370: `func webExtensionController(_ controller: WKWebExtensionController, promptForPermissionMatchPatterns matchPatterns: Set<WKWebExtension.MatchPattern>,`
-  - L2395: `func webExtensionController(_ controller: WKWebExtensionController, presentActionPopup action: WKWebExtension.Action,`
-  - L2410: `func webExtensionController(_ controller: WKWebExtensionController, didUpdate action: WKWebExtension.Action,`
-  - L2418: `func webExtensionController(_ controller: WKWebExtensionController, sendMessage message: Any, toApplicationWithIdentifier applicationIdentifier: String?,`
-  - L2452: `func webExtensionController(_ controller: WKWebExtensionController, connectUsing port: WKWebExtension.MessagePort,`
+  - L2406: `func webExtensionController(_ controller: WKWebExtensionController, presentActionPopup action: WKWebExtension.Action,`
+  - L2424: `func webExtensionController(_ controller: WKWebExtensionController, didUpdate action: WKWebExtension.Action,`
+  - L2432: `func webExtensionController(_ controller: WKWebExtensionController, sendMessage message: Any, toApplicationWithIdentifier applicationIdentifier: String?,`
+  - L2466: `func webExtensionController(_ controller: WKWebExtensionController, connectUsing port: WKWebExtension.MessagePort,`
 
-### d. Private WebKit API (35 lines in 13 files)
+### d. Private WebKit API (32 lines in 11 files)
 - `Mac/Sources/ExtensionAnswers.swift` (4):
-  - L33: `let folder = folder.appendingPathComponent("_eglu", isDirectory: true)`
-  - L341: `folder.appendingPathComponent(id, isDirectory: true).appendingPathComponent("_eglu", isDirectory: true)`
-  - L390: `let dir = folder.appendingPathComponent("_eglu", isDirectory: true)`
-  - L424: `let dir = folder.appendingPathComponent("_eglu", isDirectory: true)`
+  - L34: `let folder = folder.appendingPathComponent("_eglu", isDirectory: true)`
+  - L343: `folder.appendingPathComponent(id, isDirectory: true).appendingPathComponent("_eglu", isDirectory: true)`
+  - L392: `let dir = folder.appendingPathComponent("_eglu", isDirectory: true)`
+  - L426: `let dir = folder.appendingPathComponent("_eglu", isDirectory: true)`
 - `Mac/Sources/ExtensionAuth.swift` (3):
   - L348: `@objc(_webView:requestDisplayCapturePermissionForOrigin:initiatedByFrame:withSystemAudio:decisionHandler:)`
   - L354: `@objc(_webView:requestGeolocationPermissionForOrigin:initiatedByFrame:decisionHandler:)`
   - L360: `@objc(_webView:requestNotificationPermissionForSecurityOrigin:decisionHandler:)`
 - `Mac/Sources/ExtensionCapture.swift` (9):
-  - L336: `private static let keys = ["cameraCaptureState", "microphoneCaptureState", "_displayCaptureState"]`
-  - L344: `for path in Self.keys where path != "_displayCaptureState" || web.responds(to: NSSelectorFromString(path)) {`
-  - L354: `for path in Self.keys where path != "_displayCaptureState" || web.responds(to: NSSelectorFromString(path)) {`
-  - L376: `guard web.responds(to: NSSelectorFromString("_displayCaptureState")) else { return false }`
-  - L377: `return (web.value(forKey: "_displayCaptureState") as? Int ?? 0) != 0`
-  - L422: `let selector = NSSelectorFromString("_setDisplayCaptureState:completionHandler:")`
-  - L444: `set("_setMockCaptureDevicesEnabled:", true, in: preferences)`
-  - L445: `set("_setGetUserMediaRequiresFocus:", false, in: preferences)`
-  - L479: `@objc(_webView:requestDisplayCapturePermissionForOrigin:initiatedByFrame:withSystemAudio:decisionHandler:)`
-- `Mac/Sources/ExtensionOffscreen.swift` (2):
-  - L37: `if reasons.contains("USER_MEDIA") { ExtensionCapture.set("_setGetUserMediaRequiresFocus:", false, in: preferences) }`
-  - L223: `@objc(_webView:requestDisplayCapturePermissionForOrigin:initiatedByFrame:withSystemAudio:decisionHandler:)`
-- `Mac/Sources/ExtensionPopup.swift` (1):
-  - L151: `@objc(_webView:requestDisplayCapturePermissionForOrigin:initiatedByFrame:withSystemAudio:decisionHandler:)`
+  - L337: `private static let keys = ["cameraCaptureState", "microphoneCaptureState", "_displayCaptureState"]`
+  - L345: `for path in Self.keys where path != "_displayCaptureState" || web.responds(to: NSSelectorFromString(path)) {`
+  - L355: `for path in Self.keys where path != "_displayCaptureState" || web.responds(to: NSSelectorFromString(path)) {`
+  - L377: `guard web.responds(to: NSSelectorFromString("_displayCaptureState")) else { return false }`
+  - L378: `return (web.value(forKey: "_displayCaptureState") as? Int ?? 0) != 0`
+  - L423: `let selector = NSSelectorFromString("_setDisplayCaptureState:completionHandler:")`
+  - L445: `set("_setMockCaptureDevicesEnabled:", true, in: preferences)`
+  - L446: `set("_setGetUserMediaRequiresFocus:", false, in: preferences)`
+  - L480: `@objc(_webView:requestDisplayCapturePermissionForOrigin:initiatedByFrame:withSystemAudio:decisionHandler:)`
 - `Mac/Sources/Extensions.swift` (1):
   - L1690: `let kept = ["\(version).zip", version, "_eglu"]`
 - `Mac/Sources/Window.swift` (1):
@@ -574,13 +518,9 @@ _None._
   - L251: `.filter { $0.hasPrefix("webView") || $0.hasPrefix("_webView") })`
   - L338: `@objc(_webView:getContextMenuFromProposedMenu:forElement:userInfo:completionHandler:)`
 
-### e. Hidden web views (8 lines in 6 files)
+### e. Hidden web views (6 lines in 4 files)
 - `Mac/Sources/ExtensionAuth.swift` (1):
   - L208: `let view = WKWebView(frame: CGRect(x: 0, y: 0, width: 800, height: 600), configuration: config)`
-- `Mac/Sources/ExtensionOffscreen.swift` (1):
-  - L119: `web = WKWebView(frame: CGRect(x: 0, y: 0, width: 800, height: 600), configuration: configuration)`
-- `Mac/Sources/ExtensionPopup.swift` (1):
-  - L32: `web = WKWebView(frame: NSRect(x: 0, y: 0, width: 25, height: 25), configuration: configuration)`
 - `Mac/Sources/Extensions.swift` (1):
   - L513: `let pages = configuration.webViewConfiguration ?? WKWebViewConfiguration()`
 - `Tests/Crashes/CrashRegressionTests.swift` (3):

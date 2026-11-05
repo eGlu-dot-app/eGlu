@@ -267,23 +267,16 @@ final class PolicyTests: XCTestCase {
     /// Mac, PageWebKit.swift, the bridge for the files still on WebKit,
     /// calls only an extension's own page, for its recording. So may WebKitExtensions'
     /// ExtensionBlankPage.swift, an empty page of the app's own at a removed
-    /// extension's address, where what it kept is cleared; and the Mac's
-    /// ExtensionPopup.swift, whose views (an extension's popup and side
+    /// extension's address, where what it kept is cleared; and the runtime's
+    /// ExtensionSurface.swift, whose views (an extension's popup and side
     /// panel) only ever load that extension's own pages.
     func testOnlyPageSwiftCallsIntoPagesAndItAsksHandsOffFirst() throws {
         let sharedPage = "PageShared.swift"
         let blank = "ExtensionBlankPage.swift"
-        let surface = "ExtensionPopup.swift"
+        let surface = "ExtensionSurface.swift"
         let bridge = "PageWebKit.swift"
         for folder in ["App", "Mac", "Shared"] {
             let swift = try sources(in: folder, ending: ".swift")
-            if let page = swift.first(where: { $0.0 == surface })?.1 {
-                XCTAssertTrue(page.contains("guard url.scheme == Extensions.scheme, url.host() == context.uniqueIdentifier"),
-                              "\(surface)'s views must load only their extension's own pages")
-                for load in ["loadHTMLString", "loadFileURL", "addUserScript"] {
-                    XCTAssertFalse(page.contains(load), "\(surface) must never load a site or add a script to one")
-                }
-            }
             if folder == "Mac", let page = swift.first(where: { $0.0 == bridge })?.1 {
                 XCTAssertEqual(page.components(separatedBy: "guard web.url?.scheme?.lowercased() == Extensions.scheme").count - 1, 2,
                                "\(bridge)'s two calls must each be into an extension's own page")
@@ -294,7 +287,7 @@ final class PolicyTests: XCTestCase {
                 }
             }
             let pageFile = folder == "Shared" ? sharedPage : "Page.swift"
-            for (name, text) in swift where name != pageFile && name != surface && !(folder == "Mac" && name == bridge) {
+            for (name, text) in swift where name != pageFile && !(folder == "Mac" && name == bridge) {
                 for call in ["evaluateJavaScript", "callAsyncJavaScript", "addUserScript"] {
                     XCTAssertFalse(text.contains(call), "\(folder)/\(name) calls \(call); calls into pages go through Page.swift")
                 }
@@ -307,6 +300,14 @@ final class PolicyTests: XCTestCase {
         let filterScripts = "WebKitFilterScripts.swift"
         let pageScripts = "WebKitPageScripts.swift"
         let support = try sources(in: "WebKitEngine/Sources", ending: ".swift")
+        do {
+            let page = try XCTUnwrap(support.first(where: { $0.0 == surface })?.1, "WebKitEngine has no \(surface)")
+            XCTAssertTrue(page.contains("guard url.scheme == scheme, url.host() == extensionID"),
+                          "\(surface)'s views must load only their extension's own pages")
+            for load in ["loadHTMLString", "loadFileURL", "addUserScript"] {
+                XCTAssertFalse(page.contains(load), "\(surface) must never load a site or add a script to one")
+            }
+        }
         do {
             let page = try XCTUnwrap(support.first(where: { $0.0 == blank })?.1, "WebKitEngine has no \(blank)")
             XCTAssertTrue(page.contains("loadHTMLString(\"<!doctype html>\", baseURL: base)") && page.contains("base.scheme == scheme"),
@@ -327,7 +328,7 @@ final class PolicyTests: XCTestCase {
                           "ExtensionTrial.swift must load only the extension's own pages")
             XCTAssertFalse(trial.contains("loadFileURL"), "ExtensionTrial.swift must never load a file")
         }
-        for (name, text) in support where name != ownPage && name != hiddenPage && name != filterScripts && name != pageScripts && name != blank && name != "ExtensionTrial.swift" {
+        for (name, text) in support where name != ownPage && name != hiddenPage && name != filterScripts && name != pageScripts && name != blank && name != surface && name != "ExtensionTrial.swift" {
             for call in ["evaluateJavaScript", "callAsyncJavaScript", "addUserScript"] {
                 XCTAssertFalse(text.contains(call), "WebKitEngine's \(name) calls \(call)")
             }

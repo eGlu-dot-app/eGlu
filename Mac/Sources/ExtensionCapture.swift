@@ -1,6 +1,7 @@
 import AppKit
 import PadCore
 import WebKit
+import WebKitExtensions
 
 /// Screen recording for extensions: Loom, Screencastify, Awesome Screenshot.
 ///
