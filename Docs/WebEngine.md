@@ -591,7 +591,7 @@ These tests import contracts and can answer their interfaces without importing W
 The composed runtime fake deliberately traps on unused operations. These are conformance and focused behavior examples, not production implementations. The surrounding
 `WebKitEngine` test target still depends on WebKit implementations. `WebKitMacPageFactoryTests` uses real WebKit types with injected nonpersistent stores and callbacks. The hosted
 Mac page tests also test WebKit pages and use `Tests/MacPage/PageWebKitForTests.swift` for direct inspection. No complete fake `WebMacPage` build configuration replacing WebKit is
-present in `project.yml`. Thus the plan's full fake-engine app-build goal is not established by these package fakes.
+present in `project.yml`. Thus the plan's full fake-engine app-build goal is not established by these package fakes. `Docs/FakeEngineBuild.md` specifies that build; it is not built.
 
 ### What is not promised
 
