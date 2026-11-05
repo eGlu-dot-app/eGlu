@@ -1,8 +1,6 @@
 import AppKit
 import PadCore
 import SwiftUI
-import WebKit
-import WebKitExtensions
 
 /// The keys the person gave extensions' commands in Settings › Extensions,
 /// by extension and command, the same in every space; and what each
@@ -33,13 +31,9 @@ final class ExtensionKeys: ObservableObject {
         "\(id)/\(command)"
     }
 
-    /// At load: WebKit's command gets the person's key, or none. What the
-    /// manifest suggests is read from the manifest, never from the command,
-    /// whose key eGlu changes.
-    func apply(to context: WKWebExtensionContext) {
-        WebKitExtensionKeys.apply(to: context, given: { given[$0] }) { name, suggestion in
-            if suggested[name] != suggestion { suggested[name] = suggestion }
-        }
+    /// The runtime reads the manifest's suggestion before applying a key.
+    func suggest(_ suggestion: ExtensionKey?, for name: String) {
+        if suggested[name] != suggestion { suggested[name] = suggestion }
     }
 
     /// Gives `key` to a command, or takes its key back (nil); in every space
@@ -56,7 +50,7 @@ final class ExtensionKeys: ObservableObject {
         }
         UserDefaults.standard.set(given.mapValues(\.stored), forKey: Self.defaultsKey)
         for owner in touched {
-            for context in Extensions.shared.contexts.values.compactMap({ $0[owner] }) { apply(to: context) }
+            Extensions.shared.applyKeys(of: owner)
         }
     }
 
@@ -86,7 +80,7 @@ final class ExtensionKeys: ObservableObject {
     /// which an update may have changed since it was last loaded.
     func suggestion(_ name: String) -> ExtensionKey? {
         let id = String(name.prefix { $0 != "/" })
-        return Extensions.shared.contexts.values.contains { $0[id] != nil } ? suggested[name] : declaredSuggestions[name]
+        return Extensions.shared.isLoaded(id) ? suggested[name] : declaredSuggestions[name]
     }
 
     /// An extension's keys, as it goes from eGlu.
@@ -127,11 +121,21 @@ final class ExtensionKeys: ObservableObject {
     }
 
     static func modifiers(_ flags: NSEvent.ModifierFlags) -> ExtensionKey.Modifiers {
-        WebKitExtensionKeys.modifiers(flags)
+        var out: ExtensionKey.Modifiers = []
+        if flags.contains(.command) { out.insert(.command) }
+        if flags.contains(.option) { out.insert(.option) }
+        if flags.contains(.control) { out.insert(.control) }
+        if flags.contains(.shift) { out.insert(.shift) }
+        return out
     }
 
     static func flags(_ modifiers: ExtensionKey.Modifiers) -> NSEvent.ModifierFlags {
-        WebKitExtensionKeys.flags(modifiers)
+        var out: NSEvent.ModifierFlags = []
+        if modifiers.contains(.command) { out.insert(.command) }
+        if modifiers.contains(.option) { out.insert(.option) }
+        if modifiers.contains(.control) { out.insert(.control) }
+        if modifiers.contains(.shift) { out.insert(.shift) }
+        return out
     }
 
     /// The menu line's key, for a command that has one.

@@ -4,6 +4,8 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+- On the Mac, extensions' toolbar buttons, their menu commands and the keyboard shortcuts given to them reach the interface as plain values, with WebKit's objects kept in the WebKit plugin: the seventh part of step 12 of keeping eGlu's interface apart from its engines (`Docs/EngineSplitPlan.md`). Nothing changes in use.
+
 - On the Mac, extensions' popup and side panel pages and offscreen documents live in `WebKitExtensions`; the app keeps their panes, sizing timers, focus and permission questions over neutral views: the sixth part of step 12 of keeping eGlu's interface apart from its engines (`Docs/EngineSplitPlan.md`). Nothing changes in use.
 
 - On the Mac, extensions' tab and window adapters live in `WebKitExtensions` and ask an app-owned browser host for the workspace, live pages and popup windows: the fifth part of step 12 of keeping eGlu's interface apart from its engines (`Docs/EngineSplitPlan.md`). Nothing changes in use.

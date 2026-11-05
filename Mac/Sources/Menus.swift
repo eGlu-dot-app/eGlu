@@ -319,7 +319,7 @@ struct BrowserCommands: Commands {
                 ForEach(extensions.commands(in: window.spaceID), id: \.id) { entry in
                     Section(entry.name) {
                         ForEach(entry.commands, id: \.id) { command in
-                            Button(command.title) { extensions.perform(command, of: entry.id, in: window.spaceID) }
+                            Button(command.title) { extensions.perform(command.identity, of: entry.id, in: window.spaceID) }
                                 .keyboardShortcut(extensionKeys.given[ExtensionKeys.name(entry.id, command.id)].flatMap(ExtensionKeys.shortcut))
                         }
                     }

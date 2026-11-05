@@ -3,6 +3,7 @@ import Combine
 import IOKit.pwr_mgt
 import PadCore
 import UniformTypeIdentifiers
+import WebEngineAppKit
 import WebKit
 import WebKitExtensions
 import WebKitSupport
@@ -581,7 +582,7 @@ final class Extensions: NSObject, ObservableObject {
             watch(context, item, in: space)
             try controller(for: space).load(context)
             // Its commands' keys: the person's, or none (ExtensionKeys).
-            ExtensionKeys.shared.apply(to: context)
+            applyKeys(to: context)
             contexts[space, default: [:]][item.id] = context
             seen = firstLook(at: context, package, archive: Self.package(item.id, item.version), id: item.id)
         } catch {
@@ -1293,15 +1294,36 @@ final class Extensions: NSObject, ObservableObject {
     }
 
     /// The commands each extension on in the space offers, for the menu bar.
-    func commands(in space: UUID) -> [(name: String, id: String, commands: [WKWebExtension.Command])] {
+    func commands(in space: UUID) -> [(name: String, id: String, commands: [WebExtensionCommand])] {
         on(in: space).compactMap { item in
             guard let context = contexts[space]?[item.id], !context.commands.isEmpty else { return nil }
-            return (item.name, item.id, context.commands)
+            return (item.name, item.id, WebKitExtensionCommands.commands(in: context))
         }
     }
 
-    func perform(_ command: WKWebExtension.Command, of id: String, in space: UUID) {
-        contexts[space]?[id]?.performCommand(command)
+    func perform(_ command: WebExtensionCommand.Identity, of id: String, in space: UUID) {
+        guard let context = contexts[space]?[id] else { return }
+        WebKitExtensionCommands.perform(command, in: context)
+    }
+
+    /// Settings uses the first loaded context, even when it has no commands.
+    func commands(of id: String) -> [WebExtensionCommand]? {
+        contexts.values.compactMap { $0[id] }.first.map { WebKitExtensionCommands.commands(in: $0) }
+    }
+
+    func isLoaded(_ id: String) -> Bool {
+        contexts.values.contains { $0[id] != nil }
+    }
+
+    func applyKeys(of id: String) {
+        for context in contexts.values.compactMap({ $0[id] }) { applyKeys(to: context) }
+    }
+
+    private func applyKeys(to context: WKWebExtensionContext) {
+        let keys = ExtensionKeys.shared
+        WebKitExtensionKeys.apply(to: context, given: { keys.given[$0] }) { name, suggestion in
+            keys.suggest(suggestion, for: name)
+        }
     }
 
     /// One that can't run on this Mac: it couldn't start, or the tried list
@@ -1393,9 +1415,10 @@ final class Extensions: NSObject, ObservableObject {
         ExtensionAccessDescription.lines(for: installed.first { $0.id == id }?.granted ?? [])
     }
 
-    func action(for id: String, in window: WindowModel) -> WKWebExtension.Action? {
-        guard let context = contexts[window.spaceID]?[id] else { return nil }
-        return context.action(for: window.tabID.map { tabs.tab($0, in: window.spaceID) })
+    func action(for id: String, in window: WindowModel, iconSize: CGSize? = nil) -> WebExtensionAction? {
+        guard let context = contexts[window.spaceID]?[id],
+              let action = context.action(for: window.tabID.map { tabs.tab($0, in: window.spaceID) }) else { return nil }
+        return WebKitExtensionActions.look(of: action, iconSize: iconSize)
     }
 
     /// Its icon wherever it is loaded, or from its package when it is on
