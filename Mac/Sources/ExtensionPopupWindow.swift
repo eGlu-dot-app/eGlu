@@ -1,12 +1,7 @@
-import AppKit
-import WebKitExtensions
+import WebEngineAppKit
 
-extension ExtensionPopupWindow {
-    nonisolated static func frame(asked: CGRect, on screen: CGRect) -> CGRect? {
-        ExtensionHost.popupFrame(asked: asked, on: screen)
-    }
-
-    static func showing(_ page: Page) -> ExtensionPopupWindow? {
-        showing(page.enginePage)
+extension Extensions {
+    func popupShows(_ page: Page) -> Bool {
+        adapters.popupShows(page.enginePage)
     }
 }

@@ -51,7 +51,10 @@ final class Extensions: NSObject, ObservableObject {
     /// The popup an extension set for itself (action.setPopup), by
     /// "space/id"; "" for none. One set for a single tab isn't followed
     /// yet: WebKit doesn't say which of its tab numbers is which tab.
-    var popupPaths: [String: String] = [:]
+    var popupPaths: [String: String] {
+        get { Self.browserAnswers.popupPaths }
+        set { Self.browserAnswers.popupPaths = newValue }
+    }
     private var storeWatch: AnyCancellable?
     private var updateClock: Timer?
     /// An update check under way (ExtensionUpdates).
@@ -262,6 +265,12 @@ final class Extensions: NSObject, ObservableObject {
                              othersPage: { Extensions.othersPage($0, for: $1) },
                              refusal: { Extensions.refusal(opening: $0, by: $1) },
                              heldOwner: { ExtensionAuth.owner(of: $0) })
+
+    lazy var adapters: any WebExtensionAdapters = WebKitExtensionAdapters(tabs: tabs)
+    private lazy var diagnostics: any WebExtensionDiagnostics = WebKitExtensionDiagnostics(host: ExtensionHost.shared,
+        table: { Self.apiTable.table }, contexts: { [unowned self] in self.contexts },
+        prepared: { Self.prepared($0, $1) }, records: { [unowned self] in self.errorEvidence.records(of: $0) },
+        scheme: Self.scheme)
 
     /// The scheme of extensions' own pages, as Chrome's.
     static let scheme = WebKitExtensionControllers.scheme
@@ -965,16 +974,20 @@ final class Extensions: NSObject, ObservableObject {
 
     /// The popup an extension's button opens: the one it set, or its manifest's.
     func popupURL(for context: WKWebExtensionContext, in space: UUID) -> URL? {
-        let key = "\(space.uuidString)/\(context.uniqueIdentifier)"
-        let manifest = context.webExtension.manifest
-        let action = (manifest["action"] ?? manifest["browser_action"]) as? [String: Any]
-        let path = popupPaths[key] ?? action?["default_popup"] as? String
-        guard let path, !path.isEmpty else { return nil }
-        // Relative to the extension, keeping a query it may carry.
-        return URL(string: path, relativeTo: context.baseURL)?.absoluteURL
+        Self.browserAnswers.popupURL(for: context, in: space)
     }
 
     // MARK: Installing
+
+    lazy var installExecution: any WebExtensionInstallExecution = WebKitExtensionInstallExecution(
+        host: ExtensionHost.shared, storage: Self.storage, controllers: controllerRuntime,
+        forgetChecks: { [unowned self] in self.compatibility.forgetInstallChecks($0) },
+        forgetIcon: { [unowned self] in self.metadata.forgetIcon($0) },
+        workersChanged: { Self.workersChanged() }, scheme: Self.scheme)
+
+    func noteInstallFacts(_ facts: WebExtensionManifestFacts?, of id: String) {
+        note(facts: facts, of: id)
+    }
 
     enum Refused: LocalizedError {
         case download(Int)
@@ -994,7 +1007,27 @@ final class Extensions: NSObject, ObservableObject {
             case .notChecked(let reason): return reason
             }
         }
+
+        init(_ refusal: WebExtensionInstallRefusal) {
+            switch refusal {
+            case .download(let code): self = .download(code)
+            case .nothing: self = .nothing
+            case .notAPackage: self = .notAPackage
+            case .noManifest: self = .noManifest
+            case .badVersion: self = .badVersion
+            case .notChecked(let reason): self = .notChecked(reason)
+            }
+        }
     }
+
+    static let largestFolder = WebKitExtensionInstallExecution.largestFolder
+    static let mostFiles = WebKitExtensionInstallExecution.mostFiles
+
+    static func zipped(_ folder: URL) async throws -> Data {
+        try await WebKitExtensionInstallExecution.zipFolder(folder, refused: { Refused($0) })
+    }
+
+    static func sha256(_ data: Data) -> String { WebKitExtensionInstallExecution.checksum(data) }
 
     /// The extension a Chrome Web Store page is about, fetched from the store,
     /// checked, and offered to the person.
@@ -1054,18 +1087,7 @@ final class Extensions: NSObject, ObservableObject {
 
     /// `from`: an update reply's address, used only when it is Google's own.
     func download(_ id: String, from address: URL? = nil) async throws -> Data {
-        let url = address.flatMap { $0.scheme == "https" && (ExtensionStore.isPackageHost($0) || $0.host() == "clients2.google.com") ? $0 : nil }
-        var request = URLRequest(url: url ?? ExtensionStore.packageURL(for: id))
-        request.timeoutInterval = 60
-        let (data, response) = try await URLSession.shared.data(for: request)
-        if let http = response as? HTTPURLResponse {
-            guard (200..<300).contains(http.statusCode) else { throw Refused.download(http.statusCode) }
-            guard let final = http.url, ExtensionStore.isPackageHost(final) || final.host() == "clients2.google.com" else {
-                throw Refused.notAPackage
-            }
-        }
-        guard !data.isEmpty else { throw Refused.nothing }
-        return data
+        try await installExecution.download(id, from: address)
     }
 
     /// The install sheet: what it is, what it asks for, where it goes and
@@ -1073,12 +1095,7 @@ final class Extensions: NSObject, ObservableObject {
     func offer(_ archive: Data, id: String, source: Installed.Source, in window: WindowModel?, asking: Bool = true,
                        folder: String? = nil, space: UUID? = nil, startingAccess: Installed.SiteAccess = .allSites,
                        host: NSWindow? = nil) async throws {
-        guard let manifestData = ZipFile.file(in: archive, matching: { $0 == "manifest.json" }) else { throw Refused.noManifest }
-        let manifest = try ExtensionManifest(json: manifestData)
-        // Both name files: only what Chrome itself takes, 32 letters and a
-        // version of numbers and dots, so neither can lead out of the folder.
-        guard ExtensionID.isValid(id) else { throw Refused.notAPackage }
-        guard let version = ExtensionVersion(manifest.version)?.description else { throw Refused.badVersion }
+        let (manifest, version) = try installExecution.describeOffer(archive, id: id)
         if let there = installed.first(where: { $0.id == id }) {
             // A store extension's place is the store's, with Google's proof:
             // a file signed by its developer's key could be an older one, or
@@ -1090,16 +1107,15 @@ final class Extensions: NSObject, ObservableObject {
                 throw Refused.notChecked(String(localized: "\u{201C}\(there.name)\u{201D} \(there.version) is installed; this is an older version, \(version)."))
             }
         }
-        let name = Self.name(in: archive, manifest: manifest, fallback: id)
+        let name = manifest.name(fallback: id)
         let space = space ?? window?.spaceID ?? Session.shared.workspace.spaces[0].id
         guard asking else {
             try keep(archive, id: id, name: name, version: version, source: source, access: .allSites, spaces: [space],
                      granted: manifest.grants, folder: folder)
             return
         }
-        let summary = ExtensionAccessSummary(permissions: manifest.permissions,
-                                             sites: manifest.hostPermissions + manifest.contentScripts.flatMap(\.matches))
-        let image = Self.icon(in: archive, manifest: manifest)
+        let summary = ExtensionAccessSummary(permissions: manifest.permissions, sites: manifest.sites)
+        let image = manifest.icon()
         let choice: ExtensionInstallSheet.Choice? = await ask(in: window, host: host) { answer in
             ExtensionInstallSheet(name: name, image: image, source: source, summary: summary,
                                   spaces: Session.shared.workspace.spaces, access: startingAccess, in: space, answer: answer)
@@ -1115,20 +1131,7 @@ final class Extensions: NSObject, ObservableObject {
     @discardableResult
     func keep(_ archive: Data, id: String, name: String, version: String, source: Installed.Source,
                       access: Installed.SiteAccess, spaces: [UUID], granted: [String]?, folder: String? = nil) throws -> Task<Bool, Never> {
-        // A new package, even at the same version (Reload): its code read
-        // and pages tried afresh, and its worker too at the next launch.
-        forgetCheck(id)
-        scanned[id] = nil
-        scanning[id] = nil
-        // And its icon read again, which a new version may have changed.
-        metadata.forgetIcon(id)
-        Self.workersChanged()
-        let file = Self.package(id, version)
-        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try archive.write(to: file, options: .atomic)
-        let manifest = ZipFile.file(in: archive, matching: { $0 == "manifest.json" }).flatMap { try? ExtensionManifest(json: $0) }
-        let resolvedName = manifest.map { Self.name(in: archive, manifest: $0, fallback: name) } ?? name
-        note(manifest, of: id)
+        let resolvedName = try installExecution.keepArchive(archive, id: id, name: name, version: version)
         // Its cookies, as the person chose them for the version there was.
         let item = Installed(id: id, name: resolvedName, version: version, source: source, siteAccess: access, spaces: spaces,
                              granted: granted, folder: folder, readsCookies: installed.first { $0.id == id }?.readsCookies)
@@ -1137,25 +1140,23 @@ final class Extensions: NSObject, ObservableObject {
         // never takes another's place.
         if let old = installed.firstIndex(where: { $0.id == id }) {
             let previous = installed[old]
-            for space in previous.spaces { unload(id, in: space) }
+            installExecution.unload(WebExtensionInstallation(previous))
             installed[old] = item
             saveList()
             return Task {
-                var loaded = spaces.isEmpty
-                for space in spaces where await load(item, in: space) { loaded = true }
-                guard installed.first(where: { $0.id == id }) == item else { return false }
-                if loaded || previous.version == version {
-                    removeOtherVersions(of: id, keeping: version)
-                    return loaded
-                } else if let index = installed.firstIndex(where: { $0.id == id }) {
-                    // Loaded nowhere: the version there was, back as it was.
-                    NSLog("eGlu: extension \(id) \(version) didn't load; \(previous.version) is back")
-                    installed[index] = previous
-                    saveList()
-                    for space in previous.spaces { await load(previous, in: space) }
-                    removeOtherVersions(of: id, keeping: previous.version)
+                await installExecution.loadReplacement(WebExtensionInstallation(item)) { loaded in
+                    guard installed.first(where: { $0.id == id }) == item else { return .finished(false, keeping: nil) }
+                    if loaded || previous.version == version {
+                        return .finished(loaded, keeping: version)
+                    } else if let index = installed.firstIndex(where: { $0.id == id }) {
+                        // Loaded nowhere: the version there was, back as it was.
+                        NSLog("eGlu: extension \(id) \(version) didn't load; \(previous.version) is back")
+                        installed[index] = previous
+                        saveList()
+                        return .restore(WebExtensionInstallation(previous))
+                    }
+                    return .finished(false, keeping: nil)
                 }
-                return false
             }
         }
         installed.append(item)
@@ -1164,22 +1165,17 @@ final class Extensions: NSObject, ObservableObject {
         if source == .store { Sync.shared.adopt(id) }
         return Task {
             // The sheet's spaces; those adopted from the list load as they are turned on.
-            for space in spaces { await load(item, in: space) }
-            // The list opens by itself where it was added, with its check.
-            if let space = spaces.first { justInstalled = JustInstalled(id: id, space: space) }
-            return spaces.isEmpty || spaces.contains { contexts[$0]?[id] != nil }
+            await installExecution.loadNew(WebExtensionInstallation(item)) {
+                // The list opens by itself where it was added, with its check.
+                if let space = spaces.first { justInstalled = JustInstalled(id: id, space: space) }
+            }
         }
     }
 
     /// A version's package and folder kept, every other gone: not a folder
     /// being made (its name starts with a dot), which goes when it is done.
     private func removeOtherVersions(of id: String, keeping version: String) {
-        let here = Self.folder.appendingPathComponent(id, isDirectory: true)
-        let kept = ["\(version).zip", version, "_eglu"]
-        for name in (try? FileManager.default.contentsOfDirectory(atPath: here.path)) ?? []
-        where !kept.contains(name) && !name.hasPrefix(".") {
-            try? FileManager.default.removeItem(at: here.appendingPathComponent(name))
-        }
+        installExecution.removeOtherVersions(of: id, keeping: version)
     }
 
     /// A question as a sheet on the window. Never as a modal run of its
@@ -1392,15 +1388,12 @@ extension Extensions {
     /// them (-extensionReportWords YES): they may hold what a page or an
     /// account said, which the records never keep.
     static func words(_ text: String?) -> String {
-        guard UserDefaults.standard.bool(forKey: "extensionReportWords"), let text else { return "" }
-        return ": " + text.prefix(240)
+        WebKitExtensionDiagnostics.words(text, enabled: UserDefaults.standard.bool(forKey: "extensionReportWords"))
     }
 
     /// A line in the check's steps file, beside its report.
     static func note(_ line: String) {
-        guard let out = UserDefaults.standard.string(forKey: "extensionReport") else { return }
-        let text = ((try? String(contentsOfFile: out + ".steps", encoding: .utf8)) ?? "") + line + "\n"
-        try? text.write(toFile: out + ".steps", atomically: true, encoding: .utf8)
+        WebKitExtensionDiagnostics.note(line, outputPath: UserDefaults.standard.string(forKey: "extensionReport"))
     }
 
     /// For checking an extension without a window's sheet:
@@ -1547,33 +1540,13 @@ extension Extensions {
             for item in installed {
                 lines.append("installed \(item.name) incompatible=\(isIncompatible(item.id)) on in \(item.spaces.count)")
             }
-            // This Mac's table, once measured: its namespaces, WebKit's own.
-            if let table = Self.apiTable.table {
-                let namespaces = table.answers.filter { !$0.key.contains(".") && $0.value == .native }.keys.sorted()
-                lines.append("table \(namespaces.count): \(namespaces.joined(separator: " "))")
-                lines.append("table tabs: \(table.answers.keys.filter { $0.hasPrefix("tabs.") }.count) members")
-            }
+            lines += diagnostics.diagnosticTableLines()
             for (number, space) in spaces.enumerated() {
                 for item in installed where item.spaces.contains(space) {
-                    let context = contexts[space]?[item.id]
-                    lines.append("space \(number + 1) extension \(item.name) loaded=\(context?.isLoaded ?? false)")
-                    if let verdict = verdicts[space]?[item.id] {
-                        lines.append("space \(number + 1) verdict \(verdict.title)")
-                        lines += verdict.lines.map { "space \(number + 1) line \($0)" }
-                    }
-                    lines += (context?.errors ?? []).map { "space \(number + 1) error \(($0 as NSError).code) \($0.localizedDescription)" }
-                    lines.append("space \(number + 1) cookies \(context?.permissionStatus(for: .cookies).rawValue ?? 99)")
-                    lines.append("space \(number + 1) permissions " + (context?.grantedPermissions.keys.map(\.rawValue).sorted() ?? []).joined(separator: " "))
-                    lines += (context?.commands ?? []).map { "space \(number + 1) command \($0.id) key \($0.activationKey ?? "-") \($0.modifierFlags.rawValue)" }
-                    // What it may reach, as WebKit answers for one address
-                    // of each kind (a status's raw value: granted 2 or 3,
-                    // unknown 0, denied -2 or -3).
-                    let other = installed.first { $0.id != item.id }?.id ?? "abcdefghijklmnopabcdefghijklmnop"
-                    let reaches = ["https://example.com/", "https://accounts.google.com/", "\(Self.scheme)://\(other)/page.html", "file:///tmp/page.html"]
-                    lines.append("space \(number + 1) reaches " + reaches.map { "\($0)=\(context?.permissionStatus(for: URL(string: $0)!).rawValue ?? 99)" }.joined(separator: " "))
-                    let stamp = Self.prepared(item.id, item.version).appendingPathComponent(ExtensionPreparation.stampFile)
-                    lines.append("space \(number + 1) prepared \((try? String(contentsOf: stamp, encoding: .utf8)) ?? "-")")
-                    lines += records(of: item.id).map { "space \(number + 1) record \($0.place) \($0.api) \($0.kind) x\($0.count)" }
+                    lines += diagnostics.diagnosticLines(id: item.id, name: item.name, version: item.version,
+                        in: space, number: number + 1, otherExtension: {
+                            installed.first { $0.id != item.id }?.id ?? "abcdefghijklmnopabcdefghijklmnop"
+                        })
                 }
                 // What the recording pill says (RecordingIndicator).
                 if number == 0 {
@@ -1588,7 +1561,7 @@ extension Extensions {
                 lines.append("space \(number + 1) tabs " + addresses.joined(separator: " "))
                 for page in opened where page.space == space {
                     let live = session.pages.live[page.tab]
-                    lines.append("space \(number + 1) page \(live?.view.url?.host() ?? "-"): \(live?.view.title ?? "-")")
+                    lines.append(diagnostics.diagnosticPageLine(live?.enginePage, number: number + 1))
                     if let label = await live?.storeButtonLabel() { lines.append("space \(number + 1) store button: \(label)") }
                 }
             }

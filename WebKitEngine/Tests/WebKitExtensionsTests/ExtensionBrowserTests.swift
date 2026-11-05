@@ -460,5 +460,53 @@ final class ExtensionBrowserTests: XCTestCase {
         XCTAssertNil(window)
     }
 
+    @MainActor
+    func testNeutralAdapterConveniencesKeepControllerIdentityAndPopupMembership() async throws {
+        let context = try await context(), host = BrowserHost(), controller = controller()
+        let space = UUID(), id = UUID(), engine = page()
+        defer { engine.tearDown() }
+        host.published = workspace(space, [row(id)], id)
+        let tabs = adapters(host, controller, enabled: { $0 == space })
+        let runtime: any WebExtensionAdapters = WebKitExtensionAdapters(tabs: tabs)
+        XCTAssertFalse(runtime.popupShows(engine))
+        runtime.addressChanged(engine, tab: id, in: space)
+        runtime.loadingChanged(tab: id, in: space)
+        XCTAssertEqual(controller.events, ["properties:\(id):\(WKWebExtension.TabChangedProperties.URL.rawValue)",
+                                           "properties:\(id):\(WKWebExtension.TabChangedProperties.loading.rawValue)"])
+        let before = controller.events
+        runtime.addressChanged(engine, tab: UUID(), in: space)
+        runtime.loadingChanged(tab: id, in: UUID())
+        XCTAssertEqual(controller.events, before)
+        host.popupPages[host.popupID] = ExtensionBrowserPage(enginePage: engine, held: nil, displayURL: nil)
+        let popup = try XCTUnwrap(ExtensionPopupWindow.open(URL(string: "about:blank")!, for: context, in: space,
+            controller: controller, frame: .null, focused: false, owner: tabs, scheme: "chrome-extension"))
+        defer { if let id = popup.id { host.closePopup(id) } }
+        XCTAssertTrue(runtime.popupShows(engine))
+        XCTAssertNil(engine.webView.window)
+        XCTAssertNil(engine.webView.url)
+        let start = controller.events.count
+        runtime.addressChanged(engine, tab: UUID(), in: UUID())
+        XCTAssertEqual(Array(controller.events.dropFirst(start)), ["properties:popup:\(WKWebExtension.TabChangedProperties.URL.rawValue)"])
+        popup.close(for: context) { XCTAssertNil($0) }
+        XCTAssertFalse(runtime.popupShows(engine))
+    }
+
+    @MainActor
+    func testNeutralConveniencesReleaseTheirAdapterOwner() {
+        let host = BrowserHost(), controller = controller()
+        weak var tabs: ExtensionTabs?
+        weak var runtime: WebKitExtensionAdapters?
+        do {
+            let owner = adapters(host, controller)
+            let conveniences = WebKitExtensionAdapters(tabs: owner)
+            tabs = owner
+            runtime = conveniences
+            XCTAssertNotNil(tabs)
+            XCTAssertNotNil(runtime)
+        }
+        XCTAssertNil(runtime)
+        XCTAssertNil(tabs)
+    }
+
 }
 #endif

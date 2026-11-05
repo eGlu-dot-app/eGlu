@@ -1,11 +1,11 @@
-import WebKitExtensions
+import WebEngineAppKit
 
-extension ExtensionTabs {
+extension Extensions {
     func addressChanged(_ page: Page) {
-        addressChanged(page.enginePage, tab: page.tab, in: page.space)
+        adapters.addressChanged(page.enginePage, tab: page.tab, in: page.space)
     }
 
     func loadingChanged(_ page: Page) {
-        loadingChanged(tab: page.tab, in: page.space)
+        adapters.loadingChanged(tab: page.tab, in: page.space)
     }
 }

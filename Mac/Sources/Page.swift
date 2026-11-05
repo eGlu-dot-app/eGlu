@@ -142,7 +142,7 @@ final class Page: NSObject {
     private func beginNavigation(_ url: URL?) {
         if held != nil {
             held = nil
-            Extensions.shared.tabs.addressChanged(self)
+            Extensions.shared.addressChanged(self)
         }
         cancelPendingDialog()
         loadState.begin(url)
@@ -394,7 +394,7 @@ final class Page: NSObject {
     /// workspace, where it would be saved and synced.
     func hold(_ url: URL) {
         held = url
-        Extensions.shared.tabs.addressChanged(self)
+        Extensions.shared.addressChanged(self)
         host?.pageDidChange(self)
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(4))
@@ -1629,7 +1629,7 @@ extension Page: WebPageStateEvents, WebPageViewEvents {
     func titleOrAddressChanged() { changed() }
     func loadingChanged() {
         progressed()
-        Extensions.shared.tabs.loadingChanged(self)
+        Extensions.shared.loadingChanged(self)
     }
     func progressChanged() { progressed() }
     func backOrForwardChanged() { wentSomewhere() }

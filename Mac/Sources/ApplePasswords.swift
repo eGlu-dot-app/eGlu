@@ -1,4 +1,3 @@
-import WebKitExtensions
 import AppKit
 import Security
 import PadCore
@@ -81,7 +80,7 @@ enum ApplePasswords {
             guard let program = program() else {
                 throw ApplePasswordsSession.Unavailable(errorDescription: String(localized: "Apple's Passwords helper isn't on this Mac"))
             }
-            return HelperLink(program: program)
+            return HelperLink(connection: Extensions.nativeConnection(program: program, origin: AppleHelper.origin))
         }
         // Off, or eGlu quitting: the helper is told goodbye and stopped,
         // and the key goes with it.
@@ -135,27 +134,27 @@ enum ApplePasswords {
     }
 }
 
-/// Apple's helper, run over Chrome's framing (HostPipe).
+/// Apple's helper, run over Chrome's native messaging framing.
 @MainActor
 final class HelperLink: AppleLink {
     var onMessage: (([String: Any]) -> Void)?
     var onEnd: (() -> Void)?
-    private let pipe: HostPipe
+    private let pipe: any WebNativeConnection
 
-    init(program: URL) {
-        pipe = HostPipe(program: program, origin: AppleHelper.origin)
+    init(connection: any WebNativeConnection) {
+        pipe = connection
         pipe.onMessage = { [weak self] message in
             guard let message = message as? [String: Any] else { return }
             nonisolated(unsafe) let sent = message
             DispatchQueue.main.async { MainActor.assumeIsolated { self?.onMessage?(sent) } }
         }
-        pipe.onExit = { [weak self] in
+        pipe.onEnd = { [weak self] in
             DispatchQueue.main.async { MainActor.assumeIsolated { self?.onEnd?() } }
         }
     }
 
     func start() throws { try pipe.start() }
-    func send(_ message: [String: Any]) throws { try pipe.write(message) }
+    func send(_ message: [String: Any]) throws { try pipe.send(message) }
     func stop() { pipe.stop() }
 }
 
