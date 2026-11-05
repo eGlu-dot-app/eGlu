@@ -1175,6 +1175,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 714117EF5C41AC924BD11821 /* Build configuration list for PBXNativeTarget "eGlu Mac" */;
 			buildPhases = (
+				1847E77445A17D99A300D4C0 /* Engine boundary */,
 				02D2BC734B38C3048BEF4574 /* Sources */,
 				88DE4337E19969A8B4D7BD9A /* Resources */,
 				EFB3C4539828D914EC513E35 /* Frameworks */,
@@ -1206,6 +1207,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 0161F8FE4005C6E875A4D8A0 /* Build configuration list for PBXNativeTarget "eGlu Mac Direct" */;
 			buildPhases = (
+				4B471C410A642B0E9010C51B /* Engine boundary */,
 				9DCA2947F49FC719369092B0 /* Sources */,
 				D7DB6D1C44C6D480300974F1 /* Resources */,
 				69AFD13ACEAB765E3BED88E7 /* Frameworks */,
@@ -1428,6 +1430,25 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		1847E77445A17D99A300D4C0 /* Engine boundary */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Engine boundary";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "cd \"$SRCROOT\"\n/usr/bin/python3 Tests/engine-inventory.py --strict\n";
+		};
 		478AC11650BBC3926573723C /* Sparkle's keys in Info.plist */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -1447,6 +1468,25 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "plist=\"$TARGET_BUILD_DIR/$INFOPLIST_PATH\"\nplutil -replace SUFeedURL -string \"$SPARKLE_FEED_URL\" \"$plist\"\nplutil -replace SUPublicEDKey -string \"$SPARKLE_PUBLIC_KEY\" \"$plist\"\nplutil -replace SUEnableAutomaticChecks -bool YES \"$plist\"\n";
+		};
+		4B471C410A642B0E9010C51B /* Engine boundary */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Engine boundary";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "cd \"$SRCROOT\"\n/usr/bin/python3 Tests/engine-inventory.py --strict\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

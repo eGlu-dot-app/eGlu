@@ -196,6 +196,35 @@ class EngineInventoryTests(unittest.TestCase):
             self.assertIn("| f. Script bridges (tests) | 1 | 1 |", summary)
             self.assertIn("#### WebKit plugin (2 lines in 2 files)", inv.build_full_report(data))
 
+    def test_plugin_imports_only_at_the_composition_point(self):
+        snippet = """
+        import WebKitExtensions
+        @testable import WebKitMacPlugin
+        // import WebKitSupport
+        import WebKitSupportish
+        import WebEngineAppKit
+        """
+        findings = inv.find_plugin_imports(snippet, "Mac/Sources/Test.swift")
+        self.assertEqual([f.detail for f in findings], ["WebKitExtensions", "WebKitMacPlugin"])
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            files = {"Mac/Sources/EngineComposition.swift": "import WebKitExtensions\nimport WebKitMacPlugin\n",
+                     "Mac/Sources/Other.swift": "import WebKitSupport\n",
+                     "Shared/Both.swift": "import WebKitMacPlugin\n",
+                     "Tests/MacPage/Bridge.swift": "import WebKit\nimport WebKitMacPlugin\n"}
+            for path, source in files.items():
+                file = root / path
+                file.parent.mkdir(parents=True, exist_ok=True)
+                file.write_text(source)
+            data = inv.run_inventory(root)
+            # The composition point and the tests may; the rest of the app may not.
+            self.assertEqual({f.path for f in data["plugin_imports"]}, {"Mac/Sources/Other.swift", "Shared/Both.swift"})
+            self.assertIn("| a. Plugin imports outside the composition point | 2 | 2 |", inv.build_summary_table(data))
+            # The quick scan --strict runs as a build phase finds the same.
+            quick = inv.run_imports(root)
+            self.assertEqual({f.path for f in quick["plugin_imports"]}, {"Mac/Sources/Other.swift", "Shared/Both.swift"})
+            self.assertEqual(quick["mac_imports"], [])
+
     def test_script_bridges(self):
         swift_snippet = """
         let script = \"\"\"

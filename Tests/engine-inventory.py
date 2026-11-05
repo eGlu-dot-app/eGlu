@@ -75,6 +75,11 @@ def strip_comments_from_line(line: str, in_block: bool) -> tuple[str, bool]:
 # Section a: import WebKit and import Engines lines.
 IMPORT_RE = re.compile(r"^\s*(?:@\w+\s+)*import\s+(WebKit|Engines)\b")
 
+# The WebKit plugin's own modules. The Mac app reaches them in one file only,
+# its composition point, which a build of the app with another engine swaps.
+PLUGIN_IMPORT_RE = re.compile(r"^\s*(?:@\w+\s+)*import\s+(WebKitExtensions|WebKitMacPlugin|WebKitSupport)\b")
+COMPOSITION_FILES = {"Mac/Sources/EngineComposition.swift"}
+
 
 def find_imports(text: str, path: str = "") -> list[Finding]:
     """Find import WebKit and import Engines lines."""
@@ -94,6 +99,20 @@ def find_imports(text: str, path: str = "") -> list[Finding]:
                     detail=m.group(1),
                 )
             )
+    return findings
+
+
+def find_plugin_imports(text: str, path: str = "") -> list[Finding]:
+    """Find imports of the WebKit plugin's modules."""
+    findings = []
+    in_block = False
+    for idx, raw_line in enumerate(text.splitlines(), start=1):
+        clean, in_block = strip_comments_from_line(raw_line, in_block)
+        if in_block:
+            continue
+        m = PLUGIN_IMPORT_RE.match(clean)
+        if m:
+            findings.append(Finding(path=path, line_number=idx, line_text=raw_line.strip(), detail=m.group(1)))
     return findings
 
 
@@ -416,6 +435,21 @@ def collect_repo_files(root: Path) -> tuple[list[str], list[str]]:
     return swift_files, js_files
 
 
+def run_imports(root: Path):
+    """Only the imports, quickly: what --strict checks, as a build phase."""
+    data = {"mac_imports": [], "shared_imports": [], "plugin_imports": []}
+    for top, key in (("Mac", "mac_imports"), ("Shared", "shared_imports")):
+        for path in sorted((root / top).rglob("*.swift")):
+            rel_path = path.relative_to(root).as_posix()
+            if any(part in SKIP_DIRS for part in Path(rel_path).parts):
+                continue
+            content = path.read_text(encoding="utf-8", errors="replace")
+            data[key].extend(find_imports(content, rel_path))
+            if rel_path not in COMPOSITION_FILES:
+                data["plugin_imports"].extend(find_plugin_imports(content, rel_path))
+    return data
+
+
 def run_inventory(root: Path):
     """Run all scans across the repository."""
     swift_files, js_files = collect_repo_files(root)
@@ -446,6 +480,14 @@ def run_inventory(root: Path):
     for rel_path in shared_swift:
         content = (root / rel_path).read_text(encoding="utf-8", errors="replace")
         shared_imports.extend(find_imports(content, rel_path))
+
+    # The plugin's modules, outside the composition point.
+    plugin_imports: list[Finding] = []
+    for rel_path in mac_swift + shared_swift:
+        if rel_path.replace("\\", "/") in COMPOSITION_FILES:
+            continue
+        content = (root / rel_path).read_text(encoding="utf-8", errors="replace")
+        plugin_imports.extend(find_plugin_imports(content, rel_path))
 
     # Section b: Reach-ins.
     # The app's code is what the plan moves; tests that read WebKit's own
@@ -510,6 +552,7 @@ def run_inventory(root: Path):
     return {
         "mac_imports": mac_imports,
         "shared_imports": shared_imports,
+        "plugin_imports": plugin_imports,
         "reach_ins": reach_ins,
         "test_reach_ins": test_reach_ins,
         "page_swift_reach_ins": page_swift_reach_ins,
@@ -533,6 +576,7 @@ def build_summary_table(data: dict) -> str:
     sections = [
         ("a. Imports (Mac/)", len(data["mac_imports"]), count_files(data["mac_imports"])),
         ("a. Imports (Shared/)", len(data["shared_imports"]), count_files(data["shared_imports"])),
+        ("a. Plugin imports outside the composition point", len(data["plugin_imports"]), count_files(data["plugin_imports"])),
         ("b. Reach-ins into page view (app)", len(data["reach_ins"]), count_files(data["reach_ins"])),
         ("b. Reach-ins (tests)", len(data["test_reach_ins"]), count_files(data["test_reach_ins"])),
         ("b. Reach-ins (Page.swift self-references)", len(data["page_swift_reach_ins"]), count_files(data["page_swift_reach_ins"])),
@@ -635,7 +679,7 @@ def main():
     parser.add_argument(
         "--strict",
         action="store_true",
-        help="Exit 1 if Mac/ or Shared/ imports WebKit or Engines",
+        help="Exit 1 if Mac/ or Shared/ imports WebKit or Engines, or a WebKit plugin module outside the composition point",
     )
     parser.add_argument(
         "--write", type=Path, help="Write markdown report to specified path"
@@ -648,6 +692,22 @@ def main():
         repo_root = cwd
     else:
         repo_root = Path(__file__).resolve().parent.parent
+
+    if args.strict and not (args.write or args.check):
+        data = run_imports(repo_root)
+        offending = data["mac_imports"] + data["shared_imports"] + data["plugin_imports"]
+        if offending:
+            print(
+                "Offending files importing WebKit or Engines in Mac/ or Shared/,"
+                " or a WebKit plugin module outside the composition point:"
+            )
+            # As Xcode reads errors, so a build phase shows them at the line.
+            for item in offending:
+                print(f"{repo_root / item.path}:{item.line_number}: error: {item.line_text}"
+                      " (the interface talks to engines only through contracts; Docs/WebEngine.md)")
+            sys.exit(1)
+        print("No file in Mac/ or Shared/ imports WebKit or Engines, or a WebKit plugin module outside the composition point.")
+        sys.exit(0)
 
     data = run_inventory(repo_root)
 
@@ -670,13 +730,16 @@ def main():
 
     if args.strict:
         print(build_summary_table(data))
-        offending = data["mac_imports"] + data["shared_imports"]
+        offending = data["mac_imports"] + data["shared_imports"] + data["plugin_imports"]
         if offending:
             print(
-                "\nOffending files importing WebKit or Engines in Mac/ or Shared/:"
+                "\nOffending files importing WebKit or Engines in Mac/ or Shared/,"
+                " or a WebKit plugin module outside the composition point:"
             )
+            # As Xcode reads errors, so a build phase shows them at the line.
             for item in offending:
-                print(f"  {item.path}:{item.line_number}: {item.line_text}")
+                print(f"{repo_root / item.path}:{item.line_number}: error: {item.line_text}"
+                      " (the interface talks to engines only through contracts; Docs/WebEngine.md)")
             sys.exit(1)
         sys.exit(0)
 

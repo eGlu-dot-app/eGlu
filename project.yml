@@ -90,6 +90,16 @@ targetTemplates:
         codeSign: true
         copy:
           destination: plugins
+    # The interface talks to its engines only through contracts
+    # (Docs/WebEngine.md): no file of Mac/ or Shared/ imports WebKit or
+    # Engines, and only Mac/Sources/EngineComposition.swift imports the
+    # WebKit plugin's modules. The build stops at the first that does.
+    preBuildScripts:
+      - name: Engine boundary
+        basedOnDependencyAnalysis: false
+        script: |
+          cd "$SRCROOT"
+          /usr/bin/python3 Tests/engine-inventory.py --strict
     settings:
       base:
         PRODUCT_NAME: eGlu

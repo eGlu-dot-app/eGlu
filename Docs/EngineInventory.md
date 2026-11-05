@@ -7,6 +7,7 @@
 |:---|---:|---:|
 | a. Imports (Mac/) | 0 | 0 |
 | a. Imports (Shared/) | 0 | 0 |
+| a. Plugin imports outside the composition point | 0 | 0 |
 | b. Reach-ins into page view (app) | 0 | 0 |
 | b. Reach-ins (tests) | 191 | 20 |
 | b. Reach-ins (Page.swift self-references) | 0 | 0 |
