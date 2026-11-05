@@ -1,6 +1,5 @@
 import AppKit
 import Combine
-import IOKit.pwr_mgt
 import PadCore
 import UniformTypeIdentifiers
 import WebEngineAppKit
@@ -109,6 +108,9 @@ final class Extensions: NSObject, ObservableObject {
         var id: String
         var space: UUID
     }
+
+    lazy var permissionPrompts = WebKitExtensionPermissions(host: ExtensionHost.shared,
+        space: { [unowned self] in self.space(of: $0) }, unanswered: { Unanswered(why: $0) }, fence: Self.fence)
 
     private var controllers: [UUID: WKWebExtensionController] { controllerRuntime.controllers }
     private lazy var controllerRuntime = WebKitExtensionControllers(host: ExtensionHost.shared, storage: Self.storage,
@@ -240,8 +242,15 @@ final class Extensions: NSObject, ObservableObject {
             if restarting { restart(id, in: space, because: on ? "cookies allowed" : "cookies taken back") }
         }
     }
-    /// Keep-awake assertions an extension asked for (power), by "space/id".
-    var keptAwake: [String: IOPMAssertionID] = [:]
+    /// The shim's runtime answers and keep-awake assertions, by "space/id".
+    lazy var runtimeAnswers = WebKitExtensionRuntimeAnswers(host: ExtensionHost.shared,
+        evidence: { [unowned self] in self.errorEvidence }, contexts: { [unowned self] in self.contexts },
+        space: { [unowned self] in self.space(of: $0) },
+        revive: { [unowned self] in self.revive($0, in: $1, because: $2) },
+        answer: { [unowned self] in try await self.answer($0, $1, context: $2, in: $3) },
+        unanswered: { Unanswered(why: $0) }, scheme: Extensions.scheme, shimApplication: Extensions.shimApplication)
+
+    func releaseRuntimePower(_ key: String) { runtimeAnswers.releaseKeepAwake(key) }
     /// Each loaded context's errors watch, removed when it unloads.
     private var watches: [UUID: [String: NSObjectProtocol]] {
         get { errorEvidence.watches }
@@ -1234,9 +1243,7 @@ final class Extensions: NSObject, ObservableObject {
         guard let index = installed.firstIndex(where: { $0.id == id }) else { return }
         installed[index].spaces.removeAll { $0 == space }
         saveList()
-        unload(id, in: space)
-        closePages(of: id, in: space)
-        forget(id, in: space)
+        cleanupRuntime.remove(id, from: space)
     }
 
     /// Asked first, as Chrome asks: it takes what it kept in every space.
@@ -1293,129 +1300,20 @@ final class Extensions: NSObject, ObservableObject {
         var marked = UserDefaults.standard.dictionary(forKey: Self.incompatibleKey) ?? [:]
         marked[id] = nil
         UserDefaults.standard.set(marked, forKey: Self.incompatibleKey)
-        let clearing = spaces.map { forget(id, in: $0) }
-        Task {
-            for task in clearing { await task.value }
-            // Unless it was installed again meanwhile.
-            guard !installed.contains(where: { $0.id == id }) else { return }
-            try? FileManager.default.removeItem(at: Self.folder.appendingPathComponent(id, isDirectory: true))
-        }
+        cleanupRuntime.removePackages(id, afterClearing: spaces)
     }
 
     // MARK: Forgetting what it kept
 
-    /// What a removal is still clearing, by space and extension ("space/id"),
-    /// kept until it is done: a quit or a crash in the middle would leave it
-    /// for the next extension of the same id in that space. (Search)
-    private static let forgettingKey = "extensionsForgetting"
-    private var forgetting: [String: Task<Void, Never>] = [:]
+    private lazy var cleanupRuntime: any WebExtensionCleanup = WebKitExtensionCleanup(host: ExtensionHost.shared,
+        controllers: controllerRuntime, kept: { Self.kept($0, of: $1, in: $2) }, folder: { Self.folder },
+        clearWatches: { [unowned self] in self.watches[$0] = nil },
+        clearEvidence: { [unowned self] in self.evidence[$0] = nil })
 
-    /// Its storage, which WebKit keeps by id, and what its pages kept at
-    /// chrome-extension://<id> (localStorage, IndexedDB, caches), which
-    /// removeData doesn't reach: cleared from a blank page at that address,
-    /// in a stand-in with no worker, scripts or pages of its own, so nothing
-    /// of the removed extension runs again. (Search's forgetData)
+    private func forgetLeftOver() { cleanupRuntime.forgetLeftOver() }
+
     @discardableResult
-    private func forget(_ id: String, in space: UUID) -> Task<Void, Never> {
-        let key = "\(space.uuidString)/\(id)"
-        if let running = forgetting[key] { return running }
-        var left = UserDefaults.standard.stringArray(forKey: Self.forgettingKey) ?? []
-        if !left.contains(key) { left.append(key) }
-        UserDefaults.standard.set(left, forKey: Self.forgettingKey)
-        let task = Task { [weak self] in
-            guard let self else { return }
-            let done = await self.clear(id, in: space)
-            self.forgetting[key] = nil
-            if done {
-                let rest = (UserDefaults.standard.stringArray(forKey: Self.forgettingKey) ?? []).filter { $0 != key }
-                UserDefaults.standard.set(rest, forKey: Self.forgettingKey)
-            }
-        }
-        forgetting[key] = task
-        return task
-    }
-
-    /// At launch, before anything loads: what a removal didn't finish.
-    private func forgetLeftOver() {
-        for key in UserDefaults.standard.stringArray(forKey: Self.forgettingKey) ?? [] {
-            let parts = key.split(separator: "/", maxSplits: 1).map(String.init)
-            guard parts.count == 2, let space = UUID(uuidString: parts[0]), ExtensionID.isValid(parts[1]) else { continue }
-            guard Session.shared.workspace.space(space) != nil else {
-                // The space is gone, and its store with it.
-                let rest = (UserDefaults.standard.stringArray(forKey: Self.forgettingKey) ?? []).filter { $0 != key }
-                UserDefaults.standard.set(rest, forKey: Self.forgettingKey)
-                continue
-            }
-            forget(parts[1], in: space)
-        }
-    }
-
-    /// Waits for what a removal of this extension in this space is clearing:
-    /// the same id loaded again starts with nothing of the one before.
-    /// Whether nothing is left to clear: a clearing that failed is tried
-    /// again first, and one that fails again keeps the extension out.
-    @discardableResult
-    func cleared(_ id: String, in space: UUID) async -> Bool {
-        let key = "\(space.uuidString)/\(id)"
-        let pending = { (UserDefaults.standard.stringArray(forKey: Self.forgettingKey) ?? []).contains(key) }
-        if let running = forgetting[key] { await running.value }
-        if pending() { await forget(id, in: space).value }
-        return !pending()
-    }
-
-    private func clear(_ id: String, in space: UUID) async -> Bool {
-        for name in ["userscripts", "worlds"] { try? FileManager.default.removeItem(at: Self.kept(name, of: id, in: space)) }
-        guard Session.shared.workspace.space(space) != nil else { return true }
-        // Its pages there closed first: an open one holds its databases.
-        closePages(of: id, in: space)
-        let controller = controller(for: space)
-        let types = WKWebExtensionController.allExtensionDataTypes
-        let records = await controller.dataRecords(ofTypes: types).filter { $0.uniqueIdentifier == id }
-        if !records.isEmpty {
-            await controller.removeData(ofTypes: types, from: records)
-            // WebKit says what it couldn't delete on the records themselves.
-            // Not session storage: it is in memory, gone with the unloaded
-            // context, and WebKit says it can't reach it then (code 3).
-            let failures = records.flatMap(\.errors).filter {
-                let error = $0 as NSError
-                return !(error.domain == WKWebExtension.DataRecord.errorDomain
-                    && error.code == WKWebExtension.DataRecord.Error.Code.sessionStorageFailed.rawValue)
-            }
-            if !failures.isEmpty {
-                #if DEBUG
-                Self.note("clear: record errors \(records.flatMap(\.errors).map(\.localizedDescription))")
-                #endif
-                return false
-            }
-        }
-        guard contexts[space]?[id] == nil, let base = URL(string: "\(Self.scheme)://\(id)/") else { return false }
-        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("eglu-forget-\(UUID().uuidString)", isDirectory: true)
-        defer { try? FileManager.default.removeItem(at: folder) }
-        do {
-            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            try Data(#"{"manifest_version": 3, "name": "eGlu", "version": "1"}"#.utf8).write(to: folder.appendingPathComponent("manifest.json"))
-            let standIn = WKWebExtensionContext(for: try await WKWebExtension(resourceBaseURL: folder))
-            standIn.uniqueIdentifier = id
-            standIn.baseURL = base
-            // Turned on again meanwhile: it is its own, not a stand-in's.
-            guard contexts[space]?[id] == nil else { return false }
-            try controller.load(standIn)
-            defer { try? controller.unload(standIn) }
-            guard let configuration = standIn.webViewConfiguration else { return false }
-            let done = try await ExtensionBlankPage(configuration, scheme: Self.scheme).clear(at: base)
-            #if DEBUG
-            Self.note("clear: blank page \(done)")
-            #endif
-            return done
-        } catch {
-            #if DEBUG
-            Self.note("clear: failed \(error)")
-            #endif
-            NSLog("eGlu: couldn't clear what extension \(id) kept: \(error.localizedDescription)")
-            return false
-        }
-    }
-
+    func cleared(_ id: String, in space: UUID) async -> Bool { await cleanupRuntime.cleared(id, in: space) }
 
     /// Whether a website at `source` may send its tab to `url`, a page of
     /// an extension loaded in `space` (ExtensionPolicy.webAccessible).
@@ -1447,52 +1345,19 @@ final class Extensions: NSObject, ObservableObject {
     /// A space going: its extensions unload and their data goes, and its
     /// controller is let go before its website store is erased, which
     /// WebKit won't do while anything holds the store.
-    func removeSpace(_ space: UUID) {
-        for id in Array((contexts[space] ?? [:]).keys) { unload(id, in: space) }
-        ExtensionOffscreen.closeAll(in: space)
-        ExtensionSocket.close(in: space)
-        ExtensionPopups.shared.closeAll(in: space)
-        ExtensionSidePanels.shared.closeAll(in: space)
-        watches[space] = nil
-        // What eGlu kept for each extension in the space (user scripts,
-        // their worlds) goes with it.
-        for item in installed where item.spaces.contains(space) {
-            for name in ["userscripts", "worlds"] { try? FileManager.default.removeItem(at: Self.kept(name, of: item.id, in: space)) }
-        }
+    func removeSpace(_ space: UUID) { cleanupRuntime.removeSpace(space) }
+
+    // The catalog and its published changes remain the app's, at the same
+    // points between runtime teardown and controller release.
+    func removeCleanupMembership(in space: UUID) {
         for index in installed.indices { installed[index].spaces.removeAll { $0 == space } }
         saveList()
-        let controller = controllerRuntime.removeController(for: space)
-        contexts[space] = nil
-        verdicts[space] = nil
-        evidence[space] = nil
-        // Its extensions' storage, which WebKit keeps apart from the space's
-        // website store: deleted through the controller before it is let
-        // go, and the store swept again after, which waits for that.
-        guard let controller else { return }
-        Task {
-            let types = WKWebExtensionController.allExtensionDataTypes
-            let records = await controller.dataRecords(ofTypes: types)
-            if !records.isEmpty { await controller.removeData(ofTypes: types, from: records) }
-            withExtendedLifetime(controller) {}
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { Stores.sweep(in: WebKitSpaceStores.shared) }
-        }
     }
 
-    /// An extension's own pages in a space put away: its tabs there, its
-    /// popup and its offscreen page.
-    private func closePages(of id: String, in space: UUID) {
-        let session = Session.shared
-        for tab in session.workspace.space(space)?.tabs ?? [] {
-            guard let url = session.pages.live[tab.id]?.view.url ?? tab.url, url.scheme == Self.scheme, url.host() == id else { continue }
-            session.change { _ = $0.closeTab(tab.id) }
-            session.pages.close(tab.id)
-        }
-        ExtensionPopups.shared.closeAll(of: id, in: space)
-        ExtensionOffscreen.close(id, in: space)
-    }
+    func clearCleanupVerdicts(in space: UUID) { verdicts[space] = nil }
 
     /// The name the shim sends its native messages to.
-    static let shimApplication = "eglu"
+    static let shimApplication = WebKitExtensionRuntimeAnswers.applicationIdentifier
 
     // MARK: Running one
 
@@ -1810,60 +1675,24 @@ extension Extensions: WKWebExtensionControllerDelegate {
         completionHandler(nil)
     }
 
-    private func permissionWindow(in space: UUID, tab: (any WKWebExtensionTab)?) -> WindowModel? {
-        let id = (tab as? ExtensionTab)?.id
-        let candidates = Session.shared.allWindows.filter { $0.spaceID == space && $0.window?.isVisible == true }
-        return candidates.first { id != nil && $0.tabID == id } ?? candidates.first { $0.window?.isKeyWindow == true } ?? candidates.first
-    }
-
     func webExtensionController(_ controller: WKWebExtensionController, promptForPermissions permissions: Set<WKWebExtension.Permission>,
                                 in tab: (any WKWebExtensionTab)?, for extensionContext: WKWebExtensionContext,
                                 completionHandler: @escaping (Set<WKWebExtension.Permission>, Date?) -> Void) {
-        // Cookies too, as Chrome asks for them: a yes is the person's
-        // choice for the extension, in every space (setReadsCookies).
-        let asked = permissions
-        guard !asked.isEmpty else { return completionHandler([], nil) }
-        guard let sourceSpace = space(of: controller),
-              let owner = permissionWindow(in: sourceSpace, tab: tab) else { return completionHandler([], nil) }
-        let summary = ExtensionAccessSummary(permissions: asked.map(\.rawValue), sites: [])
-        let title = String(localized: "\u{201C}\(WebKitExtensionMetadata.name(of: extensionContext.webExtension) ?? String(localized: "An extension"))\u{201D} wants more access")
-        let id = extensionContext.uniqueIdentifier
-        Task {
-            let yes = await askForMore(title: title, from: extensionContext, in: sourceSpace, window: owner,
-                                       note: summary.cookies ? ExtensionAccessGroups.cookiesNote : nil) {
-                ExtensionAccessGroups(summary: summary, everything: true, grantsCookies: true)
-            }
-            completionHandler(yes ? asked : [], nil)
-            if yes, summary.cookies { setReadsCookies(id, true, restarting: false) }
-        }
+        permissionPrompts.promptForPermissions(permissions, controller: controller, tab: tab, context: extensionContext,
+                                               completionHandler: completionHandler)
     }
 
-    /// Chrome never asks site by site; a site the extension wants comes
-    /// with its install, or with a click on its button.
     func webExtensionController(_ controller: WKWebExtensionController, promptForPermissionToAccess urls: Set<URL>,
                                 in tab: (any WKWebExtensionTab)?, for extensionContext: WKWebExtensionContext,
                                 completionHandler: @escaping (Set<URL>, Date?) -> Void) {
-        completionHandler([], nil)
+        permissionPrompts.promptForPermissionToAccess(urls, completionHandler: completionHandler)
     }
 
     func webExtensionController(_ controller: WKWebExtensionController, promptForPermissionMatchPatterns matchPatterns: Set<WKWebExtension.MatchPattern>,
                                 in tab: (any WKWebExtensionTab)?, for extensionContext: WKWebExtensionContext,
                                 completionHandler: @escaping (Set<WKWebExtension.MatchPattern>, Date?) -> Void) {
-        // Extension pages, files and the hands-off sites are never given,
-        // so never asked about.
-        let wanted = matchPatterns.filter { !Self.withheld($0) && !HandsOff.covers(host: $0.host.map { $0.hasPrefix("*.") ? String($0.dropFirst(2)) : $0 }) }
-        guard !wanted.isEmpty, let sourceSpace = space(of: controller),
-              let owner = permissionWindow(in: sourceSpace, tab: tab) else { return completionHandler([], nil) }
-        let summary = ExtensionAccessSummary(permissions: [], sites: wanted.map(\.string))
-        let title = String(localized: "\u{201C}\(WebKitExtensionMetadata.name(of: extensionContext.webExtension) ?? String(localized: "An extension"))\u{201D} wants to read and change more sites")
-        Task {
-            let yes = await askForMore(title: title, from: extensionContext, in: sourceSpace, window: owner) {
-                ExtensionAccessGroups(summary: summary, everything: true)
-            }
-            completionHandler(yes ? wanted : [], nil)
-            // Given only once this has returned: fenced again after.
-            if yes { DispatchQueue.main.async { Self.fence(extensionContext) } }
-        }
+        permissionPrompts.promptForPermissionMatchPatterns(matchPatterns, controller: controller, tab: tab, context: extensionContext,
+                                                          completionHandler: completionHandler)
     }
 
     func sidePanelDefaultPath(_ id: String, in space: UUID) -> String? {
@@ -1905,66 +1734,15 @@ extension Extensions: WKWebExtensionControllerDelegate {
         actionsChanged += 1
     }
 
-    /// Native messaging: to "eglu", the shim's questions
-    /// (ExtensionAnswers); to any other name, the desktop app that
-    /// registered it with Chrome (ExtensionNative), sent one and answered.
+    /// The delegate keeps forwarding until the hub's composition moves.
     func webExtensionController(_ controller: WKWebExtensionController, sendMessage message: Any, toApplicationWithIdentifier applicationIdentifier: String?,
                                 for extensionContext: WKWebExtensionContext, replyHandler: @escaping (Any?, (any Error)?) -> Void) {
-        let id = extensionContext.uniqueIdentifier
-        guard let space = space(of: controller), contexts[space]?[id] === extensionContext, let name = applicationIdentifier else {
-            return replyHandler(nil, Unanswered(why: "Specified native messaging host not found."))
-        }
-        if name == Self.shimApplication {
-            guard let call = message as? [String: Any], let api = call["api"] as? String else {
-                return replyHandler(nil, Unanswered(why: "Not a question eGlu knows."))
-            }
-            Task {
-                do {
-                    let value = try await answer(api, call["args"] as? [Any] ?? [], context: extensionContext, in: space)
-                    replyHandler(["value": value ?? NSNull()], nil)
-                } catch {
-                    replyHandler(["error": error.localizedDescription], nil)
-                }
-            }
-            return
-        }
-        guard reachesApps(id) else { return replyHandler(nil, Unanswered(why: "Specified native messaging host not found.")) }
-        Task {
-            do {
-                replyHandler(try await ExtensionNative.send(message, to: name, from: id), nil)
-            } catch {
-                update(id, in: space) { $0.unreachableApp = Self.appName(ofHost: name) }
-                replyHandler(nil, error)
-            }
-        }
+        runtimeAnswers.webExtensionController(controller, sendMessage: message, toApplicationWithIdentifier: applicationIdentifier,
+                                             for: extensionContext, replyHandler: replyHandler)
     }
 
-    /// A port: to "eglu.socket", a worker's WebSocket made here
-    /// (ExtensionSocket); to any other name, a desktop app's host, kept
-    /// talking until either end lets go.
     func webExtensionController(_ controller: WKWebExtensionController, connectUsing port: WKWebExtension.MessagePort,
                                 for extensionContext: WKWebExtensionContext, completionHandler: @escaping ((any Error)?) -> Void) {
-        let id = extensionContext.uniqueIdentifier
-        guard let space = space(of: controller), contexts[space]?[id] === extensionContext else {
-            return completionHandler(Unanswered(why: "Specified native messaging host not found."))
-        }
-        if port.applicationIdentifier == ExtensionSocket.name(shimApplication: Self.shimApplication) {
-            let security = extensionContext.webExtension.manifest["content_security_policy"]
-            let policy = (security as? [String: Any])?["extension_pages"] as? String ?? security as? String
-            ExtensionSocket.connect(port, from: id, in: space, policy: policy, scheme: Self.scheme)
-            return completionHandler(nil)
-        }
-        // The shim's own, opened only to find what WebKit's ports are
-        // made of, and let go at once.
-        if port.applicationIdentifier == Self.shimApplication { return completionHandler(nil) }
-        guard reachesApps(id) else { return completionHandler(Unanswered(why: "Specified native messaging host not found.")) }
-        do {
-            try ExtensionNative.connect(port, from: id)
-            completionHandler(nil)
-        } catch {
-            update(id, in: space) { $0.unreachableApp = Self.appName(ofHost: port.applicationIdentifier ?? "") }
-            completionHandler(error)
-        }
+        runtimeAnswers.webExtensionController(controller, connectUsing: port, for: extensionContext, completionHandler: completionHandler)
     }
 }
-

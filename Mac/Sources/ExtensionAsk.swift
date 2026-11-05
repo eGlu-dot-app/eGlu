@@ -1,7 +1,6 @@
 import AppKit
 import PadCore
 import SwiftUI
-import WebKit
 import WebKitExtensions
 
 // MARK: Asking
@@ -43,9 +42,8 @@ extension Extensions {
 
     /// A question from a running extension, in the space it runs in: Don't
     /// Allow, the safe answer, is also Escape's.
-    func askForMore(title: String, from context: WKWebExtensionContext, in space: UUID, window: WindowModel?,
+    func askForMore(title: String, image: NSImage?, in space: UUID, window: WindowModel?,
                     host: NSWindow? = nil, note: String? = nil, @ViewBuilder content: () -> some View) async -> Bool {
-        let image = WebKitExtensionMetadata.icon(of: context.webExtension, size: CGSize(width: 96, height: 96))
         let place = Session.shared.workspace.space(space)
         let content = content()
         return await ask(in: window, host: host) { answer in

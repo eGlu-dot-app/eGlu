@@ -1,5 +1,4 @@
 import Foundation
-import IOKit.pwr_mgt
 import WebEngineAppKit
 
 extension ExtensionHost: ExtensionWorkerHost {
@@ -16,7 +15,7 @@ extension ExtensionHost: ExtensionWorkerHost {
         Extensions.shared.updateWorker(id, in: space, event: event)
     }
     func releaseExtensionWorkerPower(_ key: String) {
-        if let assertion = Extensions.shared.keptAwake.removeValue(forKey: key) { IOPMAssertionRelease(assertion) }
+        Extensions.shared.releaseRuntimePower(key)
     }
     func noteExtensionWorker(_ line: String) {
         #if DEBUG

@@ -1,5 +1,4 @@
 import Foundation
-import IOKit.pwr_mgt
 import WebEngineAppKit
 
 extension ExtensionHost: ExtensionControllerHost {
@@ -13,7 +12,7 @@ extension ExtensionHost: ExtensionControllerHost {
         Extensions.shared.markLoadIncompatible(id, version: version)
     }
     func releaseExtensionLoadPower(_ key: String) {
-        if let assertion = Extensions.shared.keptAwake.removeValue(forKey: key) { IOPMAssertionRelease(assertion) }
+        Extensions.shared.releaseRuntimePower(key)
     }
     func closeExtensionLoadPopup(_ id: String, in space: UUID) { ExtensionPopups.shared.closeAll(of: id, in: space) }
     func closeExtensionLoadSidePanel(_ id: String, in space: UUID) { ExtensionSidePanels.shared.closeAll(of: id, in: space) }

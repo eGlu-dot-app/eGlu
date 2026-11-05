@@ -4,6 +4,8 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+- On the Mac, the extension runtime's permission questions (what WebKit asks and the one-use permission after a click), the scripts eGlu writes for extensions, its answers that need nothing of the app's windows (idle and power, offscreen documents, native messaging, language detection, the colour picker's answer, workers' messages), and removing an extension's data live in the WebKit plugin; the app keeps the windows, sheets and choices: the twelfth part of step 12 of keeping eGlu's interface apart from its engines (`Docs/EngineSplitPlan.md`). Nothing changes in use.
+
 - On the Mac, the extension runtime's compatibility checks, the records it keeps of extensions' errors, the starting and recovering of their background workers, and WebKit's per-space extension controllers, loading and permissions live in the WebKit plugin; the app keeps its catalog, your choices, the warnings it shows and the debug switches of its own builds: the eleventh part of step 12 of keeping eGlu's interface apart from its engines (`Docs/EngineSplitPlan.md`). Nothing changes in use.
 
 - On the Mac, what the extensions' list and Settings show of an extension's package (its name, icon, what its manifest asks for, its options, new tab and side panel pages) is read by the WebKit plugin, which also keeps the packages and the copies prepared for WebKit under a folder the app gives it: the tenth part of step 12 of keeping eGlu's interface apart from its engines (`Docs/EngineSplitPlan.md`). Nothing changes in use.
