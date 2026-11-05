@@ -2,6 +2,7 @@ import AppKit
 import PadCore
 import SwiftUI
 import WebKit
+import WebKitExtensions
 
 // MARK: Asking
 
@@ -44,7 +45,7 @@ extension Extensions {
     /// Allow, the safe answer, is also Escape's.
     func askForMore(title: String, from context: WKWebExtensionContext, in space: UUID, window: WindowModel?,
                     host: NSWindow? = nil, note: String? = nil, @ViewBuilder content: () -> some View) async -> Bool {
-        let image = context.webExtension.icon(for: CGSize(width: 96, height: 96))
+        let image = WebKitExtensionMetadata.icon(of: context.webExtension, size: CGSize(width: 96, height: 96))
         let place = Session.shared.workspace.space(space)
         let content = content()
         return await ask(in: window, host: host) { answer in
@@ -55,11 +56,14 @@ extension Extensions {
         } == true
     }
 
+    static func name(in archive: Data, manifest: ExtensionManifest, fallback: String) -> String {
+        WebKitExtensionMetadata.name(in: archive, manifest: manifest, fallback: fallback)
+    }
+
     /// Its icon from its package, before it is installed: the largest its
     /// manifest lists.
     static func icon(in archive: Data, manifest: ExtensionManifest) -> NSImage? {
-        guard let path = manifest.icon, let data = ZipFile.file(in: archive, matching: { $0 == path }) else { return nil }
-        return NSImage(data: data)
+        WebKitExtensionMetadata.icon(in: archive, manifest: manifest)
     }
 }
 

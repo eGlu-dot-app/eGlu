@@ -478,7 +478,7 @@ private struct ExtensionMenu: View {
     var body: some View {
         let on = item.spaces.contains(model.spaceID)
         let incompatible = extensions.isIncompatible(item.id)
-        if on, !incompatible, extensions.context(item.id, in: model.spaceID)?.optionsPageURL != nil {
+        if on, !incompatible, extensions.optionsPageURL(item.id, in: model.spaceID) != nil {
             Button("Options") {
                 model.extensionsShown = false
                 extensions.openOptions(item.id, in: model)
@@ -589,7 +589,7 @@ private struct DetailPage: View {
                 .padding(.bottom, 4)
                 Divider()
                 VStack(spacing: 0) {
-                    if on, !incompatible, extensions.context(id, in: model.spaceID)?.optionsPageURL != nil {
+                    if on, !incompatible, extensions.optionsPageURL(id, in: model.spaceID) != nil {
                         PanelButton(action: {
                             model.extensionsShown = false
                             extensions.openOptions(id, in: model)

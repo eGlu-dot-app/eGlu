@@ -40,10 +40,8 @@ final class Extensions: NSObject, ObservableObject {
     /// so its settings give the cookie switch while it is on in no space.
     @Published private(set) var offersCookies: Set<String> = []
     @Published private(set) var justInstalled: JustInstalled?
-    /// Each extension's icon, read once.
-    private var icons: [String: NSImage] = [:]
-    /// Packages with no icon, not read again for one each time Settings draws.
-    private var iconless: Set<String> = []
+    private lazy var metadata: any WebExtensionMetadata = WebKitExtensionMetadata(host: ExtensionHost.shared,
+        contexts: { [unowned self] in self.contexts }, package: { Self.package($0, $1) })
     /// The popup an extension set for itself (action.setPopup), by
     /// "space/id"; "" for none. One set for a single tab isn't followed
     /// yet: WebKit doesn't say which of its tab numbers is which tab.
@@ -170,7 +168,12 @@ final class Extensions: NSObject, ObservableObject {
 
     private func note(_ manifest: ExtensionManifest?, of id: String) {
         guard let manifest else { return }
-        if manifest.optionalPermissions.contains("cookies") { offersCookies.insert(id) } else { offersCookies.remove(id) }
+        note(facts: metadata.manifestFacts(permissions: manifest.permissions, optionalPermissions: manifest.optionalPermissions), of: id)
+    }
+
+    private func note(facts: WebExtensionManifestFacts?, of id: String) {
+        guard let facts else { return }
+        if facts.offersCookies { offersCookies.insert(id) } else { offersCookies.remove(id) }
     }
 
     /// Whether the person let it read cookies: not until they do.
@@ -227,59 +230,35 @@ final class Extensions: NSObject, ObservableObject {
         folder.appendingPathComponent("installed.json")
     }
 
+    private nonisolated static let storage: any WebExtensionStorage = ExtensionStorage(environment: {
+        ExtensionHost.shared.extensionStorageEnvironment
+    }, debugSwitches: Extensions.debugSwitches)
+
+    /// Whether this is a DEBUG build of the app, whose own switches the
+    /// plugin then honours (the packages are not built as DEBUG in the app's
+    /// Test configuration).
+    nonisolated static var debugSwitches: Bool {
+        #if DEBUG
+        true
+        #else
+        false
+        #endif
+    }
+
     /// The verified package of a version, kept as it came.
     static func package(_ id: String, _ version: String) -> URL {
-        folder.appendingPathComponent(id, isDirectory: true).appendingPathComponent("\(version).zip")
+        storage.package(id, version)
     }
 
     /// The folder WebKit loads a version from: its package unpacked, with
     /// the shim put in (ExtensionPreparation).
     static func prepared(_ id: String, _ version: String) -> URL {
-        folder.appendingPathComponent(id, isDirectory: true).appendingPathComponent(version, isDirectory: true)
+        storage.prepared(id, version)
     }
 
-    /// Makes the prepared folder from the package, unless it is there and
-    /// was made from this package with this shim. Off the main thread: a large extension
-    /// takes a moment. Into a folder of its own first, so a folder that is
-    /// there is always a whole one; and one at a time, so a load in another
-    /// space, which may be reading it, finds it made rather than replaced.
-    /// Only a folder made with another shim is replaced, and nothing loads
-    /// one of those.
+    /// Makes the prepared folder off the main thread, under the runtime's lock.
     nonisolated static func prepare(_ package: URL, into folder: URL) throws {
-        try preparing.withLock { try prepareNow(package, into: folder) }
-    }
-
-    private nonisolated static let preparing = NSLock()
-
-    private nonisolated static func prepareNow(_ package: URL, into folder: URL) throws {
-        var shim = Scripts.extensionShim
-        #if DEBUG
-        // To see what WebKit does without it (`-extensionsWithoutShim YES`).
-        if UserDefaults.standard.bool(forKey: "extensionsWithoutShim") { shim = "" }
-        #endif
-        // The package's size and time, taken before it is read: one put in
-        // its place, of the same version, is told apart.
-        let kept = try package.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
-        let stamp = [ExtensionPreparation.stamp(for: shim), String(kept.fileSize ?? 0),
-                     String(kept.contentModificationDate?.timeIntervalSince1970 ?? 0)].joined(separator: " ")
-        let stampFile = folder.appendingPathComponent(ExtensionPreparation.stampFile)
-        if (try? String(contentsOf: stampFile, encoding: .utf8)) == stamp { return }
-        let archive = try Data(contentsOf: package)
-        let files = FileManager.default
-        let making = folder.deletingLastPathComponent()
-            .appendingPathComponent(".\(folder.lastPathComponent).\(UUID().uuidString)", isDirectory: true)
-        try files.createDirectory(at: making, withIntermediateDirectories: true)
-        defer { try? files.removeItem(at: making) }
-        // Every name was checked to stay inside the folder before the
-        // first is written, and only plain files are made: no link in a
-        // package can lead a later file elsewhere.
-        try ExtensionPreparation.prepare(archive, shim: shim, stamp: stamp) { path, data in
-            let file = making.appendingPathComponent(path)
-            try files.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try data.write(to: file)
-        }
-        if files.fileExists(atPath: folder.path) { try files.removeItem(at: folder) }
-        try files.moveItem(at: making, to: folder)
+        try storage.prepare(package, into: folder)
     }
 
     // MARK: Starting
@@ -423,13 +402,12 @@ final class Extensions: NSObject, ObservableObject {
         var changed = false
         for candidate in candidates {
             let file = Self.package(candidate.id, candidate.version)
-            let (name, manifest) = await Task.detached(priority: .utility) { () -> (String, ExtensionManifest?) in
-                guard let archive = try? Data(contentsOf: file),
-                      let data = ZipFile.file(in: archive, matching: { $0 == "manifest.json" }),
-                      let manifest = try? ExtensionManifest(json: data) else { return (candidate.name, nil) }
-                return (manifest.displayName(in: archive, fallback: candidate.name), manifest)
+            let metadata = self.metadata
+            let result = await Task.detached(priority: .utility) {
+                metadata.packageName(at: file, fallback: candidate.name)
             }.value
-            if installed.contains(where: { $0.id == candidate.id && $0.version == candidate.version }) { note(manifest, of: candidate.id) }
+            let name = result.name
+            if installed.contains(where: { $0.id == candidate.id && $0.version == candidate.version }) { note(facts: result.facts, of: candidate.id) }
             guard let index = installed.firstIndex(where: { $0.id == candidate.id && $0.version == candidate.version }),
                   installed[index].name == candidate.name, installed[index].name != name else { continue }
             installed[index].name = name
@@ -795,14 +773,15 @@ final class Extensions: NSObject, ObservableObject {
               let manifestData = ZipFile.file(in: archive, matching: { $0 == "manifest.json" }),
               let manifest = try? ExtensionManifest(json: manifestData)
         else { return seen }
-        if manifest.permissions.contains("nativeMessaging") { nativeRequired.insert(id) } else { nativeRequired.remove(id) }
-        if !manifest.permissions.contains("nativeMessaging"), manifest.optionalPermissions.contains("nativeMessaging") {
+        let facts = metadata.manifestFacts(permissions: manifest.permissions, optionalPermissions: manifest.optionalPermissions)
+        if facts.nativeRequired { nativeRequired.insert(id) } else { nativeRequired.remove(id) }
+        if facts.nativeOptional {
             nativeOptional.insert(id)
         } else {
             nativeOptional.remove(id)
         }
         manifests[id] = manifest
-        note(manifest, of: id)
+        note(facts: facts, of: id)
         seen.cookiesKeptBack = manifest.permissions.contains("cookies") && !readsCookies(id)
         let missing = missing(for: manifest, package)
         lacking[id] = missing
@@ -1139,7 +1118,7 @@ final class Extensions: NSObject, ObservableObject {
 
     // MARK: The records
 
-    private static var recordsFile: URL { folder.appendingPathComponent("records.json") }
+    private static var recordsFile: URL { storage.recordsFile }
 
     private func readRecords() {
         guard let data = try? Data(contentsOf: Self.recordsFile), let kept = try? JSONDecoder().decode(ExtensionRecords.self, from: data) else { return }
@@ -1219,12 +1198,12 @@ final class Extensions: NSObject, ObservableObject {
     /// The extensions on in the space that ask to show their page in new
     /// tabs, in the order they were added.
     func newTabAskers(in space: UUID) -> [Installed] {
-        on(in: space).filter { contexts[space]?[$0.id]?.overrideNewTabPageURL != nil }
+        on(in: space).filter { metadata.newTabPageURL($0.id, in: space) != nil }
     }
 
     /// Those that ask, in any space, for Settings › General.
     var newTabChoices: [Installed] {
-        installed.filter { item in contexts.values.contains { $0[item.id]?.overrideNewTabPageURL != nil } }
+        installed.filter { item in metadata.hasNewTabPage(item.id) }
     }
 
     /// The page new tabs show in the space: the one you said yes to, the
@@ -1232,13 +1211,13 @@ final class Extensions: NSObject, ObservableObject {
     func newTabPage(in space: UUID) -> URL? {
         let answers = newTabAnswers
         guard let item = newTabAskers(in: space).last(where: { answers[$0.id] == true }) else { return nil }
-        return contexts[space]?[item.id]?.overrideNewTabPageURL
+        return metadata.newTabPageURL(item.id, in: space)
     }
 
     /// Whether `url` is the new-tab page of an extension on in the space.
     func isNewTabPage(_ url: URL?, in space: UUID) -> Bool {
         guard let url else { return false }
-        return contexts[space]?.values.contains { $0.overrideNewTabPageURL == url } ?? false
+        return metadata.isNewTabPage(url, in: space)
     }
 
     /// The extension new tabs show, nil for eGlu's own.
@@ -1423,25 +1402,11 @@ final class Extensions: NSObject, ObservableObject {
 
     /// Its icon wherever it is loaded, or from its package when it is on
     /// in no space: for Settings, which lists every one.
-    func icon(of id: String) -> NSImage? {
-        if let icon = icons[id] { return icon }
-        guard !iconless.contains(id), let item = installed.first(where: { $0.id == id }) else { return nil }
-        let loaded = contexts.values.lazy.compactMap { $0[id]?.webExtension.icon(for: CGSize(width: 64, height: 64)) }.first
-        let icon = loaded ?? (try? Data(contentsOf: Self.package(item.id, item.version))).flatMap { archive in
-            ZipFile.file(in: archive, matching: { $0 == "manifest.json" })
-                .flatMap { try? ExtensionManifest(json: $0) }
-                .flatMap { Self.icon(in: archive, manifest: $0) }
-        }
-        if let icon { icons[id] = icon } else { iconless.insert(id) }
-        return icon
-    }
+    func icon(of id: String) -> NSImage? { metadata.icon(of: id) }
 
-    func icon(of id: String, in space: UUID) -> NSImage? {
-        if let icon = icons[id] { return icon }
-        guard let icon = contexts[space]?[id]?.webExtension.icon(for: CGSize(width: 32, height: 32)) else { return nil }
-        icons[id] = icon
-        return icon
-    }
+    func icon(of id: String, in space: UUID) -> NSImage? { metadata.icon(of: id, in: space) }
+
+    func optionsPageURL(_ id: String, in space: UUID) -> URL? { metadata.optionsPageURL(id, in: space) }
 
     /// Moved to where another is in the list, as the person drags it.
     func move(_ id: String, to target: String) {
@@ -1464,7 +1429,7 @@ final class Extensions: NSObject, ObservableObject {
     }
 
     func openOptions(_ id: String, in window: WindowModel) {
-        guard let context = contexts[window.spaceID]?[id], let url = context.optionsPageURL else { return }
+        guard let context = contexts[window.spaceID]?[id], let url = WebKitExtensionMetadata.optionsPageURL(for: context) else { return }
         _ = tabs.open(url, in: window.spaceID, active: true, pinned: false, context: context)
     }
 
@@ -1624,7 +1589,7 @@ final class Extensions: NSObject, ObservableObject {
                 throw Refused.notChecked(String(localized: "\u{201C}\(there.name)\u{201D} \(there.version) is installed; this is an older version, \(version)."))
             }
         }
-        let name = manifest.displayName(in: archive, fallback: id)
+        let name = Self.name(in: archive, manifest: manifest, fallback: id)
         let space = space ?? window?.spaceID ?? Session.shared.workspace.spaces[0].id
         guard asking else {
             try keep(archive, id: id, name: name, version: version, source: source, access: .allSites, spaces: [space],
@@ -1655,14 +1620,13 @@ final class Extensions: NSObject, ObservableObject {
         scanned[id] = nil
         scanning[id] = nil
         // And its icon read again, which a new version may have changed.
-        icons[id] = nil
-        iconless.remove(id)
+        metadata.forgetIcon(id)
         Self.workersChanged()
         let file = Self.package(id, version)
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         try archive.write(to: file, options: .atomic)
         let manifest = ZipFile.file(in: archive, matching: { $0 == "manifest.json" }).flatMap { try? ExtensionManifest(json: $0) }
-        let resolvedName = manifest?.displayName(in: archive, fallback: name) ?? name
+        let resolvedName = manifest.map { Self.name(in: archive, manifest: $0, fallback: name) } ?? name
         note(manifest, of: id)
         // Its cookies, as the person chose them for the version there was.
         let item = Installed(id: id, name: resolvedName, version: version, source: source, siteAccess: access, spaces: spaces,
@@ -2349,7 +2313,7 @@ extension Extensions: WKWebExtensionControllerDelegate {
 
     func webExtensionController(_ controller: WKWebExtensionController, openOptionsPageFor extensionContext: WKWebExtensionContext,
                                 completionHandler: @escaping ((any Error)?) -> Void) {
-        guard let space = space(of: controller), let url = extensionContext.optionsPageURL else { return completionHandler(nil) }
+        guard let space = space(of: controller), let url = WebKitExtensionMetadata.optionsPageURL(for: extensionContext) else { return completionHandler(nil) }
         _ = tabs.open(url, in: space, active: true, pinned: false, context: extensionContext)
         completionHandler(nil)
     }
@@ -2370,7 +2334,7 @@ extension Extensions: WKWebExtensionControllerDelegate {
         guard let sourceSpace = space(of: controller),
               let owner = permissionWindow(in: sourceSpace, tab: tab) else { return completionHandler([], nil) }
         let summary = ExtensionAccessSummary(permissions: asked.map(\.rawValue), sites: [])
-        let title = String(localized: "\u{201C}\(extensionContext.webExtension.displayName ?? String(localized: "An extension"))\u{201D} wants more access")
+        let title = String(localized: "\u{201C}\(WebKitExtensionMetadata.name(of: extensionContext.webExtension) ?? String(localized: "An extension"))\u{201D} wants more access")
         let id = extensionContext.uniqueIdentifier
         Task {
             let yes = await askForMore(title: title, from: extensionContext, in: sourceSpace, window: owner,
@@ -2399,7 +2363,7 @@ extension Extensions: WKWebExtensionControllerDelegate {
         guard !wanted.isEmpty, let sourceSpace = space(of: controller),
               let owner = permissionWindow(in: sourceSpace, tab: tab) else { return completionHandler([], nil) }
         let summary = ExtensionAccessSummary(permissions: [], sites: wanted.map(\.string))
-        let title = String(localized: "\u{201C}\(extensionContext.webExtension.displayName ?? String(localized: "An extension"))\u{201D} wants to read and change more sites")
+        let title = String(localized: "\u{201C}\(WebKitExtensionMetadata.name(of: extensionContext.webExtension) ?? String(localized: "An extension"))\u{201D} wants to read and change more sites")
         Task {
             let yes = await askForMore(title: title, from: extensionContext, in: sourceSpace, window: owner) {
                 ExtensionAccessGroups(summary: summary, everything: true)
@@ -2411,7 +2375,7 @@ extension Extensions: WKWebExtensionControllerDelegate {
     }
 
     func sidePanelDefaultPath(_ id: String, in space: UUID) -> String? {
-        context(id, in: space).flatMap { ExtensionSurface.defaultSidePanelPath(for: $0) }
+        metadata.sidePanelDefaultPath(id, in: space)
     }
 
     func sidePanelSource(_ id: String, in space: UUID) -> ExtensionPaneSource? {

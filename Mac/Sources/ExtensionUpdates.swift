@@ -119,7 +119,7 @@ extension Extensions {
                 }
                 guard installed.first(where: { $0.id == item.id }) == item else { return result(.deferred, String(localized: "The extension changed while you reviewed its access. Check again.")) }
             }
-            let name = manifest.displayName(in: archive, fallback: item.name)
+            let name = Self.name(in: archive, manifest: manifest, fallback: item.name)
             try await trial(archive, id: item.id)
             guard installed.first(where: { $0.id == item.id }) == item else { return result(.deferred, String(localized: "The extension changed during verification. Check again.")) }
             let installation = try keep(archive, id: item.id, name: name, version: version.description, source: .store,
@@ -147,7 +147,7 @@ extension Extensions {
         // One that won't start leaves the version there is in place.
         try await trial(archive, id: item.id)
         guard installed.first(where: { $0.id == item.id }) == item else { return false }
-        try keep(archive, id: item.id, name: manifest.displayName(in: archive, fallback: item.name),
+        try keep(archive, id: item.id, name: Self.name(in: archive, manifest: manifest, fallback: item.name),
                  version: version.description, source: item.source, access: item.siteAccess, spaces: item.spaces,
                  granted: manifest.grants, folder: folder)
         return true

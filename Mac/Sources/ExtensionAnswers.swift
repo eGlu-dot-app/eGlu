@@ -174,7 +174,7 @@ extension Extensions {
                 return true
             default:
                 if reachesApps(id) { return true }
-                let title = String(localized: "\u{201C}\(context.webExtension.displayName ?? id)\u{201D} wants to talk to apps on this Mac")
+                let title = String(localized: "\u{201C}\(WebKitExtensionMetadata.name(of: context.webExtension) ?? id)\u{201D} wants to talk to apps on this Mac")
                 let yes = await askForMore(title: title, from: context, in: space, window: Session.shared.frontWindow) {
                     NativeAppsGroup()
                 }
@@ -517,7 +517,7 @@ extension Extensions {
                 ?? Session.shared.allWindows.first(where: { $0.spaceID == space && $0.window?.isVisible == true }) else { return false }
         let spaceName = Session.shared.workspace.space(space)?.name ?? String(localized: "this space")
         let alert = NSAlert()
-        alert.messageText = String(localized: "\u{201C}\(package.displayName ?? String(localized: "An extension"))\u{201D} asks for more.")
+        alert.messageText = String(localized: "\u{201C}\(WebKitExtensionMetadata.name(of: package) ?? String(localized: "An extension"))\u{201D} asks for more.")
         let lines = missing.map { ExtensionAccessDescription.capability($0.rawValue) } + unreached.map { ExtensionAccessDescription.site($0.string) }
         let cookies = missing.contains(.cookies)
         alert.informativeText = lines.sorted().joined(separator: "\n") + "\n\n" + String(localized: "Applies in \(spaceName). Google's sign-in pages remain blocked.")
@@ -564,7 +564,7 @@ extension Extensions {
             if let old = keptAwake.removeValue(forKey: key) { IOPMAssertionRelease(old) }
             var assertion: IOPMAssertionID = 0
             let kind = ((first as? String) == "display" ? kIOPMAssertionTypePreventUserIdleDisplaySleep : kIOPMAssertionTypePreventUserIdleSystemSleep) as CFString
-            let why = String(localized: "An extension in eGlu: \(context.webExtension.displayName ?? id)") as CFString
+            let why = String(localized: "An extension in eGlu: \(WebKitExtensionMetadata.name(of: context.webExtension) ?? id)") as CFString
             if IOPMAssertionCreateWithName(kind, IOPMAssertionLevel(kIOPMAssertionLevelOn), why, &assertion) == kIOReturnSuccess {
                 keptAwake[key] = assertion
             }
@@ -631,8 +631,8 @@ extension Extensions {
         let item = installed.first { $0.id == context.uniqueIdentifier }
         var info: [String: Any] = [
             "id": context.uniqueIdentifier,
-            "name": package.displayName ?? item?.name ?? "",
-            "shortName": package.displayShortName ?? package.displayName ?? "",
+            "name": WebKitExtensionMetadata.name(of: package) ?? item?.name ?? "",
+            "shortName": package.displayShortName ?? WebKitExtensionMetadata.name(of: package) ?? "",
             "description": package.displayDescription ?? "",
             "version": package.version ?? item?.version ?? "",
             "enabled": true, "mayDisable": true, "offlineEnabled": false,
@@ -642,7 +642,7 @@ extension Extensions {
             "hostPermissions": package.allRequestedMatchPatterns.map(\.string).sorted(),
             "isApp": false,
         ]
-        if let options = context.optionsPageURL { info["optionsUrl"] = options.absoluteString }
+        if let options = WebKitExtensionMetadata.optionsPageURL(for: context) { info["optionsUrl"] = options.absoluteString }
         return info
     }
 
