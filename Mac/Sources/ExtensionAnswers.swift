@@ -325,11 +325,15 @@ extension Extensions {
             // As in Chrome, a flow is out of sight unless it says it is interactive.
             if spec["interactive"] as? Bool != true {
                 let wait = (spec["timeoutMsForNonInteractive"] as? NSNumber).map { $0.doubleValue / 1000 }
-                return try await ExtensionAuth.quietly(url, extension: id, in: space,
+                return try await WebKitExtensionAuth.quietly(url, extension: id, in: space,
                                                        abortOnLoad: spec["abortOnLoadForNonInteractive"] as? Bool ?? true,
-                                                       timeout: wait).absoluteString
+                                                       timeout: wait,
+                                                       configuration: { Session.shared.engine.configuration(space: space) },
+                                                       unanswered: { Unanswered(why: $0) }).absoluteString
             }
-            return try await ExtensionAuth.run(url, extension: id, context: context, in: space).absoluteString
+            return try await ExtensionAuth.run(url, extension: id, in: space, openTab: {
+                Extensions.shared.tabs.open(url, in: space, active: true, pinned: false, context: context)
+            }).absoluteString
 
         default:
             throw Unanswered(why: "eGlu doesn't answer \(api).")

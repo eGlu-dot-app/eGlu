@@ -4,6 +4,8 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+- On the Mac, an extension's sign-in that runs out of sight (`chrome.identity`) lives in `WebKitExtensions`, given the space's settings by the app; a sign-in in a tab stays the app's: the ninth part of step 12 of keeping eGlu's interface apart from its engines (`Docs/EngineSplitPlan.md`). Nothing changes in use.
+
 - On the Mac, what records the screen, the camera and the microphone for extensions lives in `WebKitExtensions`; the app keeps the question it asks you, bringing a tab forward and the recording pill: the eighth part of step 12 of keeping eGlu's interface apart from its engines (`Docs/EngineSplitPlan.md`). Nothing changes in use.
 
 - On the Mac, extensions' toolbar buttons, their menu commands and the keyboard shortcuts given to them reach the interface as plain values, with WebKit's objects kept in the WebKit plugin: the seventh part of step 12 of keeping eGlu's interface apart from its engines (`Docs/EngineSplitPlan.md`). Nothing changes in use.

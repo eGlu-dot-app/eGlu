@@ -5,31 +5,29 @@
 
 | Section | Count | Files |
 |:---|---:|---:|
-| a. Imports (Mac/) | 8 | 8 |
+| a. Imports (Mac/) | 7 | 7 |
 | a. Imports (Shared/) | 0 | 0 |
 | b. Reach-ins into page view (app) | 19 | 7 |
 | b. Reach-ins (tests) | 191 | 20 |
 | b. Reach-ins (Page.swift self-references) | 0 | 0 |
 | c. WebKit types in declarations | 42 | 14 |
-| c. Declarations (Extension* files) | 75 | 4 |
-| d. Private WebKit API | 23 | 10 |
-| e. Hidden web views | 6 | 4 |
+| c. Declarations (Extension* files) | 54 | 3 |
+| d. Private WebKit API | 20 | 9 |
+| e. Hidden web views | 5 | 3 |
 | f. Script bridges (app) | 2 | 2 |
 | f. Script bridges (WebKit plugin) | 7 | 3 |
 | f. Script bridges (tests) | 4 | 2 |
-| **Total** | **175** | **29** |
+| **Total** | **149** | **28** |
 
 ## Details
 
 ### a. Imports
 
-#### Mac/ (8 lines in 8 files)
+#### Mac/ (7 lines in 7 files)
 - `Mac/Sources/ExtensionAnswers.swift` (1):
   - L6: `import WebKit`
 - `Mac/Sources/ExtensionAsk.swift` (1):
   - L4: `import WebKit`
-- `Mac/Sources/ExtensionAuth.swift` (1):
-  - L3: `import WebKit`
 - `Mac/Sources/ExtensionUpdates.swift` (1):
   - L5: `import WebKit`
 - `Mac/Sources/Extensions.swift` (1):
@@ -346,40 +344,18 @@ _None._
   - L70: `let uiDelegate = try XCTUnwrap(objc_getProtocol("WKUIDelegate"))`
   - L339: `func getContextMenu(_ webView: WKWebView, proposedMenu: NSMenu, element: NSObject?, userInfo: Any?,`
 
-#### Declarations in Extension* files (75 lines in 4 files)
+#### Declarations in Extension* files (54 lines in 3 files)
 - `Mac/Sources/ExtensionAnswers.swift` (8):
   - L47: `func answer(_ api: String, _ args: [Any], context: WKWebExtensionContext, in space: UUID) async throws -> Any? {`
-  - L485: `private func requestAfterClick(_ names: [String], origins: [String], context: WKWebExtensionContext, in space: UUID) async throws -> Bool {`
-  - L492: `let wanted = names.map { WKWebExtension.Permission(rawValue: $0) }`
-  - L493: `let patterns = origins.compactMap { try? WKWebExtension.MatchPattern(string: $0) }`
-  - L505: `let blocked = { (pattern: WKWebExtension.MatchPattern) in`
-  - L537: `static func asks(_ context: WKWebExtensionContext, for permission: String) -> Bool {`
-  - L544: `private func idleOrPower(_ api: String, first: Any?, id: String, context: WKWebExtensionContext, in space: UUID) throws -> Any? {`
-  - L625: `private func describe(_ context: WKWebExtensionContext) -> [String: Any] {`
+  - L489: `private func requestAfterClick(_ names: [String], origins: [String], context: WKWebExtensionContext, in space: UUID) async throws -> Bool {`
+  - L496: `let wanted = names.map { WKWebExtension.Permission(rawValue: $0) }`
+  - L497: `let patterns = origins.compactMap { try? WKWebExtension.MatchPattern(string: $0) }`
+  - L509: `let blocked = { (pattern: WKWebExtension.MatchPattern) in`
+  - L541: `static func asks(_ context: WKWebExtensionContext, for permission: String) -> Bool {`
+  - L548: `private func idleOrPower(_ api: String, first: Any?, id: String, context: WKWebExtensionContext, in space: UUID) throws -> Any? {`
+  - L629: `private func describe(_ context: WKWebExtensionContext) -> [String: Any] {`
 - `Mac/Sources/ExtensionAsk.swift` (1):
   - L45: `func askForMore(title: String, from context: WKWebExtensionContext, in space: UUID, window: WindowModel?,`
-- `Mac/Sources/ExtensionAuth.swift` (21):
-  - L55: `static func run(_ url: URL, extension id: String, context: WKWebExtensionContext, in space: UUID) async throws -> URL {`
-  - L175: `final class Quiet: NSObject, WKNavigationDelegate, WKUIDelegate {`
-  - L191: `private var view: WKWebView?`
-  - L208: `let view = WKWebView(frame: CGRect(x: 0, y: 0, width: 800, height: 600), configuration: config)`
-  - L241: `func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,`
-  - L262: `func webView(_ webView: WKWebView, decidePolicyFor response: WKNavigationResponse,`
-  - L267: `func webView(_ webView: WKWebView, didReceiveServerRedirectForProvisionalNavigation navigation: WKNavigation!) {`
-  - L279: `func webView(_ webView: WKWebView, didReceive challenge: URLAuthenticationChallenge,`
-  - L288: `func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {`
-  - L294: `func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {`
-  - L298: `func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {`
-  - L311: `func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {`
-  - L317: `func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,`
-  - L322: `func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String,`
-  - L327: `func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String,`
-  - L332: `func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String, defaultText: String?,`
-  - L337: `func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters,`
-  - L342: `func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin,`
-  - L349: `func displayCapture(_ web: WKWebView, origin: WKSecurityOrigin, frame: WKFrameInfo, systemAudio: Bool,`
-  - L355: `func location(_ webView: WKWebView, origin: WKSecurityOrigin, frame: WKFrameInfo,`
-  - L361: `func notifications(_ webView: WKWebView, origin: WKSecurityOrigin, decisionHandler: @escaping (Bool) -> Void) {`
 - `Mac/Sources/Extensions.swift` (45):
   - L108: `private var controllers: [UUID: WKWebExtensionController] = [:]`
   - L112: `private(set) var contexts: [UUID: [String: WKWebExtensionContext]] = [:]`
@@ -427,16 +403,12 @@ _None._
   - L2455: `func webExtensionController(_ controller: WKWebExtensionController, sendMessage message: Any, toApplicationWithIdentifier applicationIdentifier: String?,`
   - L2489: `func webExtensionController(_ controller: WKWebExtensionController, connectUsing port: WKWebExtension.MessagePort,`
 
-### d. Private WebKit API (23 lines in 10 files)
+### d. Private WebKit API (20 lines in 9 files)
 - `Mac/Sources/ExtensionAnswers.swift` (4):
   - L34: `let folder = folder.appendingPathComponent("_eglu", isDirectory: true)`
-  - L343: `folder.appendingPathComponent(id, isDirectory: true).appendingPathComponent("_eglu", isDirectory: true)`
-  - L392: `let dir = folder.appendingPathComponent("_eglu", isDirectory: true)`
-  - L426: `let dir = folder.appendingPathComponent("_eglu", isDirectory: true)`
-- `Mac/Sources/ExtensionAuth.swift` (3):
-  - L348: `@objc(_webView:requestDisplayCapturePermissionForOrigin:initiatedByFrame:withSystemAudio:decisionHandler:)`
-  - L354: `@objc(_webView:requestGeolocationPermissionForOrigin:initiatedByFrame:decisionHandler:)`
-  - L360: `@objc(_webView:requestNotificationPermissionForSecurityOrigin:decisionHandler:)`
+  - L347: `folder.appendingPathComponent(id, isDirectory: true).appendingPathComponent("_eglu", isDirectory: true)`
+  - L396: `let dir = folder.appendingPathComponent("_eglu", isDirectory: true)`
+  - L430: `let dir = folder.appendingPathComponent("_eglu", isDirectory: true)`
 - `Mac/Sources/Extensions.swift` (1):
   - L1713: `let kept = ["\(version).zip", version, "_eglu"]`
 - `Mac/Sources/Window.swift` (1):
@@ -462,9 +434,7 @@ _None._
   - L251: `.filter { $0.hasPrefix("webView") || $0.hasPrefix("_webView") })`
   - L338: `@objc(_webView:getContextMenuFromProposedMenu:forElement:userInfo:completionHandler:)`
 
-### e. Hidden web views (6 lines in 4 files)
-- `Mac/Sources/ExtensionAuth.swift` (1):
-  - L208: `let view = WKWebView(frame: CGRect(x: 0, y: 0, width: 800, height: 600), configuration: config)`
+### e. Hidden web views (5 lines in 3 files)
 - `Mac/Sources/Extensions.swift` (1):
   - L514: `let pages = configuration.webViewConfiguration ?? WKWebViewConfiguration()`
 - `Tests/Crashes/CrashRegressionTests.swift` (3):
