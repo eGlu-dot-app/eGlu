@@ -1,5 +1,4 @@
 import AppKit
-import WebKitExtensions
 
 /// chrome.identity.launchWebAuthFlow: an extension's sign-in through its
 /// provider's page, in the space the extension asked from. The moment the
@@ -25,10 +24,10 @@ enum ExtensionAuth {
 
     /// Chrome's words for each way a flow ends without an answer.
     static let declined = "The user did not approve access."
-    static let notLoaded = WebKitExtensionAuth.notLoaded
+    static let notLoaded = EngineComposition.authNotLoaded
 
     /// The runtime owns the shared address check.
-    static func owner(of url: URL?) -> String? { WebKitExtensionAuth.owner(of: url) }
+    static func owner(of url: URL?) -> String? { EngineComposition.authOwner(of: url) }
 
     // MARK: In a tab
 
@@ -36,7 +35,7 @@ enum ExtensionAuth {
     /// so is ten minutes with nobody finishing. A page that can't load ends
     /// it at once (loadFailed). The hub opens the runtime's tab with the
     /// context it already has, only when this flow asks for it.
-    static func run(_ url: URL, extension id: String, in space: UUID, openTab: () -> ExtensionTab?) async throws -> URL {
+    static func run(_ url: URL, extension id: String, in space: UUID, openTab: () -> UUID?) async throws -> URL {
         guard ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { throw Extensions.Unanswered(why: notLoaded) }
         let key = key(id, space)
         return try await withCheckedThrowingContinuation { continuation in
@@ -47,17 +46,17 @@ enum ExtensionAuth {
             guard let tab = openTab() else {
                 return continuation.resume(throwing: Extensions.Unanswered(why: notLoaded))
             }
-            inFront(tab.id, in: space)
+            inFront(tab, in: space)
             let started = Date()
             let watch = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
                 MainActor.assumeIsolated {
-                    guard let flow = waiting[key], flow.tab == tab.id else { return }
+                    guard let flow = waiting[key], flow.tab == tab else { return }
                     if Session.shared.workspace.tab(flow.tab) == nil || Date().timeIntervalSince(started) > 600 {
                         end(key, .failure(Extensions.Unanswered(why: declined)))
                     }
                 }
             }
-            waiting[key] = Flow(tab: tab.id, finish: { continuation.resume(with: $0) }, watch: watch)
+            waiting[key] = Flow(tab: tab, finish: { continuation.resume(with: $0) }, watch: watch)
         }
     }
 
@@ -118,7 +117,7 @@ enum ExtensionAuth {
         // A tab's page, or an extension's popup window's (windows.create).
         let shown = Session.shared.workspace.spaceID(of: page.tab) == page.space || Extensions.shared.popupShows(page)
         guard let id = owner(of: url), shown,
-              let context = Extensions.shared.context(id, in: page.space), Extensions.asks(context, for: "identity")
+              Extensions.shared.asks(id, in: page.space, for: "identity")
         else { return false }
         page.hold(url)
         return true

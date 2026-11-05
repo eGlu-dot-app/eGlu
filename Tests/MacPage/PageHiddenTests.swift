@@ -311,7 +311,7 @@ final class PageHiddenTests: PageTestCase {
     /// held weakly, to see it go.
     private func pageLetGo(_ take: (Page) -> Void) -> Weakly<PageView> {
         autoreleasepool { () -> Weakly<PageView> in
-            let page = Page(tab: UUID(), space: UUID(), enginePage: AppWebKitEngine.page(configuration: Self.keepingNothing()))
+            let page = Page(tab: UUID(), space: UUID(), enginePage: PageWebKitForTests.page(configuration: Self.keepingNothing()))
             take(page)
             let view = Weakly(page.view)
             page.tearDown()

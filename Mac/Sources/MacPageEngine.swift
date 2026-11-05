@@ -1,125 +1,60 @@
 import Foundation
-import PadCore
 import WebEngineAppKit
 import WebEngineCore
-import WebKit
-import WebKitExtensions
-import WebKitSupport
-import WebKitMacPlugin
 
 /// Where a new page gets its configuration.
-enum MacPageSource {
-    /// A new page in the space's store.
-    case space
-    /// An enabled extension's configuration for the address, or the space's.
-    case tab(URL?)
-    /// A website's child, made from its request before the call returns.
-    case child(any WebChildRequest)
-    /// An extension's configuration, used as given.
-    case supplied(WKWebViewConfiguration, extensionPage: Bool)
-}
+typealias MacPageSource = WebMacPageSource
 
 /// Makes the Mac's pages and starts their engine services.
 @MainActor
 protocol MacPageEngine: AnyObject {
     var svgRasterizer: any WebSVGRasterizer { get }
-    /// The engine's compiled content-blocking lists.
     func ruleListStore() -> (any WebRuleListStore)?
-    /// A page for the tab, space and configuration source.
     func makePage(tab: UUID, space: UUID, source: MacPageSource) -> Page
-    /// A new configuration in the space's store.
-    func configuration(space: UUID) -> WKWebViewConfiguration
-    /// The space's session for a download retry.
     func downloadStarter(space: UUID) -> any WebDownloadStarting
-    /// Empties a removed space's store and schedules its removal.
     func eraseStore(space: UUID)
-    /// Removes website stores no space uses.
     func sweepStores()
-    /// Starts the content blocker's lists and rules.
     func startContentBlocking()
-    /// Starts the extensions enabled in each space.
     func startExtensions(afterLaunch: Bool)
-    /// WebKit's own spell checking follows the writing setting.
     func spellingFollows(writing: Bool, pages: [Page])
 }
 
-/// The app's WebKit page factory.
+/// The app's product page factory, over the selected engine's factory.
 @MainActor
-final class AppWebKitEngine: MacPageEngine {
-    var svgRasterizer: any WebSVGRasterizer { WebKitSVGRaster.shared }
+final class AppPageEngine: MacPageEngine {
+    private let factory: any WebMacPageFactory
+
+    init(factory: any WebMacPageFactory) {
+        self.factory = factory
+    }
+
+    var svgRasterizer: any WebSVGRasterizer { factory.svgRasterizer }
 
     func spellingFollows(writing: Bool, pages: [Page]) {
-        WebKitSpelling.follow(writing: writing, views: pages.map(\.view))
+        factory.spellingFollows(writing: writing, pages: pages.map(\.enginePage))
     }
 
-    func ruleListStore() -> (any WebRuleListStore)? {
-        WebKitRuleListStore.makeDefault()
-    }
+    func ruleListStore() -> (any WebRuleListStore)? { factory.ruleListStore() }
 
-    /// A supplied configuration stays supplied, including an extension's controller.
     func makePage(tab: UUID, space: UUID, source: MacPageSource) -> Page {
-        switch source {
-        case .space:
-            return Page(tab: tab, space: space, enginePage: AppWebKitEngine.page(configuration: configuration(space: space)))
-        case .tab(let url):
-            if let configuration = url.flatMap({ Extensions.shared.configuration(for: $0, in: space) }) {
-                return Page(tab: tab, space: space, enginePage: AppWebKitEngine.page(configuration: configuration, extensionPage: true))
-            }
-            return Page(tab: tab, space: space, enginePage: AppWebKitEngine.page(configuration: configuration(space: space)))
-        case .child(let request):
-            guard let request = request as? WebKitChildRequest else {
-                preconditionFailure("AppWebKitEngine requires a WebKitChildRequest")
-            }
-            return Page(tab: tab, space: space, enginePage: AppWebKitEngine.page(configuration: request.configuration, extensionPage: false))
-        case .supplied(let configuration, let extensionPage):
-            return Page(tab: tab, space: space, enginePage: AppWebKitEngine.page(configuration: configuration, extensionPage: extensionPage))
-        }
-    }
-
-    static func page(configuration: WKWebViewConfiguration, extensionPage: Bool = false) -> WebKitMacPage {
-        WebKitMacPage(configuration: configuration, extensionPage: extensionPage,
-                      extensionUIDelegate: { ExtensionPageDelegate(next: $0, capture: { ExtensionCapture.shared.runtime }) })
-    }
-
-    /// The space's store and extension controller, with the app's user agent.
-    func configuration(space: UUID) -> WKWebViewConfiguration {
-        WebKitConfiguration.make(store: WebKitStores.store(for: space),
-                                extensionController: Extensions.shared.controller(for: space),
-                                applicationNameForUserAgent: Identity.applicationName(for: ProcessInfo.processInfo.operatingSystemVersion))
+        Page(tab: tab, space: space, enginePage: factory.makePage(space: space, source: source))
     }
 
     func downloadStarter(space: UUID) -> any WebDownloadStarting {
-        WebKitDownloadStarter(store: WebKitStores.store(for: space))
+        factory.downloadStarter(space: space)
     }
 
-    func eraseStore(space: UUID) {
-        Stores.erase(space, in: WebKitSpaceStores.shared)
-    }
-
-    /// Removes website stores no space uses.
-    func sweepStores() {
-        Stores.sweep(in: WebKitSpaceStores.shared)
-    }
-
-    /// Starts the content blocker's lists and rules.
-    func startContentBlocking() {
-        ContentBlocker.shared.start()
-    }
-
-    /// Starts the extensions enabled in each space.
-    func startExtensions(afterLaunch: Bool) {
-        Extensions.shared.start(afterLaunch: afterLaunch)
-    }
+    func eraseStore(space: UUID) { Stores.erase(space, in: factory.spaceStores) }
+    func sweepStores() { Stores.sweep(in: factory.spaceStores) }
+    func startContentBlocking() { ContentBlocker.shared.start() }
+    func startExtensions(afterLaunch: Bool) { Extensions.shared.start(afterLaunch: afterLaunch) }
 }
 
 // The host passes the runtime's configuration straight to the app's engine.
 extension MacPageEngine {
     func makeExtensionPopupPage(space: UUID, configuration: (any ExtensionPageConfiguration)?) -> Page {
         if let configuration {
-            guard let configuration = configuration as? WebKitExtensionPageConfiguration else {
-                preconditionFailure("AppWebKitEngine requires a WebKitExtensionPageConfiguration")
-            }
-            return makePage(tab: UUID(), space: space, source: .supplied(configuration.configuration, extensionPage: true))
+            return makePage(tab: UUID(), space: space, source: .supplied(configuration))
         }
         return makePage(tab: UUID(), space: space, source: .space)
     }

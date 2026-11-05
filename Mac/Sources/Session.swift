@@ -97,7 +97,7 @@ final class Session: ObservableObject {
     /// tests give one of theirs to a `Pages` of their own, never to a second
     /// Session, which would open and write the same workspace.
     private init() {
-        let engine = AppWebKitEngine()
+        let engine = EngineComposition.makePageEngine()
         self.engine = engine
         pages = Pages(engine: engine)
         let opened = store.open()

@@ -2,8 +2,6 @@ import AppKit
 import PadCore
 import WebEngineAppKit
 import WebEngineCore
-import WebKit
-import WebKitExtensions
 
 /// Every tab's page: live, or let go until it is opened again.
 ///
@@ -54,7 +52,7 @@ final class Pages {
             page.restorationData = state
         }
         // No state, or one WebKit couldn't use: the tab's address.
-        if page.view.url == nil, let url = tab.url {
+        if page.state.url == nil, let url = tab.url {
             page.load(url)
         }
         return page
@@ -67,9 +65,9 @@ final class Pages {
     }
 
     /// A page WebKit made for a tab, opened by another page.
-    func adopt(tab: UUID, space: UUID, configuration: WKWebViewConfiguration, extensionPage: Bool = false) -> Page {
+    func adopt(tab: UUID, space: UUID, configuration: any ExtensionPageConfiguration) -> Page {
         close(tab)
-        let page = engine.makePage(tab: tab, space: space, source: .supplied(configuration, extensionPage: extensionPage))
+        let page = engine.makePage(tab: tab, space: space, source: .supplied(configuration))
         live[tab] = page
         return page
     }
@@ -86,7 +84,7 @@ final class Pages {
     /// page from now on, as it is.
     func adopt(_ page: Page) {
         live[page.tab] = page
-        addresses[page.tab] = page.view.url
+        addresses[page.tab] = page.state.url
     }
 
     func isLive(_ tab: UUID) -> Bool {
@@ -156,18 +154,18 @@ final class Pages {
 
     func navigationChanged(_ page: Page, committed: Bool = false) {
         guard live[page.tab] === page else { return }
-        guard committed || addresses[page.tab] != page.view.url else { return }
-        addresses[page.tab] = page.view.url
+        guard committed || addresses[page.tab] != page.state.url else { return }
+        addresses[page.tab] = page.state.url
         invalidate(page.tab)
     }
 
     private func release(_ page: Page, token: PageSnapshotFiles.Token) {
         guard live[page.tab] === page, Snapshots.isCurrent(token) else { return }
         if let state = page.restorationData {
-            states[page.tab] = KeptState(space: page.space, url: page.view.url, value: state)
+            states[page.tab] = KeptState(space: page.space, url: page.state.url, value: state)
             // Never a sign-in page's on disk: it can hold an email address;
             // nor an extension's own, which can show a password vault.
-            if !page.isSignIn, !page.isExtensionPage { Snapshots.save(state: state, url: page.view.url, using: token) }
+            if !page.isSignIn, !page.isExtensionPage { Snapshots.save(state: state, url: page.state.url, using: token) }
         }
         live[page.tab] = nil
         page.tearDown()
@@ -186,9 +184,6 @@ final class Pages {
 
 extension Pages {
     func adoptExtension(tab: UUID, space: UUID, configuration: any ExtensionPageConfiguration) -> Page {
-        guard let configuration = configuration as? WebKitExtensionPageConfiguration else {
-            preconditionFailure("AppWebKitEngine requires a WebKitExtensionPageConfiguration")
-        }
-        return adopt(tab: tab, space: space, configuration: configuration.configuration, extensionPage: true)
+        adopt(tab: tab, space: space, configuration: configuration)
     }
 }

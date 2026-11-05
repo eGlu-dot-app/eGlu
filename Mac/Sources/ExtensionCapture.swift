@@ -1,21 +1,12 @@
 import AppKit
 import Combine
 import WebEngineAppKit
-import WebKitExtensions
 
 /// The app's consent, remembered answer and recording pill.
 @MainActor
 final class ExtensionCapture: NSObject, ObservableObject {
     static let shared = ExtensionCapture()
-    private(set) var runtime: ExtensionCaptureRuntime!
-
-    override private init() {
-        super.init()
-        runtime = ExtensionCaptureRuntime(scheme: Extensions.scheme, host: ExtensionHost.shared,
-            space: { Extensions.shared.space(of: $0) },
-            context: { Extensions.shared.context($0, in: $1) },
-            declares: { Extensions.asks($0, for: "desktopCapture") })
-    }
+    override private init() { super.init() }
 
     static func key(_ id: String) -> String { "extensionCapture.\(id)" }
 
@@ -26,7 +17,7 @@ final class ExtensionCapture: NSObject, ObservableObject {
     /// id it was given and hasn't used is good no more.
     static func forget(_ id: String) {
         UserDefaults.standard.removeObject(forKey: key(id))
-        shared.runtime.forget(id)
+        Extensions.shared.runtime.forgetCapture(id)
         shared.refused.remove(id)
         shared.objectWillChange.send()
     }

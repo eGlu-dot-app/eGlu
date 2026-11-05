@@ -61,6 +61,10 @@ public final class WebKitExtensionMetadata: WebExtensionMetadata {
     }
 
     public nonisolated func packageName(at file: URL, fallback: String) -> WebExtensionPackageName {
+        Self.readPackageName(at: file, fallback: fallback)
+    }
+
+    nonisolated static func readPackageName(at file: URL, fallback: String) -> WebExtensionPackageName {
         guard let archive = try? Data(contentsOf: file),
               let data = ZipFile.file(in: archive, matching: { $0 == "manifest.json" }),
               let manifest = try? ExtensionManifest(json: data) else { return WebExtensionPackageName(name: fallback, facts: nil) }

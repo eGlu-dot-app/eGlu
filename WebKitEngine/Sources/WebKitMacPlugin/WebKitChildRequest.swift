@@ -14,4 +14,12 @@ public final class WebKitChildRequest: WebChildRequest {
         navigation = WebKitNavigationAdapter.translate(action)
         self.features = WebWindowFeatures(width: features.width?.doubleValue, height: features.height?.doubleValue)
     }
+
+    /// A translated request supplied by fixtures without loading a page.
+    public init(configuration: WKWebViewConfiguration, navigation: WebNavigation, features: WebWindowFeatures) {
+        self.configuration = configuration
+        self.navigation = navigation
+        self.features = features
+    }
+
 }

@@ -1,6 +1,5 @@
 import Foundation
 import WebEngineAppKit
-import WebKitSupport
 
 extension ExtensionHost: ExtensionCleanupHost {
     func extensionCleanupIsInstalled(_ id: String) -> Bool {
@@ -18,7 +17,7 @@ extension ExtensionHost: ExtensionCleanupHost {
     func closeExtensionCleanupPages(of id: String, in space: UUID) {
         let session = Session.shared
         for tab in session.workspace.space(space)?.tabs ?? [] {
-            guard let url = session.pages.live[tab.id]?.view.url ?? tab.url, url.scheme == Extensions.scheme, url.host() == id else { continue }
+            guard let url = session.pages.live[tab.id]?.state.url ?? tab.url, url.scheme == Extensions.scheme, url.host() == id else { continue }
             session.change { _ = $0.closeTab(tab.id) }
             session.pages.close(tab.id)
         }
@@ -29,7 +28,7 @@ extension ExtensionHost: ExtensionCleanupHost {
     func closeExtensionCleanupSidePanels(in space: UUID) { ExtensionSidePanels.shared.closeAll(in: space) }
 
     func scheduleExtensionCleanupStoreSweep() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { Stores.sweep(in: WebKitSpaceStores.shared) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { EngineComposition.sweepStores() }
     }
 
     func noteExtensionCleanup(_ message: () -> String) {

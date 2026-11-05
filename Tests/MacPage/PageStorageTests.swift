@@ -267,7 +267,7 @@ final class PageStorageTests: PageTestCase {
             }
         }
 
-        AppWebKitEngine().eraseStore(space: fresh)
+        EngineComposition.makePageEngine().eraseStore(space: fresh)
         let erased = Date()
         XCTAssertFalse(WebKitStores.isMade(fresh), "the erased space's store is still made")
         XCTAssertTrue(Self.erasing.contains(fresh.uuidString), "the erased space isn't written down")

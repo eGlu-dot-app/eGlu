@@ -138,7 +138,7 @@ final class PageUIDelegateTests: PageTestCase {
         let host = UIHost()
         hosts.append(host)
         // Torn down here, once, and not again after the test.
-        let page = Page(tab: UUID(), space: UUID(), enginePage: AppWebKitEngine.page(configuration: Self.keepingNothing()))
+        let page = Page(tab: UUID(), space: UUID(), enginePage: PageWebKitForTests.page(configuration: Self.keepingNothing()))
         var tornDown = false
         defer { if !tornDown { page.tearDown() } }
         page.host = host

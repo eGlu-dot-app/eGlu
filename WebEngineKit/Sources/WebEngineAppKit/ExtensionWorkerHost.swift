@@ -2,7 +2,7 @@ import Foundation
 
 /// Catalog and product decisions needed by worker recovery. Each answer is
 /// read at the original call site, including after worker clearing awaits.
-@MainActor public protocol ExtensionWorkerHost: ExtensionBrowserHost, ExtensionAuxiliaryPageHost {
+@MainActor public protocol ExtensionWorkerHost: AnyObject {
     var extensionWorkerSpaces: [UUID] { get }
     var extensionWorkerInstallations: [WebExtensionWorkerInstallation] { get }
     func extensionWorkerCheckStamp(_ version: String) -> String

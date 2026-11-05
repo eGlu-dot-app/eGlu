@@ -357,7 +357,8 @@ public final class ExtensionCaptureRuntime: NSObject, WKScriptMessageHandlerWith
         DispatchQueue.main.async { MainActor.assumeIsolated { self.changed() } }
     }
 
-    public static func screen(_ web: WKWebView) -> Bool {
+    public static func screen(_ view: NSView) -> Bool {
+        guard let web = view as? WKWebView else { return false }
         guard web.responds(to: NSSelectorFromString("_displayCaptureState")) else { return false }
         return (web.value(forKey: "_displayCaptureState") as? Int ?? 0) != 0
     }

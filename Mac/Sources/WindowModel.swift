@@ -466,7 +466,7 @@ final class WindowModel: ObservableObject, PageHost {
             withAnimation(.bar) { show(tab: record.id, inSpace: spaceID) }
             newTabOpened = record.id
         } else if replacing, let record = tab, record.id == newTabOpened, !record.isPinned, record.url != url,
-                  Extensions.shared.isNewTabPage(record.url, in: spaceID), session.pages.live[record.id]?.view.canGoBack != true {
+                  Extensions.shared.isNewTabPage(record.url, in: spaceID), session.pages.live[record.id]?.state.canGoBack != true {
             // The new tab ⌘T just opened, another extension's page still
             // where it opened (a yes to the question as it opened): this
             // one's page in its place, not a second new tab. Any other tab
@@ -993,11 +993,11 @@ final class WindowModel: ObservableObject, PageHost {
         let beside = split && peekCanSplit
         guard let peek, let opener = peek.opener, let space = session.workspace.spaceID(of: opener.tab),
               let child = peek.handOver() else { return }
-        let url = child.view.url ?? peek.url
+        let url = child.state.url ?? peek.url
         session.pages.adopt(child)
         let opened = session.change { workspace -> Bool in
             guard workspace.openTab(url, in: space, after: opener.tab, id: child.tab) != nil else { return false }
-            workspace.record(child.tab, url: nil, title: child.view.title)
+            workspace.record(child.tab, url: nil, title: child.state.title)
             if beside { workspace.split(opener.tab, with: child.tab) }
             return true
         }
@@ -1015,7 +1015,7 @@ final class WindowModel: ObservableObject, PageHost {
     /// Whether Handoff can be asked for here: on in Settings, on a Mac with
     /// Apple Intelligence, for a page that isn't hands-off.
     var canHandoff: Bool {
-        canHandoffFiles && page?.view.url != nil && page?.isHandsOff == false
+        canHandoffFiles && page?.state.url != nil && page?.isHandsOff == false
     }
 
     /// Whether a file can be handed off from here: a chosen or dropped one,
@@ -1051,7 +1051,7 @@ final class WindowModel: ObservableObject, PageHost {
                 chosen = file
             } else {
                 // Asked after the wait: the page may have gone, or another taken its place.
-                guard let page, self.page === page, !page.isHandsOff, page.view.url != nil else { return }
+                guard let page, self.page === page, !page.isHandsOff, page.state.url != nil else { return }
                 chosen = page
             }
             handoffChoosing = false

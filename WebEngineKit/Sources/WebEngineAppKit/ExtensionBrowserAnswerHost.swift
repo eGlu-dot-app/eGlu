@@ -39,7 +39,7 @@ public enum ExtensionAnswerPanelPresentation: Sendable { case open, close }
 
 /// Product snapshots and panel operations, called inline at the original
 /// reads and mutations. The app keeps pending panels and window selection.
-@MainActor public protocol ExtensionBrowserAnswerHost: ExtensionBrowserHost, ExtensionAuxiliaryPageHost {
+@MainActor public protocol ExtensionBrowserAnswerHost: AnyObject {
     func extensionAnswerTabs(in space: UUID) -> [ExtensionBrowserTab]
     func extensionAnswerPage(_ tab: UUID) -> ExtensionAnswerPage?
     func extensionAnswerVisibleWindow(showing tab: UUID) -> ExtensionAnswerVisibility?

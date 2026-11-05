@@ -24,7 +24,7 @@ final class StoreButton {
     func received(_ message: WebMessage) {
         // Only the store page's main frame, in the app's own world.
         guard let page, message.isMainFrame, message.world == .app,
-              let url = page.view.url, Self.isStore(url), let body = message.body.foundation as? [String: Any] else { return }
+              let url = page.state.url, Self.isStore(url), let body = message.body.foundation as? [String: Any] else { return }
         // Only the extension of the page the button was put on, and still
         // the tab's: the store's own navigation can change the address
         // under a button still on screen. Into the page's own space.
@@ -39,7 +39,7 @@ final class StoreButton {
     /// Tells a store page what is installed and what is on its way, so its
     /// button can say "Added to eGlu" or "Adding…".
     static func tell(_ page: Page) {
-        guard isStore(page.view.url) else { return }
+        guard isStore(page.state.url) else { return }
         let extensions = Extensions.shared
         let state: [String: Any] = ["installed": extensions.installed.map(\.id), "busy": extensions.busy ?? NSNull()]
         guard let json = try? JSONSerialization.data(withJSONObject: state),
@@ -55,7 +55,7 @@ final class StoreButton {
             .receive(on: DispatchQueue.main)
             .sink {
                 MainActor.assumeIsolated {
-                    for page in Session.shared.pages.live.values where isStore(page.view.url) { tell(page) }
+                    for page in Session.shared.pages.live.values where isStore(page.state.url) { tell(page) }
                 }
             }
     }

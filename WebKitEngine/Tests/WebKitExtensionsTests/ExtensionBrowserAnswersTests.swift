@@ -13,7 +13,7 @@ private struct BrowserAnswerFailure: LocalizedError {
 }
 
 @MainActor
-private final class BrowserAnswerHost: ExtensionBrowserAnswerHost {
+private final class BrowserAnswerHost: ExtensionBrowserAnswerHost, ExtensionBrowserHost, ExtensionAuxiliaryPageHost {
     @Published var published = ExtensionBrowserWorkspace(spaces: [])
     var workspace: ExtensionBrowserWorkspace { published }
     var live: [UUID: ExtensionBrowserPage] = [:]

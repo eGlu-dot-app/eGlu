@@ -1,7 +1,7 @@
 import AppKit
 import PadCore
 import SwiftUI
-import WebKitExtensions
+import WebEngineAppKit
 
 // MARK: Asking
 
@@ -55,13 +55,13 @@ extension Extensions {
     }
 
     static func name(in archive: Data, manifest: ExtensionManifest, fallback: String) -> String {
-        WebKitExtensionMetadata.name(in: archive, manifest: manifest, fallback: fallback)
+        EngineComposition.name(in: archive, manifest: manifest, fallback: fallback)
     }
 
     /// Its icon from its package, before it is installed: the largest its
     /// manifest lists.
     static func icon(in archive: Data, manifest: ExtensionManifest) -> NSImage? {
-        WebKitExtensionMetadata.icon(in: archive, manifest: manifest)
+        EngineComposition.icon(in: archive, manifest: manifest)
     }
 }
 
@@ -626,19 +626,19 @@ extension Extensions {
                 }
                 return
             }
-            guard let item = installed.first, let context = contexts[window.spaceID]?[item.id] else { return }
+            guard let item = installed.first, runtime.isLoaded(item.id, in: window.spaceID) else { return }
             let name = "\u{201C}\(item.name)\u{201D}"
             switch kind {
             case "more":
-                _ = await askForMore(title: "\(name) wants more access", from: context, in: window.spaceID, window: window) {
+                _ = await askForMore(title: "\(name) wants more access", image: runtime.permissionIcon(item.id, in: window.spaceID), in: window.spaceID, window: window) {
                     ExtensionAccessGroups(summary: ExtensionAccessSummary(permissions: ["clipboardRead", "history"], sites: []), everything: true)
                 }
             case "sites":
-                _ = await askForMore(title: "\(name) wants to read and change more sites", from: context, in: window.spaceID, window: window) {
+                _ = await askForMore(title: "\(name) wants to read and change more sites", image: runtime.permissionIcon(item.id, in: window.spaceID), in: window.spaceID, window: window) {
                     ExtensionAccessGroups(summary: ExtensionAccessSummary(permissions: [], sites: ["https://*.github.com/*", "https://mail.google.com/*"]), everything: true)
                 }
             case "native":
-                _ = await askForMore(title: "\(name) wants to talk to apps on this Mac", from: context, in: window.spaceID, window: window) {
+                _ = await askForMore(title: "\(name) wants to talk to apps on this Mac", image: runtime.permissionIcon(item.id, in: window.spaceID), in: window.spaceID, window: window) {
                     NativeAppsGroup()
                 }
             case "update":

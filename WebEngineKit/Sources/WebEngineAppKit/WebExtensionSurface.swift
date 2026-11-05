@@ -38,3 +38,12 @@ public enum ExtensionPageMedia: Sendable { case camera, microphone, cameraAndMic
     func requestExtensionMedia(_ media: ExtensionPageMedia, name: String,
                                reply: @escaping @MainActor (Bool) -> Void)
 }
+
+/// Keeps one opening's context alive while the previous pane closes.
+public struct ExtensionPaneSource {
+    public let entry: (String) -> URL?
+    public let makePage: (URL, UUID) -> ExtensionPanePage?
+    public init(entry: @escaping (String) -> URL?, makePage: @escaping (URL, UUID) -> ExtensionPanePage?) {
+        self.entry = entry; self.makePage = makePage
+    }
+}

@@ -125,6 +125,9 @@ final class Page: NSObject {
     private var pendingDialog: (show: () -> Void, cancel: () -> Void)?
     var hasPendingDialog: Bool { pendingDialog != nil }
 
+    var extensionIsCapturing: Bool { EngineComposition.pageCapture.isCapturing(enginePage.contentView) }
+    func releaseExtensionCapture() { EngineComposition.pageCapture.release(enginePage.contentView) }
+
     func reviewPendingDialog() {
         guard host?.isShowing(self) == true, let pendingDialog else { return }
         guard let window = host?.hostWindow, window.attachedSheet == nil else { return }
@@ -142,7 +145,7 @@ final class Page: NSObject {
     private func beginNavigation(_ url: URL?) {
         if held != nil {
             held = nil
-            Extensions.shared.addressChanged(self)
+            Extensions.shared.adapters.addressChanged(enginePage, tab: tab, in: space)
         }
         cancelPendingDialog()
         loadState.begin(url)
@@ -394,7 +397,7 @@ final class Page: NSObject {
     /// workspace, where it would be saved and synced.
     func hold(_ url: URL) {
         held = url
-        Extensions.shared.addressChanged(self)
+        Extensions.shared.adapters.addressChanged(enginePage, tab: tab, in: space)
         host?.pageDidChange(self)
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(4))
@@ -1629,7 +1632,7 @@ extension Page: WebPageStateEvents, WebPageViewEvents {
     func titleOrAddressChanged() { changed() }
     func loadingChanged() {
         progressed()
-        Extensions.shared.loadingChanged(self)
+        Extensions.shared.adapters.loadingChanged(tab: tab, in: space)
     }
     func progressChanged() { progressed() }
     func backOrForwardChanged() { wentSomewhere() }
@@ -1648,7 +1651,7 @@ extension Page: WebPageStateEvents, WebPageViewEvents {
     var menus: any WebPageMenus { PageMenus(page: self) }
 }
 
-/// The view keeps this after Page goes, just as PageView kept its menu
+/// The view keeps this after Page goes, just as the page view kept its menu
 /// methods. The page stays weak, and teardown clears it before detaching.
 @MainActor
 private final class PageMenus: NSObject, WebPageMenus {

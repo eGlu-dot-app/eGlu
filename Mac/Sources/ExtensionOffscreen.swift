@@ -4,15 +4,15 @@ import WebEngineAppKit
 /// The app's media question and neutral-view calls to the capture runtime.
 extension ExtensionHost: ExtensionAuxiliaryPageHost {
     func releaseExtensionPage(_ view: NSView) {
-        ExtensionCapture.shared.runtime.release(view)
+        Extensions.shared.runtime.releaseCapture(view)
     }
 
     func extensionDisplayDecision(for view: NSView) -> Int {
-        return ExtensionCapture.shared.runtime.displayDecision(for: view)
+        return Extensions.shared.runtime.displayCaptureDecision(for: view)
     }
 
     func watchExtensionPage(_ view: NSView, id: String) {
-        ExtensionCapture.shared.runtime.watch(view, id: id)
+        Extensions.shared.runtime.watchCapture(view, id: id)
     }
 
     func requestExtensionMedia(_ media: ExtensionPageMedia, name: String,

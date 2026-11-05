@@ -430,7 +430,7 @@ private struct PaneCard: View {
 
     /// The developer bar across the page's top, where the site has it on.
     private var barred: Bool {
-        guard let page, page.view.url != nil || focused && model.url != nil else { return false }
+        guard let page, page.state.url != nil || focused && model.url != nil else { return false }
         return DeveloperBar.isOn(page, url: focused ? model.url : nil)
     }
 
@@ -445,7 +445,7 @@ private struct PaneCard: View {
                 .fill(Color(nsColor: .textBackgroundColor))
                 .shadow(color: .black.opacity(0.16), radius: 1, y: 0.5)
                 .shadow(color: .black.opacity(0.08), radius: 14, y: 6)
-            if let page, page.view.url != nil || focused && model.url != nil {
+            if let page, page.state.url != nil || focused && model.url != nil {
                 VStack(spacing: 0) {
                     if barred {
                         DeveloperBar(model: model, tab: tab, page: page, focused: focused)
@@ -462,7 +462,7 @@ private struct PaneCard: View {
                 }
                 .clipShape(shape)
                 if let failure = focused ? model.failure : page.failure {
-                    FailureView(message: failure, url: focused ? model.url : page.view.url) {
+                    FailureView(message: failure, url: focused ? model.url : page.state.url) {
                         if focused { model.reload() } else { page.reload() }
                     }
                     .clipShape(shape)
@@ -480,7 +480,7 @@ private struct PaneCard: View {
                     .padding(.top, below)
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
-            if paired, !focused, hovering, let host = page?.view.url?.host() {
+            if paired, !focused, hovering, let host = page?.state.url?.host() {
                 Text(host.hasPrefix("www.") ? String(host.dropFirst(4)) : host)
                     .font(.system(size: 11.5))
                     .foregroundStyle(.secondary)

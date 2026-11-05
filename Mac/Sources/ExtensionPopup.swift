@@ -3,13 +3,6 @@ import PadCore
 import SwiftUI
 import WebEngineAppKit
 
-/// Keeps the runtime context for one synchronous opening, including while
-/// the previous panel closes. Only the runtime interprets it.
-struct ExtensionPaneSource {
-    let entry: (String) -> URL?
-    let makePage: (URL, UUID) -> ExtensionPanePage?
-}
-
 /// The popups up, one a window at most, as Chrome has one at a time.
 @MainActor
 final class ExtensionPopups: ObservableObject {
