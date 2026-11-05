@@ -11,24 +11,24 @@ public final class ExtensionStorage: WebExtensionStorage, @unchecked Sendable {
     private let environment: @MainActor @Sendable () -> WebExtensionStorageEnvironment
     private let defaults: UserDefaults
     private let readShim: @Sendable () -> String
-    private let debugSwitches: Bool
+    private let withoutShim: @Sendable () -> Bool
 
-    /// `debugSwitches`: the app's DEBUG builds' own switches (as
-    /// `-extensionsWithoutShim YES`) are honoured. The app decides, as the
-    /// app's Test configuration defines DEBUG for the app but not for its
-    /// packages.
+    /// `withoutShim`: the app's answer to its DEBUG builds' own switch
+    /// (`-extensionsWithoutShim YES`). The app decides, as the app's Test
+    /// configuration defines DEBUG for the app but not for its packages.
     public convenience init(environment: @escaping @MainActor @Sendable () -> WebExtensionStorageEnvironment,
-                            defaults: UserDefaults = .standard, debugSwitches: Bool = false) {
-        self.init(environment: environment, defaults: defaults, readShim: { Scripts.extensionShim }, debugSwitches: debugSwitches)
+                            defaults: UserDefaults = .standard, withoutShim: @escaping @Sendable () -> Bool = { false }) {
+        self.init(environment: environment, defaults: defaults, readShim: { Scripts.extensionShim }, withoutShim: withoutShim)
     }
 
     // Tests supply shim text without changing the shipped resource.
     init(environment: @escaping @MainActor @Sendable () -> WebExtensionStorageEnvironment,
-         defaults: UserDefaults, readShim: @escaping @Sendable () -> String, debugSwitches: Bool = false) {
+         defaults: UserDefaults, readShim: @escaping @Sendable () -> String,
+         withoutShim: @escaping @Sendable () -> Bool = { false }) {
         self.environment = environment
         self.defaults = defaults
         self.readShim = readShim
-        self.debugSwitches = debugSwitches
+        self.withoutShim = withoutShim
     }
 
     @MainActor
@@ -65,9 +65,7 @@ public final class ExtensionStorage: WebExtensionStorage, @unchecked Sendable {
 
     private nonisolated func prepareNow(_ package: URL, into folder: URL) throws {
         var shim = readShim()
-        // To see what WebKit does without it (`-extensionsWithoutShim YES`),
-        // in the app's DEBUG builds only.
-        if debugSwitches, defaults.bool(forKey: "extensionsWithoutShim") { shim = "" }
+        if withoutShim() { shim = "" }
         // The package's size and time, taken before it is read: one put in
         // its place, of the same version, is told apart.
         let kept = try package.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])

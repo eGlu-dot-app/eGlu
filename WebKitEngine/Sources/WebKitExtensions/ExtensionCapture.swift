@@ -435,11 +435,8 @@ public final class ExtensionCaptureRuntime: NSObject, WKScriptMessageHandlerWith
 
     /// WebKit's pretend camera, microphone and screen, so a test run
     /// records with no hardware and no macOS question (-extensionMockCapture YES).
-    /// Called only from the app's own DEBUG builds: the app's Test
-    /// configuration defines DEBUG for the app but not for its packages,
-    /// so the app's condition, not the plugin's, decides.
-    public static func mockDevices(_ preferences: WKPreferences) {
-        guard UserDefaults.standard.bool(forKey: "extensionMockCapture") else { return }
+    public static func mockDevices(_ preferences: WKPreferences, enabled: Bool = true) {
+        guard enabled else { return }
         set("_setMockCaptureDevicesEnabled:", true, in: preferences)
         set("_setGetUserMediaRequiresFocus:", false, in: preferences)
     }

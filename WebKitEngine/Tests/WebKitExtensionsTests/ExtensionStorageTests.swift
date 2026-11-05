@@ -126,9 +126,8 @@ final class ExtensionStorageTests: XCTestCase {
         XCTAssertEqual(try fixture.children(of: file.deletingLastPathComponent()), ["1", "1.zip"])
     }
 
-    // The app hands in whether its own DEBUG switches count (Extensions.debugSwitches).
     @MainActor
-    func testWithoutShimPreferenceKeepsTheSameKeyAndStamp() throws {
+    func testWithoutShimInputKeepsTheSameStamp() throws {
         let fixture = Fixture()
         defer { fixture.remove() }
         let first = fixture.storage(), second = fixture.storage(withoutShim: true)
@@ -140,18 +139,6 @@ final class ExtensionStorageTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: folder.appendingPathComponent(ExtensionPreparation.shimFile)), Data())
         XCTAssertEqual(try fixture.stamp(in: folder), try Self.stamp(for: file, shim: ""))
         XCTAssertNotEqual(try fixture.stamp(in: folder), before)
-    }
-
-    @MainActor
-    func testWithoutShimPreferenceCountsOnlyWhenTheAppSaysSo() throws {
-        let fixture = Fixture()
-        defer { fixture.remove() }
-        let storage = fixture.storage(withoutShim: true, debugSwitches: false)
-        let file = storage.package("fixture", "1"), folder = storage.prepared("fixture", "1")
-        try fixture.write(Self.archive(), to: file)
-        try storage.prepare(URL(fileURLWithPath: file.path), into: folder)
-        XCTAssertEqual(try fixture.stamp(in: folder), try Self.stamp(for: file, shim: "/* fixture shim */"))
-        XCTAssertNotEqual(try Data(contentsOf: folder.appendingPathComponent(ExtensionPreparation.shimFile)), Data())
     }
 
     @MainActor
@@ -286,9 +273,8 @@ private struct Fixture: Sendable {
     var temporaryRoot: URL { room.appendingPathComponent("temporary", isDirectory: true) }
     var environment: WebExtensionStorageEnvironment { .init(root: root, temporaryRoot: temporaryRoot) }
 
-    func storage(shim: String = "/* fixture shim */", withoutShim: Bool = false, debugSwitches: Bool = true) -> ExtensionStorage {
-        ExtensionStorage(environment: { self.environment }, defaults: FixtureDefaults(withoutShim: withoutShim), readShim: { shim },
-                         debugSwitches: debugSwitches)
+    func storage(shim: String = "/* fixture shim */", withoutShim: Bool = false) -> ExtensionStorage {
+        ExtensionStorage(environment: { self.environment }, defaults: FixtureDefaults(withoutShim: withoutShim), readShim: { shim }, withoutShim: { withoutShim })
     }
     func write(_ data: Data, to file: URL) throws {
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)

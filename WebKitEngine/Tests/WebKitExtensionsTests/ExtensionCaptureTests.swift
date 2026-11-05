@@ -413,21 +413,11 @@ final class ExtensionCaptureTests: XCTestCase {
         ExtensionCaptureRuntime.set("_setGetUserMediaRequiresFocus:", false, in: preferences)
         XCTAssertFalse(get(preferences, getter))
         ExtensionCaptureRuntime.set("_egluNonexistentPreference:", true, in: preferences)
-        #if DEBUG
-        let defaults = UserDefaults.standard
-        let previous = defaults.object(forKey: "extensionMockCapture")
-        defer {
-            if let previous { defaults.set(previous, forKey: "extensionMockCapture") }
-            else { defaults.removeObject(forKey: "extensionMockCapture") }
-        }
-        defaults.set(false, forKey: "extensionMockCapture")
         ExtensionCaptureRuntime.set("_setGetUserMediaRequiresFocus:", true, in: preferences)
-        ExtensionCaptureRuntime.mockDevices(preferences)
+        ExtensionCaptureRuntime.mockDevices(preferences, enabled: false)
         XCTAssertTrue(get(preferences, getter))
-        defaults.set(true, forKey: "extensionMockCapture")
-        ExtensionCaptureRuntime.mockDevices(preferences)
+        ExtensionCaptureRuntime.mockDevices(preferences, enabled: true)
         XCTAssertFalse(get(preferences, getter))
-        #endif
         XCTAssertFalse(config.websiteDataStore.isPersistent)
     }
 

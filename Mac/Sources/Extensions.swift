@@ -42,6 +42,13 @@ final class Extensions: NSObject, ObservableObject {
     @Published private(set) var justInstalled: JustInstalled?
     private lazy var metadata: any WebExtensionMetadata = WebKitExtensionMetadata(host: ExtensionHost.shared,
         contexts: { [unowned self] in self.contexts }, package: { Self.package($0, $1) })
+    private lazy var compatibility = WebKitExtensionCompatibility(host: ExtensionHost.shared,
+        contexts: { [unowned self] in self.contexts }, manifests: { [unowned self] in self.manifests },
+        lacking: { [unowned self] in self.lacking }, setMissing: { [unowned self] in self.lacking[$1] = $0 },
+        errorsChanged: { [unowned self] in self.errorsChanged($0, $1, in: $2) },
+        package: { Self.package($0, $1) }, prepared: { Self.prepared($0, $1) },
+        application: { Self.egluVersion }, scheme: Self.scheme, shimApplication: Self.shimApplication,
+        letRulesRedirect: Self.letRulesRedirect, sites: Self.sites, fence: Self.fence)
     /// The popup an extension set for itself (action.setPopup), by
     /// "space/id"; "" for none. One set for a single tab isn't followed
     /// yet: WebKit doesn't say which of its tab numbers is which tab.
@@ -103,39 +110,76 @@ final class Extensions: NSObject, ObservableObject {
         var space: UUID
     }
 
-    private var controllers: [UUID: WKWebExtensionController] = [:]
-    /// A late failed load cannot disable a replacement at the same version.
-    private var loadAttempts: [String: UUID] = [:]
-    private var workerRecovery: [String: ExtensionWorkerRecovery] = [:]
-    private(set) var contexts: [UUID: [String: WKWebExtensionContext]] = [:]
+    private var controllers: [UUID: WKWebExtensionController] { controllerRuntime.controllers }
+    private lazy var controllerRuntime = WebKitExtensionControllers(host: ExtensionHost.shared, storage: Self.storage,
+        delegate: { [unowned self] in self }, capture: { ExtensionCapture.shared.runtime },
+        watch: { [unowned self] in self.watch($0, Installed($1), in: $2) },
+        unwatch: { [unowned self] in self.unwatch($0, in: $1) },
+        applyKeys: { [unowned self] in self.applyKeys(to: $0) },
+        firstLook: { [unowned self] in WebExtensionEvidence(self.firstLook(at: $0, $1, archive: $2, id: $3)) },
+        record: { [unowned self] in self.record($0.policyEvidence, $1, in: $2) },
+        readCode: { [unowned self] in self.readCode(of: Installed($0)) },
+        startBackground: { [unowned self] in self.startBackground(of: $0, Installed($1), in: $2) },
+        checkCopy: { [unowned self] in self.checkCopy(of: Installed($0)) },
+        tableMissing: { Self.apiTable.table == nil }, measureTable: { [unowned self] in await self.measureTable() },
+        resetRecovery: { [unowned self] in self.workerRecovery[$0] = nil },
+        clearEvidence: { [unowned self] id, space in
+            self.evidence[space]?[id] = nil
+            ExtensionHost.shared.clearExtensionLoadVerdict(id, in: space)
+            self.recorded["\(space.uuidString)/\(id)"] = nil
+        })
+    private lazy var workerRuntime = ExtensionWorkers(host: ExtensionHost.shared,
+        contexts: { [unowned self] in self.contexts }, controllers: { [unowned self] in self.controllers })
+    private var workerRecovery: [String: ExtensionWorkerRecovery] {
+        get { workerRuntime.workerRecovery }
+        set { workerRuntime.workerRecovery = newValue }
+    }
+    private(set) var contexts: [UUID: [String: WKWebExtensionContext]] {
+        get { controllerRuntime.contexts }
+        set { controllerRuntime.contexts = newValue }
+    }
     /// Extensions being asked about new tabs now.
     private var askingNewTab: Set<String> = []
-    private var evidence: [UUID: [String: ExtensionEvidence]] = [:]
+    private lazy var errorEvidence = WebKitExtensionEvidence(host: ExtensionHost.shared,
+        contexts: { [unowned self] in self.contexts }, manifests: { [unowned self] in self.manifests },
+        folder: { Self.folder }, recordsFile: { Self.storage.recordsFile }, debugError: { api, text in
+            #if DEBUG
+            Self.note("webkit error: \(api)" + Self.words(text()))
+            #endif
+        })
+    private var evidence: [UUID: [String: WebExtensionEvidence]] {
+        get { errorEvidence.evidence }
+        set { errorEvidence.evidence = newValue }
+    }
     /// What each extension asked for that nothing here answers: what its
     /// errors are read against.
-    private(set) var lacking: [String: Set<String>] = [:]
+    private(set) var lacking: [String: Set<String>] {
+        get { errorEvidence.lacking }
+        set { errorEvidence.lacking = newValue }
+    }
     /// Each extension's manifest, as read at its first look.
     private var manifests: [String: ExtensionManifest] = [:]
-    /// What trying a version's pages on a copy found, by id, once a version
-    /// (ExtensionTrial.check); kept across launches.
-    private var checked: [String: (version: String, result: ExtensionTrial.Checked)] = [:]
-    /// The version being tried, by id.
-    private var checking: [String: String] = [:]
-    /// What reading each extension's code found (notes), by id, for the
-    /// version and the APIs missing it was read against; and the reading
-    /// under way. A password manager's scripts run to megabytes, and read
-    /// on the main thread, once a space, they held the browser for
-    /// seconds as it loaded.
-    private var scanned: [String: (key: String, notes: [String])] = [:]
-    private var scanning: [String: (key: String, attempt: UUID)] = [:]
+    // Temporary forwarding for firstLook and keep until their hub slices move.
+    private var checked: [String: (version: String, result: ExtensionTrial.Checked)] { compatibility.checked }
+    private var scanned: [String: (key: String, notes: [String])] {
+        get { compatibility.scanned }
+        set { compatibility.scanned = newValue }
+    }
+    private var scanning: [String: (key: String, attempt: UUID)] {
+        get { compatibility.scanning }
+        set { compatibility.scanning = newValue }
+    }
     /// The errors already put in the records, by "space/id": a short
     /// fingerprint of each, never its words, until the context unloads.
-    private var recorded: [String: Set<String>] = [:]
+    private var recorded: [String: Set<String>] {
+        get { errorEvidence.recorded }
+        set { errorEvidence.recorded = newValue }
+    }
     /// The problems each extension ran into, kept on this Mac (ExtensionRecords).
-    private var records = ExtensionRecords()
-    /// When each extension was last taken up afresh, by space and id: once a
-    /// minute at most, so one that can never start doesn't go round.
-    private var revived: [String: Date] = [:]
+    private var records: ExtensionRecords {
+        get { errorEvidence.recordCollection }
+        set { errorEvidence.recordCollection = newValue }
+    }
     /// The extensions whose own manifest asks for native messaging, and
     /// those that ask for it only as an optional permission, which reach a
     /// desktop app once the person has said yes, as Chrome asks. Every
@@ -189,9 +233,7 @@ final class Extensions: NSObject, ObservableObject {
         guard let index = installed.firstIndex(where: { $0.id == id }), (installed[index].readsCookies == true) != on else { return }
         installed[index].readsCookies = on
         saveList()
-        for (space, loaded) in contexts {
-            guard let context = loaded[id] else { continue }
-            Self.holdCookies(context, letting: on)
+        controllerRuntime.setReadsCookies(id, on) { space in
             update(id, in: space) { $0.cookiesKeptBack = !on && self.manifests[id]?.permissions.contains("cookies") == true }
             // Started again on the same context, which keeps what it was
             // granted while it ran and its open pages working.
@@ -201,7 +243,10 @@ final class Extensions: NSObject, ObservableObject {
     /// Keep-awake assertions an extension asked for (power), by "space/id".
     var keptAwake: [String: IOPMAssertionID] = [:]
     /// Each loaded context's errors watch, removed when it unloads.
-    private var watches: [UUID: [String: NSObjectProtocol]] = [:]
+    private var watches: [UUID: [String: NSObjectProtocol]] {
+        get { errorEvidence.watches }
+        set { errorEvidence.watches = newValue }
+    }
     let tabs = ExtensionTabs(host: ExtensionHost.shared,
                              enabled: { !Extensions.shared.on(in: $0).isEmpty },
                              controller: { Extensions.shared.controller(for: $0) },
@@ -210,8 +255,8 @@ final class Extensions: NSObject, ObservableObject {
                              heldOwner: { ExtensionAuth.owner(of: $0) })
 
     /// The scheme of extensions' own pages, as Chrome's.
-    static let scheme = "chrome-extension"
-    private static let apiTable = ExtensionTable(scheme: scheme)
+    static let scheme = WebKitExtensionControllers.scheme
+    private static var apiTable: ExtensionTable { WebKitExtensionCompatibility.apiTable }
 
     private override init() {
         super.init()
@@ -219,7 +264,7 @@ final class Extensions: NSObject, ObservableObject {
         // in a scheme it wasn't told of, with an exception, not an error
         // (WKWebExtensionContext's setBaseURL:), and AppKit, catching it,
         // leaves Swift's tasks broken behind it.
-        WKWebExtension.MatchPattern.registerCustomURLScheme(Self.scheme)
+        WebKitExtensionControllers.registerScheme()
     }
 
     static var folder: URL {
@@ -232,18 +277,13 @@ final class Extensions: NSObject, ObservableObject {
 
     private nonisolated static let storage: any WebExtensionStorage = ExtensionStorage(environment: {
         ExtensionHost.shared.extensionStorageEnvironment
-    }, debugSwitches: Extensions.debugSwitches)
-
-    /// Whether this is a DEBUG build of the app, whose own switches the
-    /// plugin then honours (the packages are not built as DEBUG in the app's
-    /// Test configuration).
-    nonisolated static var debugSwitches: Bool {
+    }, withoutShim: {
         #if DEBUG
-        true
+        UserDefaults.standard.bool(forKey: "extensionsWithoutShim")
         #else
         false
         #endif
-    }
+    })
 
     /// The verified package of a version, kept as it came.
     static func package(_ id: String, _ version: String) -> URL {
@@ -318,80 +358,13 @@ final class Extensions: NSObject, ObservableObject {
 
     // MARK: Workers WebKit remembers (Search's 0386648)
 
-    /// WebKit keeps each extension's service worker registered from one
-    /// launch to the next, with the scripts it fetched then, and may start
-    /// that copy rather than what is on disk now. A copy from another build
-    /// of the shim or another version of the extension can leave the worker
-    /// dead for good: reinstalling, reloading and restarting all bring the
-    /// same stale copy back (Vimium's keys stopped working, for Search).
-    /// WebKit lists no records for extension origins, so there is no
-    /// clearing one extension's alone; clearing a space's stops the workers
-    /// that run there. So it is done at launch, before any extension loads,
-    /// in each space whose extensions or shim changed since. Websites'
-    /// workers there go with them, and are registered again on the next
-    /// visit; nothing else of theirs is touched.
-    static let workersKey = "extensionWorkers"
+    static let workersKey = ExtensionWorkers.workersKey
 
-    /// What a space's workers would run: the shim, and the extensions on there.
-    /// Those on there now, and those on there before (`was`) that are still
-    /// installed: one turned off keeps its worker registered in the space's
-    /// store, and an update or a new shim can make that one stale too.
-    private func workers(in space: UUID, keeping was: String?) -> String {
-        let before = Set((was ?? "").split(separator: "\n").dropFirst().compactMap { $0.split(separator: " ").first.map(String.init) })
-        let tracked = installed.filter { $0.spaces.contains(space) || before.contains($0.id) }
-        return ([ExtensionPreparation.stamp(for: Scripts.extensionShim)] + tracked.map { "\($0.id) \($0.version)" }.sorted())
-            .joined(separator: "\n")
-    }
-
-    /// Cleared when the shim changed or an extension there before (on, or
-    /// turned off since) has another version now: one only added has no
-    /// worker kept yet, and one removed from eGlu has its data removed
-    /// with it. On the first launch, or after workersChanged, every space
-    /// with extensions on or had is cleared.
     private func forgetWorkersIfChanged() async {
-        let stored = UserDefaults.standard.dictionary(forKey: Self.workersKey) as? [String: String]
-        let forced = stored == nil || UserDefaults.standard.bool(forKey: Self.workersForcedKey)
-        var kept = stored ?? [:]
-        var failed = UserDefaults.standard.dictionary(forKey: Self.workerFailedKey) as? [String: String] ?? [:]
-        for space in Session.shared.workspace.spaces.map(\.id) {
-            let on = installed.filter { $0.spaces.contains(space) }
-            let was = kept[space.uuidString]
-            // A space no extension has been on in has no worker to clear.
-            guard !on.isEmpty || was != nil else { continue }
-            let now = workers(in: space, keeping: was)
-            // None left there at all, their data gone with them: nothing to
-            // keep, and websites' workers no reason to go.
-            guard now.contains("\n") else { kept[space.uuidString] = nil; continue }
-            guard was != now || forced else { continue }
-            kept[space.uuidString] = now
-            guard forced || was.map({ ExtensionWorkerRecovery.stale(was: $0, now: now) }) == true else { continue }
-            await WebKitStores.store(for: space).removeData(ofTypes: [WKWebsiteDataTypeServiceWorkerRegistrations], modifiedSince: .distantPast)
-            // One found incompatible only because its worker wouldn't start
-            // gets one more go, now its stale copy is gone: once a version.
-            for item in on where failed[item.id] == checkStamp(item.version) {
-                failed[item.id] = checkStamp(item.version) + " retried"
-                var marked = UserDefaults.standard.dictionary(forKey: Self.incompatibleKey) as? [String: String] ?? [:]
-                marked[item.id] = nil
-                UserDefaults.standard.set(marked, forKey: Self.incompatibleKey)
-            }
-        }
-        UserDefaults.standard.set(kept, forKey: Self.workersKey)
-        UserDefaults.standard.removeObject(forKey: Self.workersForcedKey)
-        UserDefaults.standard.set(failed, forKey: Self.workerFailedKey)
+        await workerRuntime.forgetWorkersIfChanged()
     }
 
-    /// Extensions found incompatible because their worker wouldn't start,
-    /// by id: the version's stamp, and whether it has had its retry.
-    private static let workerFailedKey = "extensionsWorkerFailed"
-
-    /// An extension put in again, reloaded or found with its worker dead:
-    /// its version alone doesn't tell, so the next launch clears every space
-    /// that has had extensions, its record of which is kept for that.
-    static func workersChanged() {
-        UserDefaults.standard.set(true, forKey: workersForcedKey)
-    }
-
-    private static let workersForcedKey = "extensionWorkersForced"
+    static func workersChanged() { ExtensionWorkers.markWorkersChanged() }
 
     /// Names kept by older releases may be an ID or an unresolved message.
     /// Read packages after the first frame, off the main actor, including
@@ -480,286 +453,59 @@ final class Extensions: NSObject, ObservableObject {
         return sync.extensionOffers.filter { !declined.contains($0.storeID) && !here.contains($0.storeID) }
     }
 
-    /// The space's controller, made the first time a page in the space is.
-    /// Every page gets it before its view exists, as WebKit needs, whether
-    /// or not anything is on in the space yet.
-    func controller(for space: UUID) -> WKWebExtensionController {
-        if let controller = controllers[space] { return controller }
-        let configuration = WKWebExtensionController.Configuration(identifier: space)
-        configuration.defaultWebsiteDataStore = WebKitStores.store(for: space)
-        // The extensions' own pages reach eGlu's recording channel
-        // (ExtensionCapture), in their own world; websites never do.
-        let pages = configuration.webViewConfiguration ?? WKWebViewConfiguration()
-        pages.userContentController.addScriptMessageHandler(ExtensionCapture.shared.runtime, contentWorld: .page, name: ExtensionCaptureRuntime.channel)
-        #if DEBUG
-        ExtensionCaptureRuntime.mockDevices(pages.preferences)
-        #endif
-        configuration.webViewConfiguration = pages
-        let controller = WKWebExtensionController(configuration: configuration)
-        controller.delegate = self
-        controllers[space] = controller
-        return controller
-    }
-
-    func space(of controller: WKWebExtensionController?) -> UUID? {
-        controllers.first { $0.value === controller }?.key
-    }
-
-    func context(_ id: String, in space: UUID) -> WKWebExtensionContext? {
-        contexts[space]?[id]
-    }
+    /// Temporary WebKit forwards for the delegates and adapters still in the app.
+    func controller(for space: UUID) -> WKWebExtensionController { controllerRuntime.controller(for: space) }
+    func space(of controller: WKWebExtensionController?) -> UUID? { controllerRuntime.space(of: controller) }
+    func context(_ id: String, in space: UUID) -> WKWebExtensionContext? { controllerRuntime.context(id, in: space) }
 
     /// The extensions on in a space, in the order they were installed.
     func on(in space: UUID) -> [Installed] {
-        installed.filter { $0.spaces.contains(space) && contexts[space]?[$0.id] != nil }
+        installed.filter { $0.spaces.contains(space) && controllerRuntime.isLoaded($0.id, in: space) }
     }
 
     /// Whether a URL is one of the extensions' own pages.
     func isExtensionPage(_ url: URL?) -> Bool {
-        guard let url, url.scheme == Self.scheme, let host = url.host() else { return false }
-        return installed.contains { $0.id == host }
+        guard let id = controllerRuntime.extensionID(for: url) else { return false }
+        return installed.contains { $0.id == id }
     }
 
     // MARK: Loading
 
+    func markLoadIncompatible(_ id: String, version: String) { markIncompatible(id, version: version) }
+    func clearLoadVerdict(_ id: String, in space: UUID) { verdicts[space]?[id] = nil }
+
+
     /// Whether it is loaded there now.
     @discardableResult
     private func load(_ item: Installed, in space: UUID) async -> Bool {
-        // Not on this Mac, for this version (markIncompatible).
-        guard !isIncompatible(item.id) else { return false }
-        guard await cleared(item.id, in: space) else {
-            NSLog("eGlu: extension \(item.id) waits for what was kept before to be cleared in a space")
-            return false
-        }
-        guard contexts[space]?[item.id] == nil else { return true }
-        let key = "\(space.uuidString)/\(item.id)"
-        let attempt = UUID()
-        loadAttempts[key] = attempt
-        var seen = ExtensionEvidence()
-        do {
-            let (file, folder) = (Self.package(item.id, item.version), Self.prepared(item.id, item.version))
-            try await Task.detached(priority: .userInitiated) { try Self.prepare(file, into: folder) }.value
-            let package = try await WKWebExtension(resourceBaseURL: folder)
-            // Turned off here, removed, updated, or its space gone, while the
-            // package was read: not loaded after all. Another space's turning
-            // on or off is no reason.
-            guard loadAttempts[key] == attempt,
-                  let now = installed.first(where: { $0.id == item.id }), now.version == item.version,
-                  now.source == item.source, now.spaces.contains(space),
-                  Session.shared.workspace.space(space) != nil, contexts[space]?[item.id] == nil
-            else { return contexts[space]?[item.id] != nil }
-            let context = WKWebExtensionContext(for: package)
-            context.uniqueIdentifier = item.id
-            // chrome-extension://, as Chrome's own addresses are: an
-            // extension that checks where its pages are finds them there.
-            context.baseURL = URL(string: "\(Self.scheme)://\(item.id)/")!
-            context.isInspectable = true
-            context.inspectionName = item.name
-            // The cookie choice as it is now: it may have changed while the package was read.
-            allow(context, package, access: item.siteAccess, cookies: now.readsCookies == true)
-            watch(context, item, in: space)
-            try controller(for: space).load(context)
-            // Its commands' keys: the person's, or none (ExtensionKeys).
-            applyKeys(to: context)
-            contexts[space, default: [:]][item.id] = context
-            seen = firstLook(at: context, package, archive: Self.package(item.id, item.version), id: item.id)
-        } catch {
-            guard loadAttempts[key] == attempt else { return contexts[space]?[item.id] != nil }
-            seen.start = .failed
-            unwatch(item.id, in: space)
-            // WebKit wouldn't take it at all.
-            DispatchQueue.main.async { [weak self] in
-                guard let self, self.loadAttempts[key] == attempt, self.contexts[space]?[item.id] == nil else { return }
-                self.markIncompatible(item.id, version: item.version)
-            }
-            NSLog("eGlu: extension \(item.id) didn't load in a space: \(error.localizedDescription)")
-            #if DEBUG
-            Self.note("load failed: \(error)")
-            #endif
-        }
-        record(seen, item.id, in: space)
-        if contexts[space]?[item.id] != nil { readCode(of: item) }
-        if seen.start == .checking, let context = contexts[space]?[item.id] {
-            startBackground(of: context, item, in: space)
-        }
-        if contexts[space]?[item.id] != nil {
-            checkCopy(of: item)
-            // The first extension on a new macOS build: this Mac's table.
-            if Self.apiTable.table == nil { Task { await measureTable() } }
-        }
-        return contexts[space]?[item.id] != nil
+        await controllerRuntime.load(WebExtensionInstallation(item), in: space)
     }
 
-    private func unload(_ id: String, in space: UUID) {
-        let key = "\(space.uuidString)/\(id)"
-        loadAttempts[key] = nil
-        workerRecovery[key] = nil
-        unwatch(id, in: space)
-        guard let context = contexts[space]?.removeValue(forKey: id) else { return }
-        // A keep-awake it asked for (power) goes with it.
-        if let assertion = keptAwake.removeValue(forKey: key) { IOPMAssertionRelease(assertion) }
-        // Its popup and panel first, while WebKit can still be told they
-        // close, as it was told they opened.
-        ExtensionPopups.shared.closeAll(of: id, in: space)
-        ExtensionSidePanels.shared.closeAll(of: id, in: space)
-        ExtensionPopupWindow.closeAll(of: id, in: space)
-        ExtensionCapture.shared.runtime.purge(id, in: space)
-        try? controllers[space]?.unload(context)
-        evidence[space]?[id] = nil
-        verdicts[space]?[id] = nil
-        recorded["\(space.uuidString)/\(id)"] = nil
-        // What it kept going outside WebKit goes with it: its offscreen
-        // page; and its hosts once WebKit has had a turn to let its ports go.
-        ExtensionOffscreen.close(id, in: space)
-        ExtensionSocket.close(id, in: space)
-        DispatchQueue.main.async { ExtensionNative.stopOrphans() }
-    }
+    private func unload(_ id: String, in space: UUID) { controllerRuntime.unload(id, in: space) }
 
-    /// An extension whose worker won't start again, taken up afresh as a
-    /// relaunch would: unloaded and loaded, the same context, since the
-    /// objects its open pages hold name this one. At most once a minute in
-    /// a space. (Search's revive)
     @discardableResult
     func revive(_ id: String, in space: UUID, because reason: String) -> Bool {
-        let key = "\(space.uuidString)/\(id)"
-        guard contexts[space]?[id] != nil, controllers[space] != nil,
-              Date().timeIntervalSince(revived[key] ?? .distantPast) > 60 else { return false }
-        revived[key] = Date()
-        return restart(id, in: space, because: reason)
+        workerRuntime.revive(id, in: space, because: reason)
     }
 
-    /// Unloaded and loaded again, the same context, and its worker started:
-    /// what it was granted while it ran (permissions.request) stays, and its
-    /// open pages keep working, as they would not with a new context.
     @discardableResult
     private func restart(_ id: String, in space: UUID, because reason: String) -> Bool {
-        let key = "\(space.uuidString)/\(id)"
-        guard let context = contexts[space]?[id], let controller = controllers[space] else { return false }
-        Self.workersChanged()
-        NSLog("eGlu: restarting extension \(id): \(reason)")
-        #if DEBUG
-        Self.note("revived: \(reason)")
-        #endif
-        ExtensionOffscreen.close(id, in: space)
-        // A keep-awake the worker asked for (power) goes with it; the new
-        // worker asks again if it still wants one.
-        if let assertion = keptAwake.removeValue(forKey: key) { IOPMAssertionRelease(assertion) }
-        let attempt = workerRecovery[key, default: ExtensionWorkerRecovery()].beganAttempt(restarting: true)
-        do {
-            try controller.unload(context)
-            try controller.load(context)
-        } catch {
-            NSLog("eGlu: extension \(id) couldn't be loaded again: \(error.localizedDescription)")
-            update(id, in: space) { $0.start = .failed }
-            if let item = installed.first(where: { $0.id == id }) {
-                let action = workerRecovery[key, default: ExtensionWorkerRecovery()].finished(attempt, failed: true)
-                recover(action, context: context, item: item, in: space)
-            }
-            return true
-        }
-        if let item = installed.first(where: { $0.id == id }) { startBackground(of: context, item, in: space, attempt: attempt) }
-        return true
+        workerRuntime.restart(id, in: space, because: reason)
     }
 
-    /// What the extension may do: what it asked for, less cookies unless
-    /// the person allowed them; its sites when the person chose all of
-    /// them; never Google's sign-in.
-    private func allow(_ context: WKWebExtensionContext, _ package: WKWebExtension, access: Installed.SiteAccess, cookies: Bool) {
-        for permission in package.requestedPermissions where !ExtensionPolicy.heldPermissions.contains(permission.rawValue) {
-            context.setPermissionStatus(.grantedExplicitly, for: permission)
-        }
-        Self.holdCookies(context, letting: cookies)
-        Self.letRulesRedirect(context, package)
-        if access == .allSites {
-            for pattern in Self.sites(of: package) { context.setPermissionStatus(.grantedExplicitly, for: pattern) }
-        }
-        Self.fence(context)
-    }
-
-    /// Cookies denied, or granted when the person let this extension have
-    /// them and it asks for them, outright or as an optional permission.
-    /// Granted, it reads them on the sites it may read, Google's sign-in
-    /// cookies included (set for .google.com): the person was told so.
+    // Temporary forwards for compatibility trials and permission callbacks.
     static func holdCookies(_ context: WKWebExtensionContext, letting cookies: Bool) {
-        let package = context.webExtension
-        let asked = package.requestedPermissions.union(package.optionalPermissions).contains(.cookies)
-        context.setPermissionStatus(cookies && asked ? .grantedExplicitly : .deniedExplicitly, for: .cookies)
+        WebKitExtensionControllers.holdCookies(context, letting: cookies)
     }
-
-    /// Chrome lets "declarativeNetRequest" redirect a request or change its
-    /// headers on the sites the extension has access to. WebKit does that
-    /// only with "declarativeNetRequestWithHostAccess", and otherwise drops
-    /// those rules without a word: Norma's redirect of a blocked site to its
-    /// own page never happened, and the site loaded instead. WebKit still
-    /// holds the rules to the sites granted. (Search)
     static func letRulesRedirect(_ context: WKWebExtensionContext, _ package: WKWebExtension) {
-        guard package.requestedPermissions.contains(.declarativeNetRequest) else { return }
-        context.setPermissionStatus(.grantedExplicitly, for: .declarativeNetRequestWithHostAccess)
+        WebKitExtensionControllers.letRulesRedirect(context, package)
     }
-
-    /// The sites to grant of those an extension names: none withheld, and
-    /// none a wildcard of the same scheme and path already covers. WebKit
-    /// copies an extension's injected scripts for each pattern granted, so
-    /// one naming many hosts beside a wildcard took that much more memory.
-    /// (Search's d24ceca)
-    static func sites(of package: WKWebExtension) -> [WKWebExtension.MatchPattern] {
-        let patterns = package.allRequestedMatchPatterns.filter { !withheld($0) }
-        return patterns.filter { pattern in
-            !patterns.contains { other in
-                other.string != pattern.string && other.scheme == pattern.scheme && other.path == pattern.path
-                    && other.matches(pattern) && (!pattern.matches(other) || other.string < pattern.string)
-            }
-        }
-    }
-
-    // MARK: What no extension reaches
-
-    /// Extension pages, another's or every one's, and files on this Mac, as
-    /// a pattern names them: never given, from a manifest or a question.
-    /// With chrome-extension registered as a scheme, WebKit counts other
-    /// extensions' pages in <all_urls>, which Chrome doesn't (a password
-    /// manager's vault among them; seen on macOS 27.0.1). Chrome keeps files
-    /// from an extension until "Allow access to file URLs" is turned on for
-    /// it, a switch eGlu doesn't have. Its own pages are its own. (Search)
-    nonisolated static func withheld(_ pattern: WKWebExtension.MatchPattern) -> Bool {
-        guard let scheme = pattern.scheme?.lowercased() else { return false }
-        return [Self.scheme, "webkit-extension", "file"].contains(scheme)
-    }
-
-    /// Whether an address is a page of an extension other than this one,
-    /// which it never sees into.
+    static func sites(of package: WKWebExtension) -> [WKWebExtension.MatchPattern] { WebKitExtensionControllers.sites(of: package) }
+    nonisolated static func withheld(_ pattern: WKWebExtension.MatchPattern) -> Bool { WebKitExtensionControllers.withheld(pattern) }
     nonisolated static func othersPage(_ url: URL?, for context: WKWebExtensionContext) -> Bool {
-        guard let url, let scheme = url.scheme?.lowercased(), [Self.scheme, "webkit-extension"].contains(scheme) else { return false }
-        return url.host()?.lowercased() != context.uniqueIdentifier.lowercased()
+        WebKitExtensionControllers.othersPage(url, for: context)
     }
-
-    /// The refusals, set again after anything is granted, since WebKit
-    /// weighs a grant naming a site before a refusal of all of them:
-    /// extension pages, files, and the hands-off sites. Refusing extension
-    /// pages takes back a grant of <all_urls> too, so what it meant for
-    /// websites is kept as *://*/*, given before the hands-off sites are
-    /// refused, which takes them out of it again. (Search's fence)
-    ///
-    /// An extension that asks for identity keeps its own sign-in address,
-    /// https://<id>.chromiumapp.org, never loaded (ExtensionAuth.handOver):
-    /// WebKit shows an extension a tab's address only where it has access,
-    /// and one watching its sign-in tab for that address has to see it.
-    static func fence(_ context: WKWebExtensionContext) {
-        let everything = context.grantedPermissionMatchPatterns.keys.contains { $0.matchesAllURLs }
-        for string in ["\(scheme)://*/*", "webkit-extension://*/*", "file:///*", "file://*/*"] {
-            if let pattern = try? WKWebExtension.MatchPattern(string: string) { context.setPermissionStatus(.deniedExplicitly, for: pattern) }
-        }
-        if everything, let web = try? WKWebExtension.MatchPattern(string: "*://*/*") {
-            context.setPermissionStatus(.grantedExplicitly, for: web)
-        }
-        for site in ExtensionPolicy.deniedSites {
-            if let pattern = try? WKWebExtension.MatchPattern(string: site) { context.setPermissionStatus(.deniedExplicitly, for: pattern) }
-        }
-        if asks(context, for: "identity"),
-           let own = try? WKWebExtension.MatchPattern(string: "https://\(context.uniqueIdentifier.lowercased()).chromiumapp.org/*") {
-            context.setPermissionStatus(.grantedExplicitly, for: own)
-        }
-    }
+    static func fence(_ context: WKWebExtensionContext) { WebKitExtensionControllers.fence(context) }
 
     // MARK: Checking (Docs/ExtensionsDesign.md, section 4)
 
@@ -803,353 +549,114 @@ final class Extensions: NSObject, ObservableObject {
         return seen
     }
 
-    /// What it asks for that nothing on this Mac answers: against this
-    /// Mac's measured table (ExtensionTable) once there is one; before,
-    /// what WebKit dropped and no shim answers. A permission's name is its
-    /// namespace's.
     private func missing(for manifest: ExtensionManifest, _ package: WKWebExtension) -> Set<String> {
-        let kept = Set((package.requestedPermissions.union(package.optionalPermissions)).map(\.rawValue))
-        let asked = manifest.permissions + manifest.optionalPermissions
-        var missing: Set<String>
-        if let table = Self.apiTable.table {
-            missing = table.missing(asked: asked, kept: kept)
-            if manifest.usesChromeSignIn, !table.works("identity.getAuthToken") { missing.insert("identity.getAuthToken") }
-        } else {
-            let shims = ExtensionAPITable(answers: ExtensionAPITable.shims)
-            missing = Set(manifest.dropped(kept: kept).filter { $0 != "cookies" && !shims.works($0) }
-                + (manifest.usesChromeSignIn ? ["identity.getAuthToken"] : []))
-        }
-        // EyeDropper is a web API no permission names, so neither list holds
-        // it; the shim answers it through the Mac's colour sampler. Should
-        // the shim stop doing so, it goes back to being missing.
-        if !Scripts.extensionShim.contains("eyeDropper") { missing.insert("EyeDropper") }
-        return missing
+        compatibility.missing(for: manifest, package)
     }
 
     private static func scanKey(_ version: String, _ missing: Set<String>) -> String {
-        version + "|" + missing.sorted().joined(separator: ",")
+        WebKitExtensionCompatibility.scanKey(version, missing)
     }
 
-    /// Its code read for what it reaches for (notes), off the main thread,
-    /// once for its version and what it lacks; what was found goes to every
-    /// space it is loaded in.
     private func readCode(of item: Installed) {
-        guard let manifest = manifests[item.id], let missing = lacking[item.id] else { return }
-        let key = Self.scanKey(item.version, missing)
-        let found = { [weak self] (notes: [String]) in
-            guard let self else { return }
-            for space in self.contexts.keys where self.contexts[space]?[item.id] != nil {
-                self.update(item.id, in: space) { $0.mayNotWork = notes }
-            }
-        }
-        if let done = scanned[item.id], done.key == key { return found(done.notes) }
-        guard scanning[item.id]?.key != key else { return }
-        let attempt = UUID()
-        scanning[item.id] = (key, attempt)
-        let file = Self.package(item.id, item.version)
-        Task {
-            let notes = await Task.detached(priority: .utility) {
-                (try? Data(contentsOf: file)).map { Self.notes(in: $0, manifest, missing: missing) } ?? []
-            }.value
-            // Updated, or read against a newer table, meanwhile: that reading wins.
-            guard scanning[item.id]?.attempt == attempt else { return }
-            scanning[item.id] = nil
-            scanned[item.id] = (key, notes)
-            found(notes)
-        }
+        compatibility.readCode(of: .init(id: item.id, version: item.version))
     }
 
-    /// What its code reaches for, untested, that nothing here answers.
-    nonisolated private static func notes(in archive: Data, _ manifest: ExtensionManifest, missing: Set<String>) -> [String] {
-        var notes: [String] = []
-        for file in manifest.files.map(ExtensionPreparation.normalized) where file.hasSuffix(".js") {
-            guard let source = ZipFile.file(in: archive, matching: { ExtensionPreparation.normalized($0) == file }) else { continue }
-            let uses = ExtensionScan.uses(in: String(decoding: source, as: UTF8.self), file: file, of: missing)
-            for use in uses where !use.tested && !notes.contains(use.path) { notes.append(use.path) }
-        }
-        return notes
-    }
-
-    /// This Mac's table measured, the first time on a macOS build: what
-    /// each loaded extension lacks read again against it.
-    private func measureTable() async {
-        guard Self.apiTable.table == nil, await Self.apiTable.measured() != nil else { return }
-        for item in installed {
-            guard let space = contexts.first(where: { $0.value[item.id] != nil })?.key, let context = contexts[space]?[item.id],
-                  let manifest = manifests[item.id]
-            else { continue }
-            let missing = missing(for: manifest, context.webExtension)
-            lacking[item.id] = missing
-            readCode(of: item)
-            for space in contexts.keys where contexts[space]?[item.id] != nil {
-                // Its errors so far, read again against what it lacks now.
-                if let context = contexts[space]?[item.id] { errorsChanged(context, item.id, in: space) }
-            }
-        }
-    }
-
-    // MARK: Its pages, tried on a copy
-
-    private static let checkedKey = "extensionsPagesTried"
-
-    private static func probe(_ probe: ExtensionEvidence.Probe) -> String {
-        switch probe {
-        case .notApplicable: return "none"
-        case .checking: return "checking"
-        case .passed: return "passed"
-        case .failed: return "failed"
-        case .skipped: return "skipped"
-        case .timedOut: return "timedOut"
-        }
-    }
-
-    private static func probe(_ word: String?) -> ExtensionEvidence.Probe {
-        ["passed": .passed, "failed": .failed, "skipped": .skipped, "timedOut": .timedOut][word ?? ""] ?? .notApplicable
-    }
+    private func measureTable() async { await compatibility.measureTable() }
 
     private static func apply(_ result: ExtensionTrial.Checked, to seen: inout ExtensionEvidence) {
-        seen.testPage = result.testPage
-        seen.popup = result.popup
-        seen.optionsPage = result.optionsPage
-        seen.problems.formUnion(result.problems.map(\.problem))
+        WebKitExtensionCompatibility.apply(result, to: &seen)
     }
 
-    /// What a check's result holds for: the extension's version on this
-    /// macOS build, eGlu and shim. Any of them new, it is tried again.
-    private static let checkEnvironment = ExtensionCheckEnvironment(
-        system: ExtensionTable.build, application: egluVersion,
-        shim: ExtensionPreparation.stamp(for: Scripts.extensionShim))
-
-    private func checkStamp(_ version: String) -> String { Self.checkEnvironment.stamp(for: version) }
+    private func checkStamp(_ version: String) -> String { compatibility.checkStamp(version) }
 
     private func discardStaleIncompatibilities() {
         let held = UserDefaults.standard.dictionary(forKey: Self.incompatibleKey) as? [String: String] ?? [:]
         let versions = Dictionary(installed.map { ($0.id, $0.version) }, uniquingKeysWith: { first, _ in first })
-        let current = Self.checkEnvironment.currentFailures(held, installed: versions)
+        let current = compatibility.currentFailures(held, installed: versions)
         if current != held { UserDefaults.standard.set(current, forKey: Self.incompatibleKey) }
     }
 
-    /// Its content scripts, popup and settings page tried on a copy, once a
-    /// version, a few seconds after it first loads; what was found goes to
-    /// every space it is on in. Kept, so a relaunch doesn't try them again.
     private func checkCopy(of item: Installed) {
-        let stamp = checkStamp(item.version)
-        if checked.isEmpty, let kept = UserDefaults.standard.dictionary(forKey: Self.checkedKey) as? [String: [String: Any]] {
-            for (id, entry) in kept {
-                guard let held = entry["stamp"] as? String else { continue }
-                let problems = (entry["problems"] as? [String] ?? []).compactMap { line -> (ExtensionError.Problem, String?)? in
-                    let parts = line.split(separator: " ", maxSplits: 1).map(String.init)
-                    guard parts.count == 2, ExtensionError.isAPIPath(parts[1]),
-                          let kind = ["missing": ExtensionError.Kind.missing, "notAFunction": .notAFunction, "wrongArguments": .wrongArguments][parts[0]]
-                    else { return nil }
-                    return (ExtensionError.Problem(kind: kind, api: parts[1]), nil)
-                }
-                checked[id] = (held, ExtensionTrial.Checked(testPage: Self.probe(entry["testPage"] as? String), popup: Self.probe(entry["popup"] as? String),
-                                                            optionsPage: Self.probe(entry["optionsPage"] as? String), problems: problems))
-            }
-        }
-        let apply = { [weak self] (result: ExtensionTrial.Checked) in
-            guard let self else { return }
-            for space in self.contexts.keys where self.contexts[space]?[item.id] != nil {
-                self.update(item.id, in: space) { Self.apply(result, to: &$0) }
-            }
-        }
-        if let done = checked[item.id], done.version == stamp { return apply(done.result) }
-        guard let manifest = manifests[item.id], checking[item.id] == nil else { return }
-        checking[item.id] = item.version
-        for space in contexts.keys where contexts[space]?[item.id] != nil {
-            update(item.id, in: space) { seen in
-                if manifest.popup != nil { seen.popup = .checking }
-                if manifest.optionsPage != nil { seen.optionsPage = .checking }
-                if !manifest.contentScripts.isEmpty { seen.testPage = .checking }
-            }
-        }
-        Task {
-            try? await Task.sleep(for: .seconds(2))
-            // Read against this Mac's table, measured first on a new build.
-            if Self.apiTable.table == nil { await measureTable() }
-            let result = await ExtensionTrial.check(Self.prepared(item.id, item.version), id: item.id, manifest: manifest,
-                                                    missing: lacking[item.id] ?? [], scheme: Self.scheme, shimApplication: Self.shimApplication,
-                                                    letRulesRedirect: Self.letRulesRedirect, sites: Self.sites, fence: Self.fence)
-            checking[item.id] = nil
-            // Updated meanwhile: the version now on is tried instead; removed, nothing.
-            guard let now = installed.first(where: { $0.id == item.id }) else { return }
-            guard now.version == item.version else {
-                if contexts.values.contains(where: { $0[item.id] != nil }) { checkCopy(of: now) }
-                return
-            }
-            checked[item.id] = (stamp, result)
-            var kept = UserDefaults.standard.dictionary(forKey: Self.checkedKey) ?? [:]
-            kept[item.id] = ["stamp": stamp, "testPage": Self.probe(result.testPage), "popup": Self.probe(result.popup),
-                             "optionsPage": Self.probe(result.optionsPage),
-                             "problems": result.problems.map { "\($0.problem.kind) \($0.problem.api)" }] as [String: Any]
-            UserDefaults.standard.set(kept, forKey: Self.checkedKey)
-            for found in result.problems { note(found.problem, file: found.file, of: item) }
-            apply(result)
-        }
+        compatibility.checkCopy(of: .init(id: item.id, version: item.version))
     }
 
     /// Whether an error is new to the records for "space/id"; at most 500
     /// remembered, which is past what the records keep.
     func recordOnce(_ key: String, _ text: String) -> Bool {
-        guard recorded[key, default: []].count < 500 else { return false }
-        return recorded[key, default: []].insert(Self.fingerprint(text)).inserted
+        errorEvidence.recordOnce(key, text)
     }
 
-    private func forgetCheck(_ id: String) {
-        checked[id] = nil
-        var kept = UserDefaults.standard.dictionary(forKey: Self.checkedKey) ?? [:]
-        kept[id] = nil
-        UserDefaults.standard.set(kept, forKey: Self.checkedKey)
-    }
+    private func forgetCheck(_ id: String) { compatibility.forgetCheck(id) }
 
     /// An error's fingerprint, to know it again without keeping its words.
     static func fingerprint(_ text: String) -> String {
-        var hash: UInt64 = 0xCBF2_9CE4_8422_2325
-        for byte in text.utf8 {
-            hash ^= UInt64(byte)
-            hash &*= 0x0000_0100_0000_01B3
-        }
-        return String(hash, radix: 36)
+        WebKitExtensionEvidence.fingerprint(text)
     }
 
-    /// Starts the background, and gives it five seconds. WebKit doesn't
-    /// always answer when a worker throws as it starts; its errors say so
-    /// instead (code 6), and are watched apart from this.
     private func startBackground(of context: WKWebExtensionContext, _ item: Installed, in space: UUID, attempt: UUID? = nil) {
-        let key = "\(space.uuidString)/\(item.id)"
-        let attempt = attempt ?? workerRecovery[key, default: ExtensionWorkerRecovery()].beganAttempt(restarting: false)
-        var answered = false
-        context.loadBackgroundContent { [weak self, weak context] error in
-            MainActor.assumeIsolated {
-                answered = true
-                guard let self, let context, self.contexts[space]?[item.id] === context,
-                      self.workerRecovery[key]?.attempt == attempt else { return }
-                self.update(item.id, in: space) { $0.start = error == nil ? .started : .failed }
-                let action = self.workerRecovery[key, default: ExtensionWorkerRecovery()].finished(attempt, failed: error != nil)
-                self.recover(action, context: context, item: item, in: space)
-            }
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self, weak context] in
-            guard !answered, let self, let context, self.contexts[space]?[item.id] === context,
-                  self.workerRecovery[key]?.attempt == attempt else { return }
-            self.update(item.id, in: space) { if $0.start == .checking { $0.start = .timedOut } }
-        }
+        workerRuntime.startBackground(of: context, workerInstallation(item), in: space, attempt: attempt)
     }
 
     private func recover(_ action: ExtensionWorkerRecovery.Action, context: WKWebExtensionContext, item: Installed, in space: UUID) {
-        guard contexts[space]?[item.id] === context else { return }
-        switch action {
-        case .ignore: break
-        case .incompatible:
-            markIncompatible(item.id, version: item.version)
-            // Its worker, not WebKit's verdict: the next launch clears it and
-            // tries once more (forgetWorkersIfChanged), unless it has.
-            var failed = UserDefaults.standard.dictionary(forKey: Self.workerFailedKey) as? [String: String] ?? [:]
-            if failed[item.id] != checkStamp(item.version) + " retried" {
-                failed[item.id] = checkStamp(item.version)
-                UserDefaults.standard.set(failed, forKey: Self.workerFailedKey)
-                Self.workersChanged()
-            }
-        case .restart:
-            let key = "\(space.uuidString)/\(item.id)"
-            let attempt = workerRecovery[key]?.attempt
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self, weak context] in
-                guard let self, let context, self.contexts[space]?[item.id] === context,
-                      self.workerRecovery[key]?.attempt == attempt else { return }
-                // Cooldown, a removed context or a deferred restart is never
-                // proof that the extension failed to restart.
-                self.revive(item.id, in: space, because: "its worker failed to start")
-            }
+        workerRuntime.recover(action, context: context, item: workerInstallation(item), in: space)
+    }
+
+    func workerInstallation(_ item: Installed) -> WebExtensionWorkerInstallation {
+        WebExtensionWorkerInstallation(id: item.id, version: item.version, spaces: item.spaces)
+    }
+
+    func workerCheckStamp(_ version: String) -> String { checkStamp(version) }
+
+    func resetWorkerCompatibility(_ id: String) {
+        var marked = UserDefaults.standard.dictionary(forKey: Self.incompatibleKey) as? [String: String] ?? [:]
+        marked[id] = nil
+        UserDefaults.standard.set(marked, forKey: Self.incompatibleKey)
+    }
+
+    func markWorkerIncompatible(_ id: String, version: String) { markIncompatible(id, version: version) }
+
+    func updateWorker(_ id: String, in space: UUID, event: WebExtensionWorkerEvent) {
+        switch event {
+        case .started: update(id, in: space) { $0.start = .started }
+        case .failed: update(id, in: space) { $0.start = .failed }
+        case .timedOutIfChecking: update(id, in: space) { if $0.start == .checking { $0.start = .timedOut } }
         }
     }
 
     private func watch(_ context: WKWebExtensionContext, _ item: Installed, in space: UUID) {
-        let id = item.id
-        watches[space, default: [:]][id] = NotificationCenter.default.addObserver(
-            forName: WKWebExtensionContext.errorsDidUpdateNotification, object: context, queue: .main
-        ) { [weak self, weak context] _ in
-            MainActor.assumeIsolated {
-                guard let self, let context else { return }
-                self.errorsChanged(context, id, in: space)
-            }
-        }
+        errorEvidence.watch(context, item.id, in: space)
     }
 
     private func unwatch(_ id: String, in space: UUID) {
-        if let token = watches[space]?.removeValue(forKey: id) { NotificationCenter.default.removeObserver(token) }
+        errorEvidence.unwatch(id, in: space)
     }
 
     private func errorsChanged(_ context: WKWebExtensionContext, _ id: String, in space: UUID) {
-        guard contexts[space]?[id] === context else { return }
-        let missing = lacking[id] ?? []
-        // WebKit records a worker that failed to start as an error, and
-        // doesn't try again: the extension would be dead until someone
-        // noticed. It is taken up afresh two seconds after. (Search)
-        let failed = context.errors.contains {
-            let error = $0 as NSError
-            return error.domain == WKWebExtensionContext.errorDomain
-                && error.code == WKWebExtensionContext.Error.Code.backgroundContentFailedToLoad.rawValue
-        }
+        errorEvidence.errorsChanged(context, id, in: space)
+    }
+
+    /// The worker slice still owns recovery. Called inline after the
+    /// runtime has checked that this is the current context.
+    func errorRecovery(_ id: String, in space: UUID, failed: Bool) -> WebExtensionErrorRecovery {
         let key = "\(space.uuidString)/\(id)"
         let item = installed.first { $0.id == id }
         let action = failed ? workerRecovery[key, default: ExtensionWorkerRecovery()].noticedHistoricalFailure() : .ignore
-        if let item { recover(action, context: context, item: item, in: space) }
-        update(id, in: space) { seen in
-            for error in context.errors {
-                let nsError = error as NSError
-                if nsError.domain == WKWebExtensionContext.errorDomain,
-                   nsError.code == WKWebExtensionContext.Error.Code.backgroundContentFailedToLoad.rawValue, action == .restart {
-                    seen.start = .failed
-                }
-                if let problem = ExtensionError.problem(in: nsError.localizedDescription, missing: missing) {
-                    seen.problems.insert(problem)
-                    // Once each error into the records: the list is whole each time.
-                    if let item, recordOnce(key, nsError.localizedDescription) {
-                        #if DEBUG
-                        Self.note("webkit error: \(problem.api)" + Self.words(nsError.localizedDescription))
-                        #endif
-                        note(problem, file: ExtensionError.place(in: nsError.localizedDescription)?.file, of: item)
-                    }
-                }
-            }
-        }
+        if let item, let context = contexts[space]?[id] { recover(action, context: context, item: item, in: space) }
+        return WebExtensionErrorRecovery(installation: item.map { .init(id: $0.id, version: $0.version) }, restarting: action == .restart)
     }
 
     // MARK: The records
 
-    private static var recordsFile: URL { storage.recordsFile }
-
-    private func readRecords() {
-        guard let data = try? Data(contentsOf: Self.recordsFile), let kept = try? JSONDecoder().decode(ExtensionRecords.self, from: data) else { return }
-        records = kept
-        pruneRecords()
-    }
+    private func readRecords() { errorEvidence.readRecords() }
 
     /// Past 30 days, gone from the file too.
-    private func pruneRecords() {
-        let before = records
-        records.prune()
-        if records != before { saveRecords() }
-    }
+    private func pruneRecords() { errorEvidence.pruneRecords() }
 
-    private func saveRecords() {
-        do {
-            try FileManager.default.createDirectory(at: Self.folder, withIntermediateDirectories: true)
-            try JSONEncoder().encode(records).write(to: Self.recordsFile, options: .atomic)
-        } catch {
-            NSLog("eGlu: couldn't save the extension records: \(error.localizedDescription)")
-        }
-    }
+    private func saveRecords() { errorEvidence.saveRecords() }
 
     /// A problem it ran into, kept: where in it and what, never the error's words.
     func note(_ problem: ExtensionError.Problem, file: String?, of item: Installed) {
-        let place = file.flatMap { file in manifests[item.id].map { ExtensionRecords.place(of: file, in: $0) } } ?? "page"
-        let now = Date()
-        records.note(.init(id: item.id, version: item.version, eglu: Self.egluVersion, macOS: Self.macOSVersion,
-                           shim: ExtensionPreparation.stamp(for: Scripts.extensionShim), place: place, api: problem.api,
-                           kind: "\(problem.kind)", first: now, last: now))
-        saveRecords()
+        errorEvidence.note(WebExtensionEvidence.Problem(problem), file: file, of: .init(id: item.id, version: item.version))
     }
 
     static var egluVersion: String {
@@ -1163,18 +670,23 @@ final class Extensions: NSObject, ObservableObject {
     }
 
     func records(of id: String) -> [ExtensionRecords.Record] {
-        pruneRecords()
-        return records.of(id)
+        errorEvidence.records(of: id).map { .init(id: $0.id, version: $0.version, eglu: $0.eglu, macOS: $0.macOS,
+            shim: $0.shim, place: $0.place, api: $0.api, kind: $0.kind, count: $0.count, first: $0.first, last: $0.last) }
     }
 
     func update(_ id: String, in space: UUID, _ change: (inout ExtensionEvidence) -> Void) {
-        guard var seen = evidence[space]?[id] else { return }
-        change(&seen)
-        record(seen, id, in: space)
+        errorEvidence.update(id, in: space) { value in
+            var seen = value.policyEvidence
+            change(&seen)
+            value = WebExtensionEvidence(seen)
+        }
     }
 
     private func record(_ seen: ExtensionEvidence, _ id: String, in space: UUID) {
-        evidence[space, default: [:]][id] = seen
+        errorEvidence.record(WebExtensionEvidence(seen), id, in: space)
+    }
+
+    func evidenceChanged(_ seen: ExtensionEvidence, _ id: String, in space: UUID) {
         let verdict = ExtensionVerdict(seen)
         // News to read: something that doesn't work, or no longer starts, it
         // didn't have before.
@@ -1439,27 +951,7 @@ final class Extensions: NSObject, ObservableObject {
         guard let index = installed.firstIndex(where: { $0.id == id }), installed[index].siteAccess != access else { return }
         installed[index].siteAccess = access
         saveList()
-        for (_, loaded) in contexts {
-            guard let context = loaded[id] else { continue }
-            // Given: the sites that count (sites(of:)). Taken back to
-            // asking, the one status besides granted and denied WebKit lets
-            // an app set: every one it names.
-            if access == .allSites {
-                for pattern in Self.sites(of: context.webExtension) { context.setPermissionStatus(.grantedExplicitly, for: pattern) }
-            } else {
-                for pattern in context.webExtension.allRequestedMatchPatterns where !Self.withheld(pattern) {
-                    context.setPermissionStatus(.unknown, for: pattern)
-                }
-            }
-            // When I Click It takes back the *://*/* that stands for a grant
-            // of <all_urls> (fence) too, or it would keep every site.
-            if access != .allSites, let web = try? WKWebExtension.MatchPattern(string: "*://*/*") {
-                context.setPermissionStatus(.unknown, for: web)
-            }
-            // Google's sign-in, extension pages and files stay denied
-            // whatever was chosen.
-            Self.fence(context)
-        }
+        controllerRuntime.setSiteAccess(id, WebExtensionInstallation.SiteAccess(rawValue: access.rawValue)!)
     }
 
     /// The popup an extension's button opens: the one it set, or its manifest's.
@@ -1969,7 +1461,7 @@ final class Extensions: NSObject, ObservableObject {
         }
         for index in installed.indices { installed[index].spaces.removeAll { $0 == space } }
         saveList()
-        let controller = controllers.removeValue(forKey: space)
+        let controller = controllerRuntime.removeController(for: space)
         contexts[space] = nil
         verdicts[space] = nil
         evidence[space] = nil
