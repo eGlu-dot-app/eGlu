@@ -102,17 +102,9 @@ public final class ExtensionOffscreen: NSObject, WKNavigationDelegate, WKUIDeleg
         preferences.inactiveSchedulingPolicy = .throttle
         // One made to listen may start the microphone with no focus: it has
         // no window to have it (ExtensionCapture lends it the pill's).
-        if reasons.contains("USER_MEDIA") { set("_setGetUserMediaRequiresFocus:", false, in: preferences) }
+        if reasons.contains("USER_MEDIA") { ExtensionCaptureRuntime.set("_setGetUserMediaRequiresFocus:", false, in: preferences) }
         configuration.preferences = preferences
         return true
-    }
-
-    /// One of WebKit's preferences it doesn't make public, if it has it.
-    private static func set(_ name: String, _ on: Bool, in preferences: WKPreferences) {
-        let selector = NSSelectorFromString(name)
-        guard preferences.responds(to: selector), let method = class_getMethodImplementation(type(of: preferences), selector) else { return }
-        typealias Set = @convention(c) (AnyObject, Selector, Bool) -> Void
-        unsafeBitCast(method, to: Set.self)(preferences, selector, on)
     }
 
     private let scheme: String

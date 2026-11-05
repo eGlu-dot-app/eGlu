@@ -512,9 +512,9 @@ final class Extensions: NSObject, ObservableObject {
         // The extensions' own pages reach eGlu's recording channel
         // (ExtensionCapture), in their own world; websites never do.
         let pages = configuration.webViewConfiguration ?? WKWebViewConfiguration()
-        pages.userContentController.addScriptMessageHandler(ExtensionCapture.shared, contentWorld: .page, name: ExtensionCapture.channel)
+        pages.userContentController.addScriptMessageHandler(ExtensionCapture.shared.runtime, contentWorld: .page, name: ExtensionCaptureRuntime.channel)
         #if DEBUG
-        ExtensionCapture.mockDevices(pages.preferences)
+        ExtensionCaptureRuntime.mockDevices(pages.preferences)
         #endif
         configuration.webViewConfiguration = pages
         let controller = WKWebExtensionController(configuration: configuration)
@@ -625,7 +625,7 @@ final class Extensions: NSObject, ObservableObject {
         ExtensionPopups.shared.closeAll(of: id, in: space)
         ExtensionSidePanels.shared.closeAll(of: id, in: space)
         ExtensionPopupWindow.closeAll(of: id, in: space)
-        ExtensionCapture.shared.purge(id, in: space)
+        ExtensionCapture.shared.runtime.purge(id, in: space)
         try? controllers[space]?.unload(context)
         evidence[space]?[id] = nil
         verdicts[space]?[id] = nil

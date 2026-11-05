@@ -78,7 +78,7 @@ final class AppWebKitEngine: MacPageEngine {
 
     static func page(configuration: WKWebViewConfiguration, extensionPage: Bool = false) -> WebKitMacPage {
         WebKitMacPage(configuration: configuration, extensionPage: extensionPage,
-                      extensionUIDelegate: { ExtensionPageDelegate(next: $0) })
+                      extensionUIDelegate: { ExtensionPageDelegate(next: $0, capture: { ExtensionCapture.shared.runtime }) })
     }
 
     /// The space's store and extension controller, with the app's user agent.

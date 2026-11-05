@@ -1,23 +1,18 @@
 import AppKit
 import WebEngineAppKit
-import WebKit
 
-/// The app's question and the bridge to capture until its runtime moves.
-/// Capture still takes WebKit views; the recording indicator takes NSView.
+/// The app's media question and neutral-view calls to the capture runtime.
 extension ExtensionHost: ExtensionAuxiliaryPageHost {
     func releaseExtensionPage(_ view: NSView) {
-        guard let web = view as? WKWebView else { return }
-        ExtensionCapture.shared.release(web)
+        ExtensionCapture.shared.runtime.release(view)
     }
 
     func extensionDisplayDecision(for view: NSView) -> Int {
-        guard let web = view as? WKWebView else { return 0 }
-        return ExtensionCapture.shared.displayDecision(for: web)
+        return ExtensionCapture.shared.runtime.displayDecision(for: view)
     }
 
     func watchExtensionPage(_ view: NSView, id: String) {
-        guard let web = view as? WKWebView else { return }
-        ExtensionCapture.shared.watch(web, id: id)
+        ExtensionCapture.shared.runtime.watch(view, id: id)
     }
 
     func requestExtensionMedia(_ media: ExtensionPageMedia, name: String,
