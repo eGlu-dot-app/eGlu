@@ -4,6 +4,8 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+## 1.1.2
+
 - On the Mac, the build stops at any file of the interface that imports WebKit or the Rust engines, or the WebKit plugin's modules outside its one composition point, and `Docs/WebEngine.md` explains the contracts to whoever writes a plugin for another engine: the first part of step 13 of keeping eGlu's interface apart from its engines (`Docs/EngineSplitPlan.md`). Nothing changes in use.
 - On the Mac, the last of the interface's WebKit goes behind the WebKit plugin: the extension runtime's controller delegate and its answers to the compatibility shim, and the page engine, with the app's one composition point in `EngineComposition.swift`; no file of the Mac app or of what it shares with iPhone and iPad imports WebKit. The Mac page tests, which test the WebKit plugin's pages, reach WebKit through a bridge of their own: the end of step 12 of keeping eGlu's interface apart from its engines (`Docs/EngineSplitPlan.md`). Nothing changes in use.
 - On the Mac, the extension runtime's answers about tabs, pages and side panels, installing and updating an extension's package, its diagnostic report and Apple Passwords' connection to its helper live in the WebKit plugin or go through its contracts; the app keeps the sheets, the file panel, the panes and the update checks: the thirteenth part of step 12 of keeping eGlu's interface apart from its engines (`Docs/EngineSplitPlan.md`). Nothing changes in use.
