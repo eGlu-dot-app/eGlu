@@ -252,40 +252,67 @@ public enum Bookmarks {
     /// `imported` added to `existing`: a link already at its level is left
     /// out, and a folder whose name is already there is merged into that
     /// one, so importing the same file twice adds nothing. A new folder that
-    /// brings no links is left out too, unless `keepingEmpty`: eGlu's own
-    /// export, whose empty folders were made so on purpose. Returns how many
-    /// links it added.
+    /// brings no links is left out too.
+    ///
+    /// `asWritten` is for eGlu's own export, which holds what a space held:
+    /// its empty folders were made so on purpose, and it may hold the same
+    /// address twice or two folders of one name, as the manager allows. Each
+    /// of those is matched with one already at its level, the first with the
+    /// first, and only what is left over is added: the file comes back as it
+    /// was written, and importing it twice still adds nothing. Returns how
+    /// many links it added.
     @discardableResult
-    public static func merge(_ imported: [Bookmark], into existing: inout [Bookmark], keepingEmpty: Bool = false) -> Int {
+    public static func merge(_ imported: [Bookmark], into existing: inout [Bookmark], asWritten: Bool = false) -> Int {
         var added = 0
-        // What this level holds already, worked out once: its links by key
-        // and its folders by name. Looking through the level for each link
-        // coming in made a folder of a thousand links a million comparisons.
-        var links = Set(existing.compactMap { $0.url.map(key) })
+        // What this level holds already, worked out once: how many links of
+        // each key and its folders by name, in order. Looking through the level
+        // for each link coming in made a folder of a thousand links a million
+        // comparisons.
+        var links: [String: Int] = [:]
+        for item in existing { if let link = item.url { links[key(link), default: 0] += 1 } }
         // The bar by any spelling of its name is the one bar.
         func name(_ folder: Bookmark) -> String { isBar(folder) ? barName : folder.title }
-        var folders: [String: Int] = [:]
-        for (index, item) in existing.enumerated() where item.isFolder && folders[name(item)] == nil {
-            folders[name(item)] = index
+        var folders: [String: [Int]] = [:]
+        for (index, item) in existing.enumerated() where item.isFolder {
+            folders[name(item), default: []].append(index)
         }
+        // How many folders of each name the file has had at this level.
+        var seen: [String: Int] = [:]
         for item in imported {
             if let link = item.url {
-                guard links.insert(key(link)).inserted else { continue }
+                let k = key(link)
+                if asWritten {
+                    // One already there for each of the file's, the rest added.
+                    if let left = links[k], left > 0 {
+                        links[k] = left - 1
+                        continue
+                    }
+                } else {
+                    // One of each at a level: the file's own repeats too.
+                    guard links[k] == nil else { continue }
+                    links[k] = 1
+                }
                 existing.append(Bookmark(title: item.title, url: link))
                 added += 1
                 continue
             }
             let children = item.children ?? []
-            if let index = folders[name(item)] {
+            let named = name(item)
+            // The file's nth folder of a name goes into the level's nth; without asWritten, every one into the first.
+            let nth = asWritten ? seen[named, default: 0] : 0
+            seen[named] = nth + 1
+            if let match = folders[named], nth < match.count {
+                let index = match[nth]
                 var inside = existing[index].children ?? []
-                added += merge(children, into: &inside, keepingEmpty: keepingEmpty)
+                added += merge(children, into: &inside, asWritten: asWritten)
                 existing[index].children = inside
             } else {
                 var inside: [Bookmark] = []
-                added += merge(children, into: &inside, keepingEmpty: keepingEmpty)
-                if !inside.isEmpty || keepingEmpty {
+                added += merge(children, into: &inside, asWritten: asWritten)
+                if !inside.isEmpty || asWritten {
                     existing.append(Bookmark(folder: item.title, children: inside))
-                    folders[name(item)] = existing.count - 1
+                    // A later one of the name goes into this one, as before; as written, it is a folder of its own.
+                    if !asWritten { folders[named, default: []].append(existing.count - 1) }
                 }
             }
         }
@@ -310,10 +337,11 @@ public struct BookmarkImport: Equatable, Sendable {
     public var items: [Bookmark]
     /// The icons the file carries, by IconKey (Chrome's export has them).
     public var icons: [String: Data]
-    /// Whether its empty folders stay: in eGlu's own export they were made
-    /// so on purpose (BookmarkFile.generator); in another browser's, a
-    /// folder with nothing to open is left out.
-    public var keepsEmptyFolders = false
+    /// Whether it is eGlu's own export (BookmarkFile.generator), read and
+    /// merged as written (Bookmarks.merge): its empty folders, the same
+    /// address twice and two folders of one name all stay. Another
+    /// browser's file leaves out folders with nothing to open and repeats.
+    public var asWritten = false
 
     public var count: Int {
         items.flatMap(\.links).count
@@ -334,7 +362,7 @@ public struct BookmarkImportRetry: Equatable, Sendable {
 
 public enum BookmarkImportOutcome: Equatable, Sendable {
     /// `folders`: new folders it brought, which only eGlu's own export
-    /// brings without links in them (BookmarkImport.keepsEmptyFolders).
+    /// brings without links in them (BookmarkImport.asWritten).
     case imported(added: Int, total: Int, space: String, folders: Int = 0)
     case duplicates(total: Int, space: String)
     case unreadable, archiveWithoutBookmarks, empty, cancelled
@@ -617,7 +645,7 @@ public enum BookmarkFile {
                 let bar = Bookmark(folder: Bookmarks.barName, children: favourites.children ?? [])
                 items = tidy([bar] + items.filter { $0.id != favourites.id })
             }
-            return BookmarkImport(items: items, icons: icons, keepsEmptyFolders: ownExport)
+            return BookmarkImport(items: items, icons: icons, asWritten: ownExport)
         }
 
         var favouritesIndex: Int?

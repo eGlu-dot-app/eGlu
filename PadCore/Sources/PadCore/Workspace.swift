@@ -1025,7 +1025,7 @@ public struct Workspace: Codable, Equatable, Sendable {
         guard let s = spaces.firstIndex(where: { $0.id == space }) else { return .destinationMissing(bookmarks) }
         guard bookmarks.count > 0 else { return .empty }
         let before = Self.folderCount(spaces[s].bookmarks)
-        let added = Bookmarks.merge(bookmarks.items, into: &spaces[s].bookmarks, keepingEmpty: bookmarks.keepsEmptyFolders)
+        let added = Bookmarks.merge(bookmarks.items, into: &spaces[s].bookmarks, asWritten: bookmarks.asWritten)
         // Folders it brought with no new links in them (eGlu's own export
         // keeps its empty ones) change the space too: no duplicate, that.
         let folders = Self.folderCount(spaces[s].bookmarks) - before

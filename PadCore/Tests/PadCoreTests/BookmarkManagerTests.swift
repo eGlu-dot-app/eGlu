@@ -124,7 +124,7 @@ final class BookmarkManagerTests: XCTestCase {
         let data = BookmarkFile.export(items)
         XCTAssertTrue(String(decoding: data, as: UTF8.self).contains("<META NAME=\"generator\" CONTENT=\"eGlu\">"))
         let read = BookmarkFile.parse(data)
-        XCTAssertTrue(read.keepsEmptyFolders)
+        XCTAssertTrue(read.asWritten)
         XCTAssertEqual(Self.shape(read.items), Self.shape(items))
 
         // Into a space with no bookmarks: the empty folders come too, and a second import adds nothing.
@@ -174,6 +174,41 @@ final class BookmarkManagerTests: XCTestCase {
         XCTAssertEqual(Self.shape(try XCTUnwrap(w.space(fresh)).bookmarks), Self.shape(items))
     }
 
+    func testRepeatsInEglusOwnExportComeBackAsTheyWereAndOnlyOnce() throws {
+        var (w, space, _, _) = space()
+        // The same address twice, and two folders called Docs side by side at the top.
+        w.addBookmark(figma, title: "Figma again", into: nil, in: space)
+        let first = try XCTUnwrap(w.addFolder(named: "Docs", in: nil, of: space))
+        let second = try XCTUnwrap(w.addFolder(named: "Docs", in: nil, of: space))
+        w.addBookmark(notion, title: "Notion", into: first, in: space)
+        w.addBookmark(slack, title: "Slack", into: second, in: space)
+        let items = w.spaces[0].bookmarks
+        let read = BookmarkFile.parse(BookmarkFile.export(items))
+        XCTAssertEqual(Self.shape(read.items), Self.shape(items))
+
+        let fresh = w.addSpace(named: "Fresh")
+        XCTAssertTrue(w.importBookmarks(read, into: fresh).isComplete)
+        XCTAssertEqual(Self.shape(try XCTUnwrap(w.space(fresh)).bookmarks), Self.shape(items))
+        // Again: each of the file's is matched with one there, so nothing is added.
+        XCTAssertEqual(w.importBookmarks(read, into: fresh), .duplicates(total: read.count, space: "Fresh"))
+        XCTAssertEqual(Self.shape(try XCTUnwrap(w.space(fresh)).bookmarks), Self.shape(items))
+    }
+
+    func testAnotherBrowsersRepeatsStillComeInOnce() {
+        var w = Workspace.onFigma()
+        let space = w.spaces[0].id
+        w.spaces[0].bookmarks = []
+        let file = BookmarkImport(items: [Bookmark(title: "Figma", url: figma), Bookmark(title: "Figma again", url: figma),
+                                          Bookmark(folder: "Docs", children: [Bookmark(title: "Notion", url: notion)]),
+                                          Bookmark(folder: "Docs", children: [Bookmark(title: "Slack", url: slack)])],
+                                  icons: [:])
+        _ = w.importBookmarks(file, into: space)
+        XCTAssertEqual(Self.shape(w.spaces[0].bookmarks), Self.shape([
+            Bookmark(title: "Figma", url: figma),
+            Bookmark(folder: "Docs", children: [Bookmark(title: "Notion", url: notion), Bookmark(title: "Slack", url: slack)]),
+        ]))
+    }
+
     func testAnotherBrowsersEmptyFoldersStayOut() throws {
         let chrome = """
         <DL><p>
@@ -184,7 +219,7 @@ final class BookmarkManagerTests: XCTestCase {
         </DL><p>
         """
         let read = BookmarkFile.parse(Data(chrome.utf8))
-        XCTAssertFalse(read.keepsEmptyFolders)
+        XCTAssertFalse(read.asWritten)
         XCTAssertEqual(read.items.map(\.title), ["Figma"])
         // And a folder with nothing in it, handed over some other way, is still left out by the merge.
         var w = Workspace.onFigma()
