@@ -113,15 +113,14 @@ struct HandoffOutlineTests {
         #expect(opening.hasSuffix("…"))
     }
 
-    @Test func selectionAsidesAndTranscriptComeFromTheComposed() {
+    @Test func selectionAndAsidesComeFromTheComposed() {
         var composed = Self.composed("## Talk\n\nWords.")
         composed.selection = "The **tide** comes in."
         composed.asides = [Handoff.Aside(name: "Comments", characters: 3_200)]
-        composed.transcript = true
         let outline = Handoff.outline(of: composed)
         #expect(outline.selection == "The tide comes in.")
         #expect(outline.asides.map(\.name) == ["Comments"])
-        #expect(outline.transcript)
+        #expect(!outline.transcript)
         #expect(!outline.isEmpty)
         #expect(Handoff.outline(of: Self.composed("")).isEmpty)
     }
@@ -242,12 +241,33 @@ struct HandoffOutlineReviewTests {
         #expect(outline.sections.first?.left == 1_300)
     }
 
-    @Test func theTranscriptIsNotAlsoAPart() {
+    /// A reading with the site's transcript added (PageReading.adding).
+    static func spoken() -> PageReading {
+        var reading = PageReading(blocks: [])
+        reading.spoken = PageReading.Spoken(lines: 1)
+        return reading
+    }
+
+    @Test func theSitesTranscriptIsNotAlsoAPart() {
         var composed = Handoff.Composed(kind: .media, body: "## Description\n\nA video about tides.\n\n## Transcript\n\n0:00 Hello there.")
         composed.transcript = true
-        let reading = PageReading(blocks: [PageBlock(kind: .heading, level: 2, text: "## Transcript", hint: .transcript, start: "Transcript")])
-        let outline = Handoff.outline(of: composed, reading: reading)
+        let outline = Handoff.outline(of: composed, reading: Self.spoken())
         #expect(outline.sections.map(\.heading) == ["Description"])
         #expect(outline.transcript)
+    }
+
+    @Test func aPartOfThePagesCalledTranscriptStays() {
+        let body = "## Transcript\n\nThe page's own notes on the talk.\n\n## Description\n\nA video about tides.\n\n## Transcript\n\n0:00 Hello there."
+        let outline = Handoff.outline(of: Handoff.Composed(kind: .media, body: body), reading: Self.spoken())
+        #expect(outline.sections.map(\.heading) == ["Transcript", "Description"])
+        #expect(outline.sections.first?.opening == "The page's own notes on the talk.")
+    }
+
+    @Test func aTranscriptOfThePagesOwnIsAPart() {
+        var composed = Handoff.Composed(kind: .media, body: "## Description\n\nA video.\n\n## Transcript\n\n0:00 Hello there.")
+        composed.transcript = true
+        let outline = Handoff.outline(of: composed)
+        #expect(outline.sections.map(\.heading) == ["Description", "Transcript"])
+        #expect(!outline.transcript)
     }
 }

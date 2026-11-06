@@ -45,9 +45,11 @@ extension Handoff {
         public var asides: [Aside] = []
         /// The person's selection, plain, which goes first.
         public var selection = ""
-        /// What a recording says is in the file: the page's own transcript, or
-        /// the site's. Its part is not among the sections: the sheet has a
-        /// row of its own for it.
+        /// What a recording says is in the file, as the site's own reader
+        /// gave it (PageReading.adding): at the file's end, after the page's
+        /// text. Its part is not among the sections, the sheet having a row
+        /// of its own for it. A transcript of the page's own is a part of
+        /// the page like the others, listed where it is.
         public var transcript = false
 
         public init() {}
@@ -68,7 +70,7 @@ extension Handoff {
         var outline = Outline()
         outline.asides = composed.asides
         outline.selection = cut(outlinePlain(composed.selection), to: selectionRoom)
-        outline.transcript = composed.transcript || reading?.spoken != nil
+        outline.transcript = reading?.spoken != nil
 
         // What was read in the page's pictures is the picture's, not the page's parts: its big text came
         // as headings, which would be taken for the page's own (PageReading.shown).
@@ -109,31 +111,30 @@ extension Handoff {
         // The parts are under the highest headings the page has more than one of; one above them all is a part too.
         let top = Set(found).sorted().first { level in found.count(where: { $0 == level }) > 1 } ?? found.min()
 
+        // The site's transcript, where there is one: the last heading as its
+        // reader writes it, which comes after all of the page's own text. A
+        // part of the page's called the same, before it, stays a part.
+        let spoken = outline.transcript
+            ? lines.indices.last { levels[$0] != nil && lines[$0] == Transcript.heading } : nil
         var heading = ""
+        var headed: Int?
         var under: [Int] = []
         func close() {
-            if let section = section(heading: heading, lines: under, of: lines, code: code, levels: levels) {
-                outline.sections.append(section)
-            }
+            guard headed == nil || headed != spoken,
+                  let section = section(heading: heading, lines: under, of: lines, code: code, levels: levels) else { return }
+            outline.sections.append(section)
         }
         for index in lines.indices where index != skipped {
             if let level = levels[index], let top, level <= top {
                 close()
                 heading = headingWords(lines[index])
+                headed = index
                 under = []
             } else {
                 under.append(index)
             }
         }
         close()
-        // The transcript's part goes as the transcript: the site's, added under "Transcript" (Transcript.blocks), or the page's own.
-        if outline.transcript {
-            var named: Set<String> = reading?.spoken != nil || reading == nil ? ["transcript"] : []
-            for block in reading?.blocks ?? [] where block.kind == .heading && block.hint == .transcript {
-                named.insert(oneLine(outlinePlain(block.title), upTo: 120).lowercased())
-            }
-            outline.sections.removeAll { named.contains($0.heading.lowercased()) }
-        }
         return outline
     }
 

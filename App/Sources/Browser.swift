@@ -3261,7 +3261,8 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         let height = min(max(view.bounds.height - 120, 480), 720)
         guide.preferredContentSize = CGSize(width: width, height: height)
         if let sheet = guide.sheetPresentationController {
-            // The whole height on a phone; elsewhere, should the sheet keep to detents, no more than the height above.
+            // On a phone the handoff's parts come over seconds and need the room. Elsewhere a large detent, should the
+            // sheet keep to detents there, would undo the height cap above; a custom one keeps to it.
             sheet.detents = traitCollection.horizontalSizeClass == .compact ? [.large()]
                 : [.custom(identifier: .init("guide")) { context in min(height, context.maximumDetentValue) }]
             sheet.prefersGrabberVisible = true
