@@ -119,7 +119,9 @@ extension Handoff {
             found.removeAll { $0 == level }
         }
         // The parts are under the highest headings the page has more than one of; one above them all is a part too.
-        let top = Set(found).sorted().first { level in found.count(where: { $0 == level }) > 1 } ?? found.min()
+        // Where no level comes twice, each heading is a part: the highest alone would take what comes before
+        // it ("### Intro" before "## Appendix") into a part with no name.
+        let top = Set(found).sorted().first { level in found.count(where: { $0 == level }) > 1 } ?? found.max()
         var heading = ""
         var headed: Int?
         var under: [Int] = []

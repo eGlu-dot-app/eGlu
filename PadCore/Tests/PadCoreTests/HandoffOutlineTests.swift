@@ -286,6 +286,12 @@ struct HandoffOutlineReviewTests {
         #expect(plain.sections.map(\.heading) == ["Intro", "Details", "Appendix"])
     }
 
+    @Test func withNoLevelTwiceEachHeadingIsAPart() {
+        let outline = Handoff.outline(of: Handoff.Composed(kind: .article, body: "### Intro\n\nWords.\n\n## Appendix\n\nExtra."))
+        #expect(outline.sections.map(\.heading) == ["Intro", "Appendix"])
+        #expect(outline.sections.map(\.opening) == ["Words.", "Extra."])
+    }
+
     @Test func aPageWithNoHeadingsButTheTranscript() {
         let body = "The page's only paragraph.\n\n## Transcript\n\n0:00 Hello there."
         let outline = Handoff.outline(of: Handoff.Composed(kind: .media, body: body), reading: Self.spoken())
