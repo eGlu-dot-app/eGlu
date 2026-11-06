@@ -43,6 +43,12 @@ struct Welcome: View {
         session.workspace.space(spaceID)
     }
 
+    /// The steps this welcome shows, in order: the ones forward and back go
+    /// through, the dots count, and VoiceOver numbers.
+    private var steps: [Step] {
+        Step.allCases.filter { $0 != .writing || asksWriting }
+    }
+
     /// The space's colour is the welcome's own: choosing one shows at once on
     /// every button here, as it will on the space's button in the bar.
     private var colour: SpaceColor {
@@ -101,10 +107,8 @@ struct Welcome: View {
     }
 
     private func advance() {
-        var raw = step.rawValue + 1
-        if raw == Step.writing.rawValue && !asksWriting { raw += 1 }
-        guard let next = Step(rawValue: raw) else { return done() }
-        go(to: next)
+        guard let at = steps.firstIndex(of: step), at + 1 < steps.count else { return done() }
+        go(to: steps[at + 1])
     }
 
     // MARK: The frame around the pages
@@ -112,19 +116,17 @@ struct Welcome: View {
     private var header: some View {
         ZStack {
             HStack(spacing: 6) {
-                ForEach(Step.allCases, id: \.self) { each in
+                ForEach(steps, id: \.self) { each in
                     Capsule()
                         .fill(each == step ? colour.color : Palette.faint)
                         .frame(width: each == step ? 18 : 6, height: 6)
                 }
             }
             .accessibilityElement()
-            .accessibilityLabel("Step \(step.rawValue + 1) of \(Step.allCases.count)")
+            .accessibilityLabel("Step \((steps.firstIndex(of: step) ?? 0) + 1) of \(steps.count)")
             HStack {
                 Button {
-                    var raw = step.rawValue - 1
-                    if raw == Step.writing.rawValue && !asksWriting { raw -= 1 }
-                    if let before = Step(rawValue: raw) { go(to: before) }
+                    if let at = steps.firstIndex(of: step), at > 0 { go(to: steps[at - 1]) }
                 } label: {
                     Image(systemName: "chevron.backward")
                         .font(.system(size: 17, weight: .semibold))
@@ -375,6 +377,8 @@ struct Welcome: View {
                             .padding(.horizontal, 16)
                             .frame(minHeight: 36)
                             .background(colour.color, in: Capsule())
+                            // Drawn 36 points tall, answering a touch over 44, as the welcome's other buttons do.
+                            .padding(.vertical, 4)
                             .contentShape(Rectangle())
                             .buttonStyle(PressScale())
                         Text(browser.instructions)
