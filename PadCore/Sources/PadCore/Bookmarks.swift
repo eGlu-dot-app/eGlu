@@ -215,45 +215,185 @@ public enum Bookmarks {
         return false
     }
 
+    /// What the bookmark manager lists while words are typed, as Chromium's
+    /// does: every link and folder, at any depth and in order, whose name or
+    /// address holds each of the words, with the folders it is in, outermost
+    /// first. The bookmarks bar itself is no result: it is always in the
+    /// manager's list of folders already.
+    public static func matching(_ query: String, in items: [Bookmark]) -> [(item: Bookmark, path: [Bookmark])] {
+        let words = query.split(whereSeparator: \.isWhitespace).map(String.init)
+        guard !words.isEmpty else { return [] }
+        func holds(_ item: Bookmark) -> Bool {
+            let text = [item.label, item.url?.absoluteString ?? ""].joined(separator: " ")
+            return words.allSatisfy { text.range(of: $0, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
+        }
+        // Found once: asked for each item at the top, a space of many bookmarks and no bar took as long as their count squared.
+        let barID = Bookmarks.bar(in: items)?.id
+        func walk(_ level: [Bookmark], path: [Bookmark], top: Bool) -> [(item: Bookmark, path: [Bookmark])] {
+            level.flatMap { item -> [(item: Bookmark, path: [Bookmark])] in
+                let bar = top && item.id == barID
+                let own = !bar && holds(item) ? [(item: item, path: path)] : []
+                return own + walk(item.children ?? [], path: path + [item], top: false)
+            }
+        }
+        return walk(items, path: [], top: true)
+    }
+
+    /// Of `ids`, those not inside another of them, in the order the
+    /// bookmarks stand: a folder chosen with what is in it moves, opens and
+    /// goes as one, its own keeping their places in it. Ids that are nowhere
+    /// are left out.
+    public static func outermost(_ ids: some Collection<UUID>, in items: [Bookmark]) -> [UUID] {
+        let chosen = Set(ids)
+        func walk(_ level: [Bookmark]) -> [UUID] {
+            level.flatMap { item in chosen.contains(item.id) ? [item.id] : walk(item.children ?? []) }
+        }
+        return walk(items)
+    }
+
     /// `imported` added to `existing`: a link already at its level is left
     /// out, and a folder whose name is already there is merged into that
-    /// one, so importing the same file twice adds nothing. Returns how many
-    /// links it added.
+    /// one, so importing the same file twice adds nothing. A new folder that
+    /// brings no links is left out too.
+    ///
+    /// `asWritten` is for eGlu's own export, which holds what a space held:
+    /// its empty folders were made so on purpose, and it may hold the same
+    /// address twice or two folders of one name, as the manager allows. Each
+    /// of those is paired with one already at its level, each one there only
+    /// once, and only what is left over is added: the file comes back as it
+    /// was written, and importing it twice still adds nothing. Returns how
+    /// many links it added.
     @discardableResult
-    public static func merge(_ imported: [Bookmark], into existing: inout [Bookmark]) -> Int {
+    public static func merge(_ imported: [Bookmark], into existing: inout [Bookmark], asWritten: Bool = false) -> Int {
+        merge(imported, into: &existing, asWritten: asWritten, top: true)
+    }
+
+    /// `merge` at one level: `top` only for the space's own top, where the bar is.
+    private static func merge(_ imported: [Bookmark], into existing: inout [Bookmark], asWritten: Bool, top: Bool) -> Int {
         var added = 0
-        // What this level holds already, worked out once: its links by key
-        // and its folders by name. Looking through the level for each link
-        // coming in made a folder of a thousand links a million comparisons.
-        var links = Set(existing.compactMap { $0.url.map(key) })
         // The bar by any spelling of its name is the one bar.
         func name(_ folder: Bookmark) -> String { isBar(folder) ? barName : folder.title }
-        var folders: [String: Int] = [:]
-        for (index, item) in existing.enumerated() where item.isFolder && folders[name(item)] == nil {
-            folders[name(item)] = index
+        // Worked out once a level: looking through the level for each item
+        // coming in made a folder of a thousand links a million comparisons.
+        var folders: [String: [Int]] = [:]
+        for (index, item) in existing.enumerated() where item.isFolder {
+            folders[name(item), default: []].append(index)
         }
-        for item in imported {
+        let present = asWritten ? linksHere(imported, pairedWith: existing) : linksHere(imported, onceIn: existing)
+        var paired = Set<Int>()
+        // The file's bar goes into the space's bar, the first so named: a later
+        // folder of that name with more in common is only a folder, and pairing
+        // with it would leave the bar without what the file's bar brings.
+        let fileBar = top && asWritten ? bar(in: imported)?.id : nil
+        let spaceBar = fileBar == nil ? nil : existing.firstIndex(where: isBar)
+        if let spaceBar { paired.insert(spaceBar) }
+        // A folder of the file just as one of the level's, inside and all,
+        // takes that one before any is paired by what they share: a file
+        // imported again into the space it came from then changes nothing.
+        var twins: [Int: Int] = [:]
+        if asWritten {
+            for (offset, item) in imported.enumerated() where item.isFolder && item.id != fileBar {
+                let same = signature(item)
+                guard let index = folders[name(item)]?.first(where: { !paired.contains($0) && signature(existing[$0]) == same })
+                else { continue }
+                twins[offset] = index
+                paired.insert(index)
+            }
+        }
+        for (offset, item) in imported.enumerated() {
             if let link = item.url {
-                guard links.insert(key(link)).inserted else { continue }
+                guard !present.contains(offset) else { continue }
                 existing.append(Bookmark(title: item.title, url: link))
                 added += 1
                 continue
             }
             let children = item.children ?? []
-            if let index = folders[name(item)] {
+            let named = name(item)
+            let match = twins[offset] ?? (item.id == fileBar && spaceBar != nil ? spaceBar
+                : asWritten ? closest(item, among: (folders[named] ?? []).filter { !paired.contains($0) }, in: existing)
+                : folders[named]?.first)
+            if let index = match {
+                paired.insert(index)
                 var inside = existing[index].children ?? []
-                added += merge(children, into: &inside)
+                added += merge(children, into: &inside, asWritten: asWritten, top: false)
                 existing[index].children = inside
             } else {
                 var inside: [Bookmark] = []
-                added += merge(children, into: &inside)
-                if !inside.isEmpty {
+                added += merge(children, into: &inside, asWritten: asWritten, top: false)
+                if !inside.isEmpty || asWritten {
                     existing.append(Bookmark(folder: item.title, children: inside))
-                    folders[name(item)] = existing.count - 1
+                    // Another browser's folders of one name come in as one,
+                    // as they always have here; eGlu's own two of a name were
+                    // two in the space, and stay two.
+                    if !asWritten { folders[named, default: []].append(existing.count - 1) }
                 }
             }
         }
         return added
+    }
+
+    /// Which of `imported`'s links are already at the level, by their place
+    /// in `imported`: one of each address, the file's own repeats too, as
+    /// another browser's file is merged.
+    private static func linksHere(_ imported: [Bookmark], onceIn existing: [Bookmark]) -> Set<Int> {
+        var keys = Set(existing.compactMap { $0.url.map(key) })
+        var present = Set<Int>()
+        for (offset, item) in imported.enumerated() {
+            if let link = item.url, !keys.insert(key(link)).inserted { present.insert(offset) }
+        }
+        return present
+    }
+
+    /// Which of `imported`'s links are already at the level, each one there
+    /// standing for one of the file's. Its name first: the same address kept
+    /// under two names is two bookmarks, and the one with the other name is
+    /// not this one. Then its address alone, so a bookmark renamed since the
+    /// file was written is still found and not added again.
+    private static func linksHere(_ imported: [Bookmark], pairedWith existing: [Bookmark]) -> Set<Int> {
+        func named(_ link: URL, _ title: String) -> String { key(link) + "\n" + title }
+        var byName: [String: Int] = [:]
+        var byAddress: [String: Int] = [:]
+        for item in existing {
+            guard let link = item.url else { continue }
+            byName[named(link, item.title), default: 0] += 1
+            byAddress[key(link), default: 0] += 1
+        }
+        var present = Set<Int>()
+        for (offset, item) in imported.enumerated() {
+            guard let link = item.url, let left = byName[named(link, item.title)], left > 0 else { continue }
+            byName[named(link, item.title)] = left - 1
+            byAddress[key(link), default: 0] -= 1
+            present.insert(offset)
+        }
+        for (offset, item) in imported.enumerated() where !present.contains(offset) {
+            guard let link = item.url, let left = byAddress[key(link)], left > 0 else { continue }
+            byAddress[key(link)] = left - 1
+            present.insert(offset)
+        }
+        return present
+    }
+
+    /// Of the level's folders of one name not yet paired, the one sharing
+    /// most addresses with `folder`: two folders of a name may stand in
+    /// another order in the space than in the file, and what is in them says
+    /// which is which. With nothing to tell them apart (empty, or nothing in
+    /// common), the first.
+    private static func closest(_ folder: Bookmark, among candidates: [Int], in existing: [Bookmark]) -> Int? {
+        // Each address once: one kept twice in a folder says no more about which folder it is.
+        let wanted = Set(folder.links.compactMap { $0.url.map(key) })
+        var best: (index: Int, shared: Int)?
+        for index in candidates {
+            let shared = Set(existing[index].links.compactMap { $0.url.map(key) }).intersection(wanted).count
+            if shared > (best?.shared ?? -1) { best = (index, shared) }
+        }
+        return best?.index
+    }
+
+    /// What a bookmark or folder is, everything in it with its name and
+    /// address in order, to tell a folder from its twin (merge).
+    private static func signature(_ item: Bookmark) -> String {
+        if let link = item.url { return "L\(key(link))\t\(item.title)" }
+        return "F\(item.title)(" + (item.children ?? []).map(signature).joined(separator: "\n") + ")"
     }
 }
 
@@ -274,9 +414,23 @@ public struct BookmarkImport: Equatable, Sendable {
     public var items: [Bookmark]
     /// The icons the file carries, by IconKey (Chrome's export has them).
     public var icons: [String: Data]
+    /// Whether it is eGlu's own export (BookmarkFile.generator), read and
+    /// merged as written (Bookmarks.merge): its empty folders, the same
+    /// address twice and two folders of one name all stay. Another
+    /// browser's file leaves out folders with nothing to open and repeats.
+    public var asWritten = false
 
     public var count: Int {
         items.flatMap(\.links).count
+    }
+
+    /// Nothing to bring: no links, and from eGlu's own export no folder but
+    /// an empty bar. eGlu's folders alone are what a space held, kept so on
+    /// purpose; another browser's file with no links is no bookmarks file.
+    public var bringsNothing: Bool {
+        // The bar is the first folder so named; a later one is a folder of the space's like any other.
+        let bar = Bookmarks.bar(in: items)?.id
+        return count == 0 && !(asWritten && items.contains { $0.id != bar || !($0.children ?? []).isEmpty })
     }
 }
 
@@ -293,12 +447,14 @@ public struct BookmarkImportRetry: Equatable, Sendable {
 }
 
 public enum BookmarkImportOutcome: Equatable, Sendable {
-    case imported(added: Int, total: Int, space: String)
+    /// `folders`: new folders it brought, which only eGlu's own export
+    /// brings without links in them (BookmarkImport.asWritten).
+    case imported(added: Int, total: Int, space: String, folders: Int = 0)
     case duplicates(total: Int, space: String)
     case unreadable, archiveWithoutBookmarks, empty, cancelled
     case destinationMissing(BookmarkImport)
     case workspaceUnavailable
-    case notSaved(added: Int, total: Int, space: String, retry: BookmarkImportRetry? = nil)
+    case notSaved(added: Int, total: Int, space: String, retry: BookmarkImportRetry? = nil, folders: Int = 0)
 
     public var isComplete: Bool {
         switch self {
@@ -327,24 +483,28 @@ public enum BookmarkImportOutcome: Equatable, Sendable {
     /// Recheck identity after an asynchronous save or before a retry. A matching
     /// name is not enough to make a replacement space the import destination.
     public func validatingDestination(in workspace: Workspace) -> Self {
-        guard case let .notSaved(added, total, _, retry?) = self else { return self }
+        guard case let .notSaved(added, total, _, retry?, folders) = self else { return self }
         guard let space = workspace.space(retry.destination) else { return .destinationMissing(retry.bookmarks) }
-        return .notSaved(added: added, total: total, space: space.name, retry: retry)
+        return .notSaved(added: added, total: total, space: space.name, retry: retry, folders: folders)
     }
 
     public func acknowledgingSave(_ saved: Bool, retry: BookmarkImportRetry? = nil) -> Self {
         switch self {
-        case let .imported(added, total, space) where !saved: return .notSaved(added: added, total: total, space: space, retry: retry)
+        case let .imported(added, total, space, folders) where !saved:
+            return .notSaved(added: added, total: total, space: space, retry: retry, folders: folders)
         case let .duplicates(total, space) where !saved: return .notSaved(added: 0, total: total, space: space, retry: retry)
-        case let .notSaved(added, total, space, _) where saved:
-            return added > 0 ? .imported(added: added, total: total, space: space) : .duplicates(total: total, space: space)
+        case let .notSaved(added, total, space, _, folders) where saved:
+            return added > 0 || folders > 0 ? .imported(added: added, total: total, space: space, folders: folders)
+                : .duplicates(total: total, space: space)
         default: return self
         }
     }
 
     public var title: String {
         switch self {
+        case let .imported(added, _, _, folders) where added == 0 && folders > 0: return BrowserText.localized("Folders Imported")
         case .imported: return BrowserText.localized("Bookmarks Imported")
+        case let .duplicates(total, _) where total == 0: return BrowserText.localized("Folders Already Present")
         case .duplicates: return BrowserText.localized("Bookmarks Already Present")
         case .unreadable: return BrowserText.localized("Could Not Read the File")
         case .archiveWithoutBookmarks: return BrowserText.localized("No Bookmarks in This Archive")
@@ -358,8 +518,16 @@ public enum BookmarkImportOutcome: Equatable, Sendable {
 
     public var message: String {
         switch self {
-        case let .imported(added, total, space):
+        // Only folders new: the file's bookmarks were all there already.
+        case let .imported(added, total, space, folders) where added == 0 && folders > 0 && total == 0:
+            return String(format: BrowserText.localized("%1$lld folders added to %2$@."), folders, space)
+        case let .imported(added, total, space, folders) where added == 0 && folders > 0:
+            return String(format: BrowserText.localized("%1$lld folders added to %2$@. The %3$lld bookmarks in the file were already there."), folders, space, total)
+        case let .imported(added, total, space, _):
             return String(format: BrowserText.localized("%1$lld of %2$lld bookmarks added to %3$@. They appear in this space's bookmarks and on new tabs."), added, total, space)
+        // eGlu's own folders alone, all there already.
+        case let .duplicates(total, space) where total == 0:
+            return String(format: BrowserText.localized("The folders in the file are already in %@."), space)
         case let .duplicates(total, space): return String(format: BrowserText.localized("All %1$lld bookmarks in the file are already in %2$@."), total, space)
         case .unreadable: return BrowserText.localized("Choose the file again, or save a local copy first. You can also import later in Settings.")
         case .archiveWithoutBookmarks: return BrowserText.localized("Choose an HTML bookmark export from Chrome, Firefox or Safari, or a Safari ZIP export that includes Bookmarks.")
@@ -367,7 +535,9 @@ public enum BookmarkImportOutcome: Equatable, Sendable {
         case .cancelled: return BrowserText.localized("No bookmarks were imported.")
         case .destinationMissing: return BrowserText.localized("The destination space was removed while the file was being read. The file has been read. Choose an existing space to import into.")
         case .workspaceUnavailable: return BrowserText.localized("Recover and save the workspace before importing bookmarks. The bookmark file is unchanged.")
-        case let .notSaved(added, _, space, _):
+        case let .notSaved(added, _, space, _, folders) where added == 0 && folders > 0:
+            return String(format: BrowserText.localized("%1$lld folders were added to %2$@ in this session, but the workspace could not be saved. Keep eGlu open and retry saving."), folders, space)
+        case let .notSaved(added, _, space, _, _):
             return String(format: BrowserText.localized("%1$lld bookmarks were added to %2$@ in this session, but the workspace could not be saved. Keep eGlu open and retry saving."), added, space)
         }
     }
@@ -401,12 +571,69 @@ public enum BookmarkFile {
             html = inside
         }
         let parsed = parse(html)
-        return parsed.count > 0 ? .success(parsed) : .failure(.empty)
+        return parsed.bringsNothing ? .failure(.empty) : .success(parsed)
     }
 
     public static func parse(_ data: Data) -> BookmarkImport {
         var reader = Reader(bytes: [UInt8](data))
         return reader.read()
+    }
+
+    /// A space's bookmarks in the same format, as Chrome writes it: the bar
+    /// as the folder marked PERSONAL_TOOLBAR_FOLDER, first, and the rest
+    /// after it at the top, so Chrome, Firefox, Safari and eGlu each read the
+    /// bar back as their own. There are no dates to write: none are kept.
+    public static func export(_ items: [Bookmark]) -> Data {
+        var lines = [
+            "<!DOCTYPE NETSCAPE-Bookmark-file-1>",
+            "<!-- This is an automatically generated file.",
+            "     It will be read and overwritten.",
+            "     DO NOT EDIT! -->",
+            "<META HTTP-EQUIV=\"Content-Type\" CONTENT=\"text/html; charset=UTF-8\">",
+            "<META NAME=\"generator\" CONTENT=\"\(generator)\">",
+            "<TITLE>Bookmarks</TITLE>",
+            "<H1>Bookmarks</H1>",
+            "<DL><p>",
+        ]
+        func write(_ level: [Bookmark], depth: Int) {
+            let indent = String(repeating: "    ", count: depth)
+            for item in level {
+                if let url = item.url {
+                    lines.append("\(indent)<DT><A HREF=\"\(escaped(url.absoluteString))\">\(escaped(item.title))</A>")
+                    continue
+                }
+                let bar = depth == 1 && Bookmarks.isBar(item) && Bookmarks.bar(in: items)?.id == item.id
+                let mark = bar ? " PERSONAL_TOOLBAR_FOLDER=\"true\"" : ""
+                lines.append("\(indent)<DT><H3\(mark)>\(escaped(bar ? Bookmarks.barName : item.title))</H3>")
+                lines.append("\(indent)<DL><p>")
+                write(item.children ?? [], depth: depth + 1)
+                lines.append("\(indent)</DL><p>")
+            }
+        }
+        let bar = Bookmarks.bar(in: items).map { [$0] } ?? []
+        write(bar + Bookmarks.others(in: items), depth: 1)
+        lines.append("</DL><p>")
+        return Data((lines.joined(separator: "\n") + "\n").utf8)
+    }
+
+    /// What eGlu's export says made it, so reading the file back keeps its
+    /// empty folders. Other browsers pass over a META they don't know.
+    static let generator = "eGlu"
+
+    /// Text safe in an attribute in double quotes, and between tags.
+    static func escaped(_ text: String) -> String {
+        var out = ""
+        out.reserveCapacity(text.count)
+        for character in text {
+            switch character {
+            case "&": out += "&amp;"
+            case "<": out += "&lt;"
+            case ">": out += "&gt;"
+            case "\"": out += "&quot;"
+            default: out.append(character)
+            }
+        }
+        return out
     }
 
     /// Names a folder of favourites goes by: the bar under the address bar.
@@ -459,8 +686,16 @@ public enum BookmarkFile {
                 case "h3":
                     let title = text(until: "</h3")
                     let marked = tag.attributes["personal_toolbar_folder"]?.lowercased() == "true"
-                    let named = BookmarkFile.favouriteNames.contains(title.lowercased())
+                    // Other browsers' bars are known by their names too; eGlu's
+                    // own export marks its one bar, and a folder of the space's
+                    // called Favorites is only a folder.
+                    let named = !ownExport && BookmarkFile.favouriteNames.contains(title.lowercased())
                     pending = Frame(title: title, favourites: marked || (named && frames.count == 1))
+                case "meta":
+                    if tag.attributes["name"]?.lowercased() == "generator",
+                       tag.attributes["content"]?.lowercased().hasPrefix(BookmarkFile.generator.lowercased()) == true {
+                        ownExport = true
+                    }
                 case "a":
                     let title = text(until: "</a")
                     guard let href = tag.attributes["href"], let url = URL(string: href),
@@ -484,24 +719,30 @@ public enum BookmarkFile {
             // what they hold goes there, not into a folder of that name.
             var top: [Bookmark] = []
             for (offset, item) in frames[0].items.enumerated() {
-                if offset != favouritesIndex, item.isFolder,
+                // In eGlu's own export a folder so named is one of the space's own.
+                if !ownExport, offset != favouritesIndex, item.isFolder,
                    item.title.lowercased() == BookmarkFile.othersName.lowercased() {
                     top += item.children ?? []
                 } else {
                     top.append(item)
                 }
             }
-            var items = Reader.pruned(top)
+            // eGlu's own export keeps its empty folders: they were made so on purpose.
+            let keep = ownExport
+            func tidy(_ items: [Bookmark]) -> [Bookmark] { keep ? items : Reader.pruned(items) }
+            var items = tidy(top)
             if let index = favouritesIndex, index < frames[0].items.count {
                 // The file's favourites are the space's bookmarks bar, first.
                 let favourites = frames[0].items[index]
                 let bar = Bookmark(folder: Bookmarks.barName, children: favourites.children ?? [])
-                items = Reader.pruned([bar] + items.filter { $0.id != favourites.id })
+                items = tidy([bar] + items.filter { $0.id != favourites.id })
             }
-            return BookmarkImport(items: items, icons: icons)
+            return BookmarkImport(items: items, icons: icons, asWritten: ownExport)
         }
 
         var favouritesIndex: Int?
+        /// The file is eGlu's own export (BookmarkFile.generator).
+        var ownExport = false
 
         /// Folders with no links left in them taken out.
         static func pruned(_ items: [Bookmark]) -> [Bookmark] {
@@ -591,6 +832,9 @@ public enum BookmarkFile {
             while at < bytes.count, !matches(end, at: at) { at += 1 }
             var raw = String(decoding: bytes[start..<min(at, bytes.count)], as: UTF8.self)
             skip(past: ">")
+            // eGlu's own export wrote the name as it is, its < and > escaped:
+            // read back just so, two spaces and all, it is the same folder.
+            if ownExport { return Reader.decode(raw) }
             raw = raw.replacingOccurrences(of: "<[^>]*>", with: "", options: .regularExpression)
             let words = Reader.decode(raw).split(whereSeparator: { $0.isWhitespace })
             return words.joined(separator: " ")

@@ -29,6 +29,9 @@ public enum Command: String, CaseIterable, Sendable {
     case pinTab
     case splitTab
     case bookmark
+    /// The space's bookmarks to sort out, as Chromium's Bookmark Manager:
+    /// folders, order, import and export (BookmarkManagerView).
+    case bookmarkManager
     case share
     case copyLink
     case siteMode
@@ -76,6 +79,7 @@ public enum Command: String, CaseIterable, Sendable {
         case .pinTab: return BrowserText.localized("Pin or Unpin Tab")
         case .splitTab: return BrowserText.localized("Split or Separate Tabs")
         case .bookmark: return BrowserText.localized("Bookmark This Page")
+        case .bookmarkManager: return BrowserText.localized("Bookmark Manager")
         case .share: return BrowserText.localized("Share Page…")
         case .copyLink: return BrowserText.localized("Copy Link")
         case .siteMode: return BrowserText.localized("Request Desktop or Mobile Site")
@@ -121,6 +125,8 @@ public enum Command: String, CaseIterable, Sendable {
         case .pinTab: return ["pin", "keep", "unpin"]
         case .splitTab: return ["split view", "side by side", "two", "pane", "unsplit"]
         case .bookmark: return ["save", "favorite", "star", "remove bookmark"]
+        case .bookmarkManager:
+            return ["bookmarks", "organize", "organise", "edit bookmarks", "folders", "export bookmarks", "bookmarks bar"]
         case .share: return ["add to home screen", "send", "airdrop", "web app"]
         case .copyLink: return ["copy address", "copy url", "clipboard", "link"]
         case .siteMode: return ["desktop site", "mobile site", "user agent", "phone"]
@@ -231,7 +237,7 @@ public enum ShortcutGroup: String, CaseIterable, Sendable {
         case .go:
             return [.address, .everything, .back, .forward, .history, .reload, .stop, .share, .copyLink, .handoff, .handoffFile, .siteMode,
                     .contentBlocking, .linkMenu, .find, .acceptWritingSuggestion]
-        case .tabs: return [.newTab, .closeTab, .reopenTab, .pinTab, .splitTab, .bookmark, .nextTab, .previousTab]
+        case .tabs: return [.newTab, .closeTab, .reopenTab, .pinTab, .splitTab, .bookmark, .bookmarkManager, .nextTab, .previousTab]
         case .spaces: return [.nextSpace, .previousSpace, .newSpace, .spaceSettings, .importBookmarks, .newWindow, .closeWindow]
         // The developer tools, as the Mac's Developer menu and the
         // developer bar have them.
@@ -269,6 +275,7 @@ public enum Shortcuts {
         .pinTab: Chord(.character("p"), shift: true),
         .splitTab: Chord(.character("\\")),
         .bookmark: Chord(.character("d"), shift: true),
+        .bookmarkManager: Chord(.character("b"), shift: true),
         .share: Chord(.character("s")),
         .copyLink: Chord(.character("c"), shift: true),
         .siteMode: Chord(.character("m"), shift: true),
@@ -328,6 +335,15 @@ public enum Destination {
         guard !text.isEmpty else { return nil }
         if let address = Address.url(from: text) { return Address.reachable(address) ?? address }
         return search(text, engine: engine)
+    }
+
+    /// The typed text as a web address, or nil: never a search. What a
+    /// bookmark's address field takes, where words are a mistake to point
+    /// out and not something to look up; only a page a tab can open.
+    public static func webAddress(from typed: String) -> URL? {
+        guard let url = Address.url(from: typed), let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https", url.host != nil else { return nil }
+        return Address.reachable(url) ?? url
     }
 
     /// The typed words as a search, never as an address.

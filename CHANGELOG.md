@@ -4,6 +4,8 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+- On the Mac, iPhone and iPad, a Bookmark Manager, as Chrome's: a space's folders down the side, the bookmarks bar first and Other Bookmarks after it, and the folder chosen beside them. Bookmarks and folders are dragged into another order or onto another folder, moved from their menu, added, renamed, given another address, sorted by name, deleted and found by their words; the space's bookmarks are imported from another browser's file and exported as the HTML file Chrome, Firefox and Safari import, the bar as their own bar; a file eGlu exported keeps its empty folders when it is imported again, where another browser's empty folders are still left out. It opens from the Tabs menu (⌥⌘B) and the Other Bookmarks panel on a Mac, and from the page menu, the new tab's bookmarks and ⌃⌥⇧B on iPhone and iPad. The bookmarks bar is always there and is never deleted, here or on a new tab's page.
+
 ## 1.1.2
 
 - On the Mac, the build stops at any file of the interface that imports WebKit or the Rust engines, or the WebKit plugin's modules outside its one composition point, and `Docs/WebEngine.md` explains the contracts to whoever writes a plugin for another engine: the first part of step 13 of keeping eGlu's interface apart from its engines (`Docs/EngineSplitPlan.md`). Nothing changes in use.
