@@ -287,6 +287,19 @@ public enum Bookmarks {
         let fileBar = top && asWritten ? bar(in: imported)?.id : nil
         let spaceBar = fileBar == nil ? nil : existing.firstIndex(where: isBar)
         if let spaceBar { paired.insert(spaceBar) }
+        // A folder of the file just as one of the level's, inside and all,
+        // takes that one before any is paired by what they share: a file
+        // imported again into the space it came from then changes nothing.
+        var twins: [Int: Int] = [:]
+        if asWritten {
+            for (offset, item) in imported.enumerated() where item.isFolder && item.id != fileBar {
+                let same = signature(item)
+                guard let index = folders[name(item)]?.first(where: { !paired.contains($0) && signature(existing[$0]) == same })
+                else { continue }
+                twins[offset] = index
+                paired.insert(index)
+            }
+        }
         for (offset, item) in imported.enumerated() {
             if let link = item.url {
                 guard !present.contains(offset) else { continue }
@@ -296,9 +309,9 @@ public enum Bookmarks {
             }
             let children = item.children ?? []
             let named = name(item)
-            let match = item.id == fileBar && spaceBar != nil ? spaceBar
+            let match = twins[offset] ?? (item.id == fileBar && spaceBar != nil ? spaceBar
                 : asWritten ? closest(item, among: (folders[named] ?? []).filter { !paired.contains($0) }, in: existing)
-                : folders[named]?.first
+                : folders[named]?.first)
             if let index = match {
                 paired.insert(index)
                 var inside = existing[index].children ?? []
@@ -366,13 +379,21 @@ public enum Bookmarks {
     /// which is which. With nothing to tell them apart (empty, or nothing in
     /// common), the first.
     private static func closest(_ folder: Bookmark, among candidates: [Int], in existing: [Bookmark]) -> Int? {
+        // Each address once: one kept twice in a folder says no more about which folder it is.
         let wanted = Set(folder.links.compactMap { $0.url.map(key) })
         var best: (index: Int, shared: Int)?
         for index in candidates {
-            let shared = existing[index].links.reduce(0) { $0 + ($1.url.map { wanted.contains(key($0)) } == true ? 1 : 0) }
+            let shared = Set(existing[index].links.compactMap { $0.url.map(key) }).intersection(wanted).count
             if shared > (best?.shared ?? -1) { best = (index, shared) }
         }
         return best?.index
+    }
+
+    /// What a bookmark or folder is, everything in it with its name and
+    /// address in order, to tell a folder from its twin (merge).
+    private static func signature(_ item: Bookmark) -> String {
+        if let link = item.url { return "L\(key(link))\t\(item.title)" }
+        return "F\(item.title)(" + (item.children ?? []).map(signature).joined(separator: "\n") + ")"
     }
 }
 

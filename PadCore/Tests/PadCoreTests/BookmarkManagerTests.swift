@@ -247,6 +247,20 @@ final class BookmarkManagerTests: XCTestCase {
         XCTAssertEqual(Self.shape(w.spaces[0].bookmarks), Self.shape(there))
     }
 
+    func testAnUnchangedExportImportedAgainChangesNothingEvenWithSharedAddresses() throws {
+        let a = URL(string: "https://a.example/")!
+        let b = URL(string: "https://b.example/")!
+        var w = Workspace.onFigma()
+        let space = w.spaces[0].id
+        let there = [Bookmark(folder: "Docs", children: [Bookmark(title: "A", url: a)]),
+                     Bookmark(folder: "Docs", children: [Bookmark(title: "A", url: a), Bookmark(title: "A again", url: a),
+                                                         Bookmark(title: "B", url: b)])]
+        w.spaces[0].bookmarks = there
+        let read = BookmarkFile.parse(BookmarkFile.export(there))
+        XCTAssertEqual(w.importBookmarks(read, into: space), .duplicates(total: 4, space: w.spaces[0].name))
+        XCTAssertEqual(Self.shape(w.spaces[0].bookmarks), Self.shape(there))
+    }
+
     func testTheFilesBarGoesIntoTheSpacesBarEvenWithATwinWithMoreInCommon() throws {
         let a = URL(string: "https://a.example/")!
         let b = URL(string: "https://b.example/")!
