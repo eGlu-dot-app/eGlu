@@ -239,10 +239,12 @@ public enum Bookmarks {
 
     /// `imported` added to `existing`: a link already at its level is left
     /// out, and a folder whose name is already there is merged into that
-    /// one, so importing the same file twice adds nothing. Returns how many
+    /// one, so importing the same file twice adds nothing. A new folder that
+    /// brings no links is left out too, unless `keepingEmpty`: eGlu's own
+    /// export, whose empty folders were made so on purpose. Returns how many
     /// links it added.
     @discardableResult
-    public static func merge(_ imported: [Bookmark], into existing: inout [Bookmark]) -> Int {
+    public static func merge(_ imported: [Bookmark], into existing: inout [Bookmark], keepingEmpty: Bool = false) -> Int {
         var added = 0
         // What this level holds already, worked out once: its links by key
         // and its folders by name. Looking through the level for each link
@@ -264,12 +266,12 @@ public enum Bookmarks {
             let children = item.children ?? []
             if let index = folders[name(item)] {
                 var inside = existing[index].children ?? []
-                added += merge(children, into: &inside)
+                added += merge(children, into: &inside, keepingEmpty: keepingEmpty)
                 existing[index].children = inside
             } else {
                 var inside: [Bookmark] = []
-                added += merge(children, into: &inside)
-                if !inside.isEmpty {
+                added += merge(children, into: &inside, keepingEmpty: keepingEmpty)
+                if !inside.isEmpty || keepingEmpty {
                     existing.append(Bookmark(folder: item.title, children: inside))
                     folders[name(item)] = existing.count - 1
                 }
@@ -296,6 +298,10 @@ public struct BookmarkImport: Equatable, Sendable {
     public var items: [Bookmark]
     /// The icons the file carries, by IconKey (Chrome's export has them).
     public var icons: [String: Data]
+    /// Whether its empty folders stay: in eGlu's own export they were made
+    /// so on purpose (BookmarkFile.generator); in another browser's, a
+    /// folder with nothing to open is left out.
+    public var keepsEmptyFolders = false
 
     public var count: Int {
         items.flatMap(\.links).count
@@ -442,6 +448,7 @@ public enum BookmarkFile {
             "     It will be read and overwritten.",
             "     DO NOT EDIT! -->",
             "<META HTTP-EQUIV=\"Content-Type\" CONTENT=\"text/html; charset=UTF-8\">",
+            "<META NAME=\"generator\" CONTENT=\"\(generator)\">",
             "<TITLE>Bookmarks</TITLE>",
             "<H1>Bookmarks</H1>",
             "<DL><p>",
@@ -466,6 +473,10 @@ public enum BookmarkFile {
         lines.append("</DL><p>")
         return Data((lines.joined(separator: "\n") + "\n").utf8)
     }
+
+    /// What eGlu's export says made it, so reading the file back keeps its
+    /// empty folders. Other browsers pass over a META they don't know.
+    static let generator = "eGlu"
 
     /// Text safe in an attribute in double quotes, and between tags.
     static func escaped(_ text: String) -> String {
@@ -535,6 +546,11 @@ public enum BookmarkFile {
                     let marked = tag.attributes["personal_toolbar_folder"]?.lowercased() == "true"
                     let named = BookmarkFile.favouriteNames.contains(title.lowercased())
                     pending = Frame(title: title, favourites: marked || (named && frames.count == 1))
+                case "meta":
+                    if tag.attributes["name"]?.lowercased() == "generator",
+                       tag.attributes["content"]?.lowercased().hasPrefix(BookmarkFile.generator.lowercased()) == true {
+                        ownExport = true
+                    }
                 case "a":
                     let title = text(until: "</a")
                     guard let href = tag.attributes["href"], let url = URL(string: href),
@@ -565,17 +581,22 @@ public enum BookmarkFile {
                     top.append(item)
                 }
             }
-            var items = Reader.pruned(top)
+            // eGlu's own export keeps its empty folders: they were made so on purpose.
+            let keep = ownExport
+            func tidy(_ items: [Bookmark]) -> [Bookmark] { keep ? items : Reader.pruned(items) }
+            var items = tidy(top)
             if let index = favouritesIndex, index < frames[0].items.count {
                 // The file's favourites are the space's bookmarks bar, first.
                 let favourites = frames[0].items[index]
                 let bar = Bookmark(folder: Bookmarks.barName, children: favourites.children ?? [])
-                items = Reader.pruned([bar] + items.filter { $0.id != favourites.id })
+                items = tidy([bar] + items.filter { $0.id != favourites.id })
             }
-            return BookmarkImport(items: items, icons: icons)
+            return BookmarkImport(items: items, icons: icons, keepsEmptyFolders: ownExport)
         }
 
         var favouritesIndex: Int?
+        /// The file is eGlu's own export (BookmarkFile.generator).
+        var ownExport = false
 
         /// Folders with no links left in them taken out.
         static func pruned(_ items: [Bookmark]) -> [Bookmark] {

@@ -1024,7 +1024,7 @@ public struct Workspace: Codable, Equatable, Sendable {
     public mutating func importBookmarks(_ bookmarks: BookmarkImport, into space: UUID) -> BookmarkImportOutcome {
         guard let s = spaces.firstIndex(where: { $0.id == space }) else { return .destinationMissing(bookmarks) }
         guard bookmarks.count > 0 else { return .empty }
-        let added = Bookmarks.merge(bookmarks.items, into: &spaces[s].bookmarks)
+        let added = Bookmarks.merge(bookmarks.items, into: &spaces[s].bookmarks, keepingEmpty: bookmarks.keepsEmptyFolders)
         let name = spaces[s].name
         return added > 0 ? .imported(added: added, total: bookmarks.count, space: name)
             : .duplicates(total: bookmarks.count, space: name)

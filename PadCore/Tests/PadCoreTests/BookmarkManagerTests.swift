@@ -98,6 +98,47 @@ final class BookmarkManagerTests: XCTestCase {
         XCTAssertEqual(Self.shape(read.items), Self.shape(items))
     }
 
+    func testEglusOwnExportBringsItsEmptyFoldersBackIntoAnotherSpace() throws {
+        var (w, space, _, docs) = space()
+        _ = try XCTUnwrap(w.addFolder(named: "Later", in: nil, of: space))
+        _ = try XCTUnwrap(w.addFolder(named: "Someday", in: docs, of: space))
+        let items = w.spaces[0].bookmarks
+        let data = BookmarkFile.export(items)
+        XCTAssertTrue(String(decoding: data, as: UTF8.self).contains("<META NAME=\"generator\" CONTENT=\"eGlu\">"))
+        let read = BookmarkFile.parse(data)
+        XCTAssertTrue(read.keepsEmptyFolders)
+        XCTAssertEqual(Self.shape(read.items), Self.shape(items))
+
+        // Into a space with no bookmarks: the empty folders come too, and a second import adds nothing.
+        let fresh = w.addSpace(named: "Fresh")
+        XCTAssertTrue(w.importBookmarks(read, into: fresh).isComplete)
+        let landed = try XCTUnwrap(w.space(fresh)).bookmarks
+        XCTAssertEqual(Self.shape(landed), Self.shape(items))
+        XCTAssertEqual(w.importBookmarks(read, into: fresh), .duplicates(total: read.count, space: "Fresh"))
+        XCTAssertEqual(Self.shape(try XCTUnwrap(w.space(fresh)).bookmarks), Self.shape(items))
+    }
+
+    func testAnotherBrowsersEmptyFoldersStayOut() throws {
+        let chrome = """
+        <DL><p>
+            <DT><A HREF="https://www.figma.com/files">Figma</A>
+            <DT><H3>Empty</H3>
+            <DL><p>
+            </DL><p>
+        </DL><p>
+        """
+        let read = BookmarkFile.parse(Data(chrome.utf8))
+        XCTAssertFalse(read.keepsEmptyFolders)
+        XCTAssertEqual(read.items.map(\.title), ["Figma"])
+        // And a folder with nothing in it, handed over some other way, is still left out by the merge.
+        var w = Workspace.onFigma()
+        let space = w.spaces[0].id
+        w.spaces[0].bookmarks = []
+        let file = BookmarkImport(items: [Bookmark(title: "Figma", url: figma), Bookmark(folder: "Empty", children: [])], icons: [:])
+        _ = w.importBookmarks(file, into: space)
+        XCTAssertEqual(w.spaces[0].bookmarks.map(\.title), ["Figma"])
+    }
+
     func testTheBarIsWrittenFirstWhereverItStands() {
         let bar = Bookmark(folder: Bookmarks.barName, children: [Bookmark(title: "Slack", url: slack)])
         let items = [Bookmark(title: "Figma", url: figma), bar]
