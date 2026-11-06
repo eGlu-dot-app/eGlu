@@ -1022,7 +1022,7 @@ private struct SkeletonLines: View {
 // MARK: What the file holds
 
 /// What goes in the file, part by part, as Arc Search lists the points of
-/// a page it sums up: a mark in the space's colour, the part's heading,
+/// a page it sums up: a mark in the space's colour on a light ground of it, the part's heading,
 /// and the words it begins with. The person's selection first, then the
 /// page's parts in their order, what was read of its pictures and its
 /// transcript, and last, greyed, what was set aside: named in the file
@@ -1138,12 +1138,14 @@ private struct OutlineRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
+            // The space's colour on a light ground of the same colour, as the sheet's other marks at work had it:
+            // light enough that a list of them does not outweigh the words beside it.
             ZStack {
                 Circle()
-                    .fill(row.quiet ? Palette.wash : colour.color)
+                    .fill(row.quiet ? Palette.wash : colour.color.opacity(0.16))
                 Image(systemName: row.symbol)
                     .font(.system(size: size * 0.44, weight: .semibold))
-                    .foregroundStyle(row.quiet ? Palette.muted : colour.ink)
+                    .foregroundStyle(row.quiet ? Palette.muted : colour.color)
             }
             .frame(width: size, height: size)
             .accessibilityHidden(true)
