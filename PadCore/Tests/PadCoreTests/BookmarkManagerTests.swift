@@ -291,6 +291,31 @@ final class BookmarkManagerTests: XCTestCase {
         ]))
     }
 
+    func testFoldersAloneComeBackFromEglusOwnExport() throws {
+        var w = Workspace.onFigma()
+        let space = w.spaces[0].id
+        w.spaces[0].bookmarks = [Bookmark(folder: "Later", children: [Bookmark(folder: "Someday", children: [])])]
+        let data = BookmarkFile.export(w.spaces[0].bookmarks)
+        let read = try BookmarkFile.readExport(data).get()
+        XCTAssertFalse(read.bringsNothing)
+
+        let fresh = w.addSpace(named: "Fresh")
+        let outcome = w.importBookmarks(read, into: fresh)
+        XCTAssertEqual(outcome, .imported(added: 0, total: 0, space: "Fresh", folders: 2))
+        XCTAssertEqual(outcome.title, "Folders Imported")
+        XCTAssertEqual(outcome.message, "2 folders added to Fresh.")
+        XCTAssertEqual(Self.shape(try XCTUnwrap(w.space(fresh)).bookmarks), Self.shape(w.spaces[0].bookmarks))
+        let again = w.importBookmarks(read, into: fresh)
+        XCTAssertEqual(again, .duplicates(total: 0, space: "Fresh"))
+        XCTAssertEqual(again.title, "Folders Already Present")
+        XCTAssertEqual(again.message, "The folders in the file are already in Fresh.")
+
+        // An empty bar alone is nothing to bring; another browser's folders with no links neither.
+        XCTAssertEqual(BookmarkFile.readExport(BookmarkFile.export([Bookmark(folder: Bookmarks.barName, children: [])])),
+                       .failure(.empty))
+        XCTAssertEqual(BookmarkFile.readExport(Data("<DL><p><DT><H3>Later</H3><DL><p></DL><p></DL><p>".utf8)), .failure(.empty))
+    }
+
     func testAnotherBrowsersEmptyFoldersStayOut() throws {
         let chrome = """
         <DL><p>

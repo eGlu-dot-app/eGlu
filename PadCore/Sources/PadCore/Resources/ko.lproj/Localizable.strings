@@ -362,3 +362,6 @@
 "Folders Imported" = "폴더를 가져옴";
 "%1$lld folders added to %2$@. The %3$lld bookmarks in the file were already there." = "%2$@에 폴더 %1$lld개를 추가했습니다. 파일의 책갈피 %3$lld개는 이미 있었습니다.";
 "%1$lld folders were added to %2$@ in this session, but the workspace could not be saved. Keep eGlu open and retry saving." = "이번 세션에서 %2$@에 폴더 %1$lld개를 추가했지만 작업 공간을 저장하지 못했습니다. eGlu를 열어 둔 채 저장을 다시 시도하세요.";
+"Folders Already Present" = "폴더가 이미 있음";
+"%1$lld folders added to %2$@." = "%2$@에 폴더 %1$lld개를 추가했습니다.";
+"The folders in the file are already in %@." = "파일의 폴더가 모두 이미 %@에 있습니다.";

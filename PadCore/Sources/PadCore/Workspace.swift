@@ -1043,7 +1043,7 @@ public struct Workspace: Codable, Equatable, Sendable {
     @discardableResult
     public mutating func importBookmarks(_ bookmarks: BookmarkImport, into space: UUID) -> BookmarkImportOutcome {
         guard let s = spaces.firstIndex(where: { $0.id == space }) else { return .destinationMissing(bookmarks) }
-        guard bookmarks.count > 0 else { return .empty }
+        guard !bookmarks.bringsNothing else { return .empty }
         let before = Self.folderCount(spaces[s].bookmarks)
         let added = Bookmarks.merge(bookmarks.items, into: &spaces[s].bookmarks, asWritten: bookmarks.asWritten)
         // Folders it brought with no new links in them (eGlu's own export

@@ -13,8 +13,10 @@ import UniformTypeIdentifiers
 /// where the bar's bookmarks go.
 struct BookmarkManagerView: View {
     let spaceID: UUID
-    /// A page chosen: in the tab on screen, or in a new one.
-    let open: (URL, _ newTab: Bool) -> Void
+    /// Pages chosen, all at once: one in the tab on screen, or each in a new
+    /// one. Handed over together so the host can give each a tab of its own
+    /// (WindowModel.open(_:newTab:)).
+    let open: ([URL], _ newTab: Bool) -> Void
     let done: () -> Void
     @ObservedObject private var session = Session.shared
     /// The folder listed, as the side has it chosen: the bar at first, but
@@ -418,7 +420,8 @@ struct BookmarkManagerView: View {
                 exportFile = BookmarksFile(items: bookmarks)
                 exporting = true
             }
-            .disabled(bookmarks.flatMap(\.links).isEmpty)
+            // Folders alone are worth keeping: only a space with nothing but an empty bar has nothing to export.
+            .disabled(bookmarks.allSatisfy { Bookmarks.isBar($0) && ($0.children ?? []).isEmpty })
         } label: {
             Label("Organize", systemImage: "ellipsis.circle")
         }
@@ -504,10 +507,8 @@ struct BookmarkManagerView: View {
     /// Pages opened from here, as from a bookmark in History, and the manager put away.
     private func go(_ links: [URL], newTab: Bool) {
         guard !links.isEmpty else { return }
-        for url in links {
-            HistoryRecorder.shared.expect(.bookmark, url)
-            open(url, newTab)
-        }
+        for url in links { HistoryRecorder.shared.expect(.bookmark, url) }
+        open(links, newTab)
         done()
     }
 

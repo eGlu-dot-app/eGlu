@@ -423,6 +423,13 @@ public struct BookmarkImport: Equatable, Sendable {
     public var count: Int {
         items.flatMap(\.links).count
     }
+
+    /// Nothing to bring: no links, and from eGlu's own export no folder but
+    /// an empty bar. eGlu's folders alone are what a space held, kept so on
+    /// purpose; another browser's file with no links is no bookmarks file.
+    public var bringsNothing: Bool {
+        count == 0 && !(asWritten && items.contains { !(Bookmarks.isBar($0) && ($0.children ?? []).isEmpty) })
+    }
 }
 
 /// A bookmark import's result, including recoverable failures. Parsed bookmarks
@@ -495,6 +502,7 @@ public enum BookmarkImportOutcome: Equatable, Sendable {
         switch self {
         case let .imported(added, _, _, folders) where added == 0 && folders > 0: return BrowserText.localized("Folders Imported")
         case .imported: return BrowserText.localized("Bookmarks Imported")
+        case let .duplicates(total, _) where total == 0: return BrowserText.localized("Folders Already Present")
         case .duplicates: return BrowserText.localized("Bookmarks Already Present")
         case .unreadable: return BrowserText.localized("Could Not Read the File")
         case .archiveWithoutBookmarks: return BrowserText.localized("No Bookmarks in This Archive")
@@ -509,10 +517,15 @@ public enum BookmarkImportOutcome: Equatable, Sendable {
     public var message: String {
         switch self {
         // Only folders new: the file's bookmarks were all there already.
+        case let .imported(added, total, space, folders) where added == 0 && folders > 0 && total == 0:
+            return String(format: BrowserText.localized("%1$lld folders added to %2$@."), folders, space)
         case let .imported(added, total, space, folders) where added == 0 && folders > 0:
             return String(format: BrowserText.localized("%1$lld folders added to %2$@. The %3$lld bookmarks in the file were already there."), folders, space, total)
         case let .imported(added, total, space, _):
             return String(format: BrowserText.localized("%1$lld of %2$lld bookmarks added to %3$@. They appear in this space's bookmarks and on new tabs."), added, total, space)
+        // eGlu's own folders alone, all there already.
+        case let .duplicates(total, space) where total == 0:
+            return String(format: BrowserText.localized("The folders in the file are already in %@."), space)
         case let .duplicates(total, space): return String(format: BrowserText.localized("All %1$lld bookmarks in the file are already in %2$@."), total, space)
         case .unreadable: return BrowserText.localized("Choose the file again, or save a local copy first. You can also import later in Settings.")
         case .archiveWithoutBookmarks: return BrowserText.localized("Choose an HTML bookmark export from Chrome, Firefox or Safari, or a Safari ZIP export that includes Bookmarks.")
@@ -556,7 +569,7 @@ public enum BookmarkFile {
             html = inside
         }
         let parsed = parse(html)
-        return parsed.count > 0 ? .success(parsed) : .failure(.empty)
+        return parsed.bringsNothing ? .failure(.empty) : .success(parsed)
     }
 
     public static func parse(_ data: Data) -> BookmarkImport {

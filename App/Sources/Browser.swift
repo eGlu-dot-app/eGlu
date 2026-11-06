@@ -3425,12 +3425,14 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
     /// wide enough for its folders beside them; a page chosen there opens here.
     func openBookmarkManager() {
         guard presentedViewController == nil else { return }
-        let manager = UIHostingController(rootView: BookmarkManagerView(spaceID: model.spaceID) { [weak self] url, newTab in
+        let manager = UIHostingController(rootView: BookmarkManagerView(spaceID: model.spaceID) { [weak self] urls, newTab in
             guard let self else { return }
-            if newTab, let tab = Session.shared.change({ $0.openTab(url, in: self.model.spaceID) }) {
-                self.show(tab: tab, inSpace: self.model.spaceID)
-            } else {
-                self.open(url)
+            for url in urls {
+                if newTab, let tab = Session.shared.change({ $0.openTab(url, in: self.model.spaceID) }) {
+                    self.show(tab: tab, inSpace: self.model.spaceID)
+                } else {
+                    self.open(url)
+                }
             }
         } done: { [weak self] in
             self?.dismiss(animated: true) { self?.focusPage() }

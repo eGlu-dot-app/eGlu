@@ -687,3 +687,6 @@
 "Folders Imported" = "Folders Imported";
 "%1$lld folders added to %2$@. The %3$lld bookmarks in the file were already there." = "%1$lld folders added to %2$@. The %3$lld bookmarks in the file were already there.";
 "%1$lld folders were added to %2$@ in this session, but the workspace could not be saved. Keep eGlu open and retry saving." = "%1$lld folders were added to %2$@ in this session, but the workspace could not be saved. Keep eGlu open and retry saving.";
+"Folders Already Present" = "Folders Already Present";
+"%1$lld folders added to %2$@." = "%1$lld folders added to %2$@.";
+"The folders in the file are already in %@." = "The folders in the file are already in %@.";

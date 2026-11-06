@@ -125,8 +125,8 @@ struct BrowserView: View {
             ClearHistoryView(spaceID: model.spaceID) { model.historyClearing = false }
         }
         .sheet(isPresented: $model.bookmarkManagerShown) {
-            BookmarkManagerView(spaceID: model.spaceID) { url, newTab in
-                model.open(url, newTab: newTab)
+            BookmarkManagerView(spaceID: model.spaceID) { urls, newTab in
+                model.open(urls, newTab: newTab)
             } done: {
                 model.bookmarkManagerShown = false
             }

@@ -609,6 +609,21 @@ final class WindowModel: ObservableObject, PageHost {
         focusPage()
     }
 
+    /// Several pages at once (the Bookmark Manager's Open All): the first as
+    /// `open` puts it, into a blank tab on screen if there is one, and each
+    /// of the rest in a tab of its own. Opened one by one, they would all
+    /// load into that blank tab, which stays blank till its page commits.
+    func open(_ urls: [URL], newTab: Bool) {
+        guard let first = urls.first else { return }
+        open(first, newTab: newTab)
+        let session = Session.shared
+        for url in urls.dropFirst() {
+            guard let id = session.change({ $0.openTab(url, in: spaceID) }) else { continue }
+            withAnimation(.bar) { show(tab: id, inSpace: spaceID) }
+        }
+        focusPage()
+    }
+
     func back() {
         page?.goBack()
     }
