@@ -137,6 +137,25 @@ final class BookmarkManagerTests: XCTestCase {
         XCTAssertEqual(unsaved.acknowledgingSave(true), outcome)
     }
 
+    func testFoldersNamedAsOtherBrowsersBarsComeBackAsFoldersFromEglusOwnExport() throws {
+        var (w, space, bar, _) = space()
+        let favorites = try XCTUnwrap(w.addFolder(named: "Favorites", in: nil, of: space))
+        w.addBookmark(notion, title: "Notion", into: favorites, in: space)
+        let others = try XCTUnwrap(w.addFolder(named: "Other bookmarks", in: nil, of: space))
+        w.addBookmark(slack, title: "Slack too", into: others, in: space)
+        let items = w.spaces[0].bookmarks
+        let read = BookmarkFile.parse(BookmarkFile.export(items))
+        // The one marked bar is the bar; Favorites and Other bookmarks stay folders, as they were.
+        XCTAssertEqual(Self.shape(read.items), Self.shape(items))
+        XCTAssertEqual(read.items.filter(Bookmarks.isBar).count, 1)
+        XCTAssertEqual(Bookmarks.bar(in: read.items)?.children?.map(\.title),
+                       Bookmarks.find(bar, in: items)?.children?.map(\.title))
+
+        let fresh = w.addSpace(named: "Fresh")
+        XCTAssertTrue(w.importBookmarks(read, into: fresh).isComplete)
+        XCTAssertEqual(Self.shape(try XCTUnwrap(w.space(fresh)).bookmarks), Self.shape(items))
+    }
+
     func testAnotherBrowsersEmptyFoldersStayOut() throws {
         let chrome = """
         <DL><p>

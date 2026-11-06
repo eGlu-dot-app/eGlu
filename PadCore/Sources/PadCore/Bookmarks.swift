@@ -554,7 +554,10 @@ public enum BookmarkFile {
                 case "h3":
                     let title = text(until: "</h3")
                     let marked = tag.attributes["personal_toolbar_folder"]?.lowercased() == "true"
-                    let named = BookmarkFile.favouriteNames.contains(title.lowercased())
+                    // Other browsers' bars are known by their names too; eGlu's
+                    // own export marks its one bar, and a folder of the space's
+                    // called Favorites is only a folder.
+                    let named = !ownExport && BookmarkFile.favouriteNames.contains(title.lowercased())
                     pending = Frame(title: title, favourites: marked || (named && frames.count == 1))
                 case "meta":
                     if tag.attributes["name"]?.lowercased() == "generator",
@@ -584,7 +587,8 @@ public enum BookmarkFile {
             // what they hold goes there, not into a folder of that name.
             var top: [Bookmark] = []
             for (offset, item) in frames[0].items.enumerated() {
-                if offset != favouritesIndex, item.isFolder,
+                // In eGlu's own export a folder so named is one of the space's own.
+                if !ownExport, offset != favouritesIndex, item.isFolder,
                    item.title.lowercased() == BookmarkFile.othersName.lowercased() {
                     top += item.children ?? []
                 } else {
