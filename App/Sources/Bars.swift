@@ -548,6 +548,7 @@ struct MenuEntry {
         }
         entries += [
             MenuEntry(title: BrowserText.localized("History"), symbol: Command.history.symbol) { act(.command(.history)) },
+            MenuEntry(title: BrowserText.localized("Bookmarks"), symbol: Command.bookmarkManager.symbol) { act(.command(.bookmarkManager)) },
             MenuEntry(title: BrowserText.localized("Settings"), symbol: "gearshape") { act(.command(.settings)) },
         ]
         return entries

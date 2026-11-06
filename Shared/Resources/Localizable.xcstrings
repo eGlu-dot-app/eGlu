@@ -613,7 +613,14 @@
       }
     },
     "%@, folder" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, 폴더"
+          }
+        }
+      }
     },
     "%@, gap %@" : {
 
@@ -788,6 +795,46 @@
     "Add Note" : {
 
     },
+    "%@ Bookmarks" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 책갈피"
+          }
+        }
+      }
+    },
+    "%lld items" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "항목 %lld개"
+          }
+        }
+      }
+    },
+    "Add Bookmark" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "책갈피 추가"
+          }
+        }
+      }
+    },
+    "Add Bookmark…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "책갈피 추가…"
+          }
+        }
+      }
+    },
     "Add Note…" : {
 
     },
@@ -808,6 +855,16 @@
     },
     "Add “%@”?" : {
 
+    },
+    "Add, sort, import or export bookmarks" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "책갈피 추가, 정렬, 가져오기 또는 내보내기"
+          }
+        }
+      }
     },
     "Added to Bookmarks" : {
 
@@ -1275,6 +1332,26 @@
         }
       }
     },
+    "Bookmark Manager" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "책갈피 관리자"
+          }
+        }
+      }
+    },
+    "Bookmark Manager (⌥⌘B)" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "책갈피 관리자 (⌥⌘B)"
+          }
+        }
+      }
+    },
     "Bookmark Manager › Export Bookmarks" : {
 
     },
@@ -1680,6 +1757,16 @@
     },
     "Choose Another File…" : {
 
+    },
+    "Choose another location and try again." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다른 위치를 선택한 후 다시 시도해 주세요."
+          }
+        }
+      }
     },
     "Choose Another Space" : {
       "extractionState" : "manual",
@@ -2164,7 +2251,14 @@
 
     },
     "Copy Address" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "주소 복사"
+          }
+        }
+      }
     },
     "Copy Link" : {
       "extractionState" : "manual",
@@ -2281,6 +2375,26 @@
         }
       }
     },
+    "Delete" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "삭제"
+          }
+        }
+      }
+    },
+    "Delete %lld Bookmarks and Folders?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "책갈피와 폴더 %lld개를 삭제하시겠습니까?"
+          }
+        }
+      }
+    },
     "Delete Bookmark" : {
 
     },
@@ -2298,6 +2412,16 @@
     },
     "Delete from History…" : {
 
+    },
+    "Delete “%@” and Everything in It?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” 폴더와 그 안의 모든 항목을 삭제하시겠습니까?"
+          }
+        }
+      }
     },
     "Deletes this extension and its settings, sign-ins, and saved data from every space on this Mac. This cannot be undone." : {
 
@@ -2527,6 +2651,16 @@
     "Drag a tab to change its place everywhere. A hidden tab stays pinned; only this Mac leaves it out." : {
 
     },
+    "Drag bookmarks here, or add one." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "책갈피를 여기로 드래그하거나 새로 추가하세요."
+          }
+        }
+      }
+    },
     "Drag to change the order." : {
 
     },
@@ -2593,8 +2727,28 @@
         }
       }
     },
+    "Edit" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "편집"
+          }
+        }
+      }
+    },
     "Edit Address" : {
 
+    },
+    "Edit Bookmark" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "책갈피 편집"
+          }
+        }
+      }
     },
     "Edit spaces, import bookmarks" : {
       "extractionState" : "manual",
@@ -2626,6 +2780,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "편집을 누른 후 공간의 핸들을 드래그하여 순서를 변경해 주세요."
+          }
+        }
+      }
+    },
+    "Edit…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "편집…"
           }
         }
       }
@@ -2784,6 +2948,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "내보내기"
+          }
+        }
+      }
+    },
+    "Export Bookmarks…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "책갈피 내보내기…"
           }
         }
       }
@@ -3325,6 +3499,166 @@
     },
     "Held a link to another app. Review it in the … menu." : {
 
+    },
+    "Hide" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "숨기기"
+          }
+        }
+      }
+    },
+    "Move to" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이동"
+          }
+        }
+      }
+    },
+    "New Folder…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 폴더…"
+          }
+        }
+      }
+    },
+    "No Bookmarks" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "책갈피 없음"
+          }
+        }
+      }
+    },
+    "Open All in New Tabs (%lld)" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모두 새 탭에서 열기(%lld개)"
+          }
+        }
+      }
+    },
+    "Organize" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "정리"
+          }
+        }
+      }
+    },
+    "Other Bookmarks" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기타 책갈피"
+          }
+        }
+      }
+    },
+    "Rename Folder" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "폴더 이름 변경"
+          }
+        }
+      }
+    },
+    "Search Bookmarks" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "책갈피 검색"
+          }
+        }
+      }
+    },
+    "Search Results" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "검색 결과"
+          }
+        }
+      }
+    },
+    "Show in Folder" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "폴더에서 보기"
+          }
+        }
+      }
+    },
+    "Sort by Name" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이름순 정렬"
+          }
+        }
+      }
+    },
+    "The bookmarks and folders in it are deleted too." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "폴더 안의 책갈피와 폴더도 함께 삭제됩니다."
+          }
+        }
+      }
+    },
+    "The bookmarks and folders in them are deleted too." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "폴더 안의 책갈피와 폴더도 함께 삭제됩니다."
+          }
+        }
+      }
+    },
+    "The Bookmarks Bar Is Empty" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "책갈피 막대가 비어 있음"
+          }
+        }
+      }
+    },
+    "The Bookmarks Weren't Exported" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "책갈피를 내보내지 못함"
+          }
+        }
+      }
     },
     "The other pane held a link to %@. Tap it, then review the link in the … menu." : {
 
@@ -4330,10 +4664,24 @@
       }
     },
     "Name" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이름"
+          }
+        }
+      }
     },
     "New Folder" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 폴더"
+          }
+        }
+      }
     },
     "New Little Window" : {
 
@@ -4823,10 +5171,24 @@
 
     },
     "Open" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "열기"
+          }
+        }
+      }
     },
     "Open %@" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 열기"
+          }
+        }
+      }
     },
     "Open Accessibility Settings" : {
 
@@ -4919,7 +5281,14 @@
 
     },
     "Open in New Tab" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 탭에서 열기"
+          }
+        }
+      }
     },
     "Open in New Tab (⌃⌥O)" : {
 
@@ -5517,7 +5886,14 @@
       }
     },
     "Rename…" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이름 변경…"
+          }
+        }
+      }
     },
     "Reopen Closed Tab" : {
       "extractionState" : "manual",
@@ -8027,6 +8403,16 @@
     "Type a new address or a search" : {
 
     },
+    "Type a web address, such as figma.com." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "figma.com과 같은 웹 주소를 입력하세요."
+          }
+        }
+      }
+    },
     "Types into the selected page field" : {
 
     },
@@ -8110,6 +8496,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "업데이트"
+          }
+        }
+      }
+    },
+    "URL" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "URL"
           }
         }
       }
