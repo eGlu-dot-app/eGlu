@@ -93,6 +93,26 @@ final class BookmarkManagerTests: XCTestCase {
         XCTAssertEqual(Bookmarks.parent(of: docs, in: w.spaces[0].bookmarks), nil)
     }
 
+    func testSortByNamePutsAFolderInOrderAndKeepsTheBarFirst() throws {
+        var (w, space, bar, docs) = space()
+        // A folder of Zebra before apple: sorted, apple first, folders and links together, no case.
+        w.addBookmark(URL(string: "https://zebra.example/")!, title: "Zebra", into: docs, in: space)
+        w.addBookmark(URL(string: "https://apple.example/")!, title: "apple", into: docs, in: space)
+        w.sortBookmarks(in: docs, of: space)
+        XCTAssertEqual(Bookmarks.find(docs, in: w.spaces[0].bookmarks)?.children?.map(\.title), ["apple", "Notion", "Zebra"])
+        w.sortBookmarks(in: bar, of: space)
+        XCTAssertEqual(w.spaces[0].bar?.children?.map(\.title), ["Docs", "Slack"])
+
+        // The top level: the bar stays first wherever it stood, Other Bookmarks sorted after it.
+        let reading = try XCTUnwrap(w.addFolder(named: "Reading", in: nil, of: space))
+        w.moveBookmark(bar, into: nil, in: space)
+        XCTAssertEqual(w.spaces[0].bookmarks.map(\.title), ["Figma", "Reading", Bookmarks.barName])
+        w.sortBookmarks(in: nil, of: space)
+        XCTAssertEqual(w.spaces[0].bookmarks.map(\.id).first, bar)
+        XCTAssertEqual(Bookmarks.others(in: w.spaces[0].bookmarks).map(\.id),
+                       [try XCTUnwrap(Bookmarks.find(figma, in: w.spaces[0].bookmarks)?.id), reading])
+    }
+
     func testABookmarksAddressIsAWebAddressAndNeverASearch() {
         XCTAssertEqual(Destination.webAddress(from: " figma.com/files "), URL(string: "https://figma.com/files"))
         XCTAssertEqual(Destination.webAddress(from: "localhost:3000"), URL(string: "http://localhost:3000"))

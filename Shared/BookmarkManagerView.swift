@@ -559,8 +559,13 @@ struct BookmarkManagerView: View {
     /// What is in `place` by name, as Chromium's Sort by Name: folders and
     /// links together, in the order of their names for this language.
     private func sort(_ place: Place) {
-        let sorted = items(in: place).sorted { $0.label.localizedStandardCompare($1.label) == .orderedAscending }
-        move(sorted.map(\.id), into: place, before: nil)
+        session.change { w in
+            switch place {
+            case .bar: if let bar = Bookmarks.bar(in: bookmarks) { w.sortBookmarks(in: bar.id, of: spaceID) }
+            case .others: w.sortBookmarks(in: nil, of: spaceID)
+            case .folder(let id): w.sortBookmarks(in: id, of: spaceID)
+            }
+        }
     }
 
     /// Delete, asked first when it takes a folder with something in it, or

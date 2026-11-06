@@ -944,6 +944,26 @@ public struct Workspace: Codable, Equatable, Sendable {
         tidySplits(s)
     }
 
+    /// What `folder` holds in the order of their names, as Chromium's Sort
+    /// by Name: folders and links together, in this language's order of
+    /// what each shows (Bookmark.label). For the top level (nil), the
+    /// bookmarks bar stays first and the rest, Other Bookmarks, are sorted.
+    /// Nothing leaves its folder, so tabs open from the bar stay its own.
+    public mutating func sortBookmarks(in folder: UUID?, of space: UUID) {
+        guard let s = spaces.firstIndex(where: { $0.id == space }) else { return }
+        func sorted(_ items: [Bookmark]) -> [Bookmark] {
+            items.sorted { $0.label.localizedStandardCompare($1.label) == .orderedAscending }
+        }
+        if let folder {
+            Bookmarks.update(folder, in: &spaces[s].bookmarks) { item in
+                if item.isFolder { item.children = sorted(item.children ?? []) }
+            }
+        } else {
+            let all = spaces[s].bookmarks
+            spaces[s].bookmarks = (Bookmarks.bar(in: all).map { [$0] } ?? []) + sorted(Bookmarks.others(in: all))
+        }
+    }
+
     /// A bookmark or folder and everything in it, at any depth.
     private static func everything(_ item: Bookmark) -> [Bookmark] {
         [item] + (item.children ?? []).flatMap(everything)
