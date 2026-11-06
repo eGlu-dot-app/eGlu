@@ -263,6 +263,14 @@ struct HandoffOutlineReviewTests {
         #expect(outline.sections.first?.opening == "The page's own notes on the talk.")
     }
 
+    @Test func theSitesTranscriptIsItsOwnPartUnderTopHeadings() {
+        let body = "# Intro\n\nWords of the page.\n\n# Details\n\nA label\n\n## Transcript\n\n0:00 Hello there.\n\n## Notes\n\n1. A note."
+        let outline = Handoff.outline(of: Handoff.Composed(kind: .media, body: body), reading: Self.spoken())
+        #expect(outline.sections.map(\.heading) == ["Intro", "Details", "Notes"])
+        #expect(outline.sections[1].opening == "A label")
+        #expect(outline.transcript)
+    }
+
     @Test func aTranscriptOfThePagesOwnIsAPart() {
         var composed = Handoff.Composed(kind: .media, body: "## Description\n\nA video.\n\n## Transcript\n\n0:00 Hello there.")
         composed.transcript = true

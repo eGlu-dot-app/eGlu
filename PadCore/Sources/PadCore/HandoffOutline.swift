@@ -124,15 +124,23 @@ extension Handoff {
                   let section = section(heading: heading, lines: under, of: lines, code: code, levels: levels) else { return }
             outline.sections.append(section)
         }
+        // The transcript is a part of its own whatever the page's headings
+        // are (a page parted by its top headings would take it into its last
+        // part, its first timed line that part's opening), and what follows
+        // it, the notes the page's text points to, another.
+        let transcriptLevel = headingLevel(Transcript.heading) ?? 2
+        var inSpoken = false
         for index in lines.indices where index != skipped {
-            if let level = levels[index], let top, level <= top {
-                close()
-                heading = headingWords(lines[index])
-                headed = index
-                under = []
-            } else {
+            guard let level = levels[index], let top,
+                  level <= top || index == spoken || (inSpoken && level <= transcriptLevel) else {
                 under.append(index)
+                continue
             }
+            close()
+            heading = headingWords(lines[index])
+            headed = index
+            inSpoken = index == spoken
+            under = []
         }
         close()
         return outline
