@@ -227,9 +227,11 @@ public enum Bookmarks {
             let text = [item.label, item.url?.absoluteString ?? ""].joined(separator: " ")
             return words.allSatisfy { text.range(of: $0, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
         }
+        // Found once: asked for each item at the top, a space of many bookmarks and no bar took as long as their count squared.
+        let barID = Bookmarks.bar(in: items)?.id
         func walk(_ level: [Bookmark], path: [Bookmark], top: Bool) -> [(item: Bookmark, path: [Bookmark])] {
             level.flatMap { item -> [(item: Bookmark, path: [Bookmark])] in
-                let bar = top && item.id == Bookmarks.bar(in: items)?.id
+                let bar = top && item.id == barID
                 let own = !bar && holds(item) ? [(item: item, path: path)] : []
                 return own + walk(item.children ?? [], path: path + [item], top: false)
             }
