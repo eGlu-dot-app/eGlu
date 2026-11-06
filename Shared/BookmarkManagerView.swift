@@ -421,7 +421,7 @@ struct BookmarkManagerView: View {
                 exporting = true
             }
             // Folders alone are worth keeping: only a space with nothing but an empty bar has nothing to export.
-            .disabled(bookmarks.allSatisfy { Bookmarks.isBar($0) && ($0.children ?? []).isEmpty })
+            .disabled(bookmarks.allSatisfy { $0.id == Bookmarks.bar(in: bookmarks)?.id && ($0.children ?? []).isEmpty })
         } label: {
             Label("Organize", systemImage: "ellipsis.circle")
         }

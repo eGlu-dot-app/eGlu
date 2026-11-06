@@ -310,6 +310,13 @@ final class BookmarkManagerTests: XCTestCase {
         XCTAssertEqual(again.title, "Folders Already Present")
         XCTAssertEqual(again.message, "The folders in the file are already in Fresh.")
 
+        // A second folder of the bar's name is a folder like any other, empty or not: it comes back.
+        let twins = [Bookmark(folder: Bookmarks.barName, children: []), Bookmark(folder: Bookmarks.barName, children: [])]
+        let twinsRead = try BookmarkFile.readExport(BookmarkFile.export(twins)).get()
+        let other = w.addSpace(named: "Other")
+        XCTAssertTrue(w.importBookmarks(twinsRead, into: other).isComplete)
+        XCTAssertEqual(try XCTUnwrap(w.space(other)).bookmarks.map(\.title), [Bookmarks.barName, Bookmarks.barName])
+
         // An empty bar alone is nothing to bring; another browser's folders with no links neither.
         XCTAssertEqual(BookmarkFile.readExport(BookmarkFile.export([Bookmark(folder: Bookmarks.barName, children: [])])),
                        .failure(.empty))

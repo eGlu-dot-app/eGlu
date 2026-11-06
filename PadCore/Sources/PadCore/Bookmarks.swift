@@ -428,7 +428,9 @@ public struct BookmarkImport: Equatable, Sendable {
     /// an empty bar. eGlu's folders alone are what a space held, kept so on
     /// purpose; another browser's file with no links is no bookmarks file.
     public var bringsNothing: Bool {
-        count == 0 && !(asWritten && items.contains { !(Bookmarks.isBar($0) && ($0.children ?? []).isEmpty) })
+        // The bar is the first folder so named; a later one is a folder of the space's like any other.
+        let bar = Bookmarks.bar(in: items)?.id
+        return count == 0 && !(asWritten && items.contains { $0.id != bar || !($0.children ?? []).isEmpty })
     }
 }
 
