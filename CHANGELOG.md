@@ -4,6 +4,8 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+## 1.1.3
+
 - On iPhone, iPad and the Mac, the Handoff sheet shows what is handed off while it is made, as Arc Search shows a page it sums up: the page on a card with a small picture of it and how far the handoff is, Apple Intelligence's summary word by word as it is written, then as the file has it, and what the file holds, part by part, by the page's headings and the words each begins with, what was set aside greyed. On iPhone the sheet takes the whole height; what is more than that scrolls over the Handoff button.
 - On the Mac, iPhone and iPad, a Bookmark Manager, as Chrome's: a space's folders down the side, the bookmarks bar first and Other Bookmarks after it, and the folder chosen beside them. Bookmarks and folders are dragged into another order or onto another folder, moved from their menu, added, renamed, given another address, sorted by name, deleted and found by their words; the space's bookmarks are imported from another browser's file and exported as the HTML file Chrome, Firefox and Safari import, the bar as their own bar; a file eGlu exported keeps its empty folders when it is imported again, where another browser's empty folders are still left out. It opens from the Tabs menu (⌥⌘B) and the Other Bookmarks panel on a Mac, and from the page menu, the new tab's bookmarks and ⌃⌥⇧B on iPhone and iPad. The bookmarks bar is always there and is never deleted, here or on a new tab's page.
 
