@@ -35,6 +35,16 @@
 #     ID profile names no devices: nothing else in the account changes.
 #     Without ICLOUD the build has everything but sync, which Settings ›
 #     iCloud then says it isn't signed for.
+#   - PASSKEYS=1 for a build with passkeys: ICLOUD's, signed with
+#     Config/eGluMacReleasePasskeys.entitlements (the Release ones and Apple's
+#     passkey entitlement for browsers) and the Developer ID profile for
+#     passkeys, which Release/profile.py makes with PASSKEYS=1 once Apple has
+#     granted the entitlement (PASSKEYS_PROFILE names another; PROFILE, which
+#     Release/setup.py sets to the iCloud profile, is not read then). The profile is checked
+#     before anything is built: an app signed with a restricted entitlement its
+#     profile doesn't grant is one macOS refuses to open. Off unless set; a
+#     build without it leaves passkeys to WebKit, as before
+#     (Mac/Sources/Passkeys.swift).
 #
 #   - to release: Sparkle's EdDSA key in the login keychain, account
 #     "safience" (made once with Sparkle's generate_keys --account safience;
@@ -89,12 +99,47 @@ if [[ -n "$NOTARIZE" && ${#NOTARY} -eq 0 ]]; then
   exit 1
 fi
 
-# Signed by hand with Developer ID; with iCloud, with the provisioning
-# profile iCloud's entitlements need too.
+# Signed by hand with Developer ID; with iCloud (or passkeys, which come
+# with it), with the provisioning profile their entitlements need too.
 SIGNING=(CODE_SIGN_STYLE=Manual "CODE_SIGN_IDENTITY=Developer ID Application" "DEVELOPMENT_TEAM=$TEAM")
 PROFILES=""
-if [[ -n "${ICLOUD:-}" ]]; then
+PASSKEY_KEY="com.apple.developer.web-browser.public-key-credential"
+if [[ -n "${PASSKEYS:-}" ]]; then
+  ICLOUD=1
+  ENTITLEMENTS="Config/eGluMacReleasePasskeys.entitlements"
+  PROFILE="${PASSKEYS_PROFILE:-Safience Developer ID Passkeys}"
+  # The newest profile installed by that name, unexpired, must grant the
+  # passkey entitlement; one made before Apple granted it doesn't.
+  GRANTS="$(python3 - "$PROFILE" "$PASSKEY_KEY" <<'PY'
+import datetime, glob, os, plistlib, subprocess, sys
+name, key = sys.argv[1], sys.argv[2]
+now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+found = []
+for folder in ("~/Library/Developer/Xcode/UserData/Provisioning Profiles", "~/Library/MobileDevice/Provisioning Profiles"):
+    for path in glob.glob(os.path.join(os.path.expanduser(folder), "*.provisionprofile")):
+        decoded = subprocess.run(["security", "cms", "-D", "-i", path], capture_output=True).stdout
+        try:
+            profile = plistlib.loads(decoded)
+        except Exception:
+            continue
+        if profile.get("Name") == name and profile.get("ExpirationDate", now) > now:
+            found.append(profile)
+if not found:
+    print("missing")
+else:
+    newest = max(found, key=lambda profile: profile.get("CreationDate", now))
+    print("yes" if newest.get("Entitlements", {}).get(key) is True else "no")
+PY
+)"
+  case "$GRANTS" in
+    yes) ;;
+    missing) echo "No profile named “$PROFILE” is installed: Release/profile.py with PASSKEYS=1 makes it, once Apple has granted $PASSKEY_KEY." >&2; exit 1 ;;
+    *) echo "“$PROFILE” doesn't grant $PASSKEY_KEY: turn the capability on for the app's identifier on developer.apple.com, then make the profile again (Release/profile.py, PASSKEYS=1)." >&2; exit 1 ;;
+  esac
+elif [[ -n "${ICLOUD:-}" ]]; then
   ENTITLEMENTS="Config/eGluMacRelease.entitlements"
+fi
+if [[ -n "${ICLOUD:-}" ]]; then
   PROFILE="${PROFILE:-Safience Developer ID}"
   # The app's alone (MAC_PROFILE, Config/Mac.xcconfig): PadCore's resource bundle takes none.
   SIGNING+=("MAC_PROFILE=$PROFILE")
@@ -138,7 +183,7 @@ fi
 rm -rf "$OUT"
 mkdir -p "$OUT"
 
-echo "Archiving $NAME (Release, signed with Developer ID, $([[ -n "${ICLOUD:-}" ]] && echo "with iCloud" || echo "without iCloud"))…"
+echo "Archiving $NAME (Release, signed with Developer ID, $([[ -n "${ICLOUD:-}" ]] && echo "with iCloud" || echo "without iCloud")$([[ -n "${PASSKEYS:-}" ]] && echo " and passkeys"))…"
 xcodebuild archive -quiet \
   -project eGlu.xcodeproj -scheme "eGlu Mac Direct" -configuration Release \
   -destination "generic/platform=macOS" -archivePath "$OUT/$NAME.xcarchive" -packageAuthorizationProvider netrc \
@@ -166,6 +211,18 @@ codesign --verify --deep --strict "$APP"
 SIGNATURE="$(codesign --display --verbose=4 "$APP" 2>&1)"
 [[ "$SIGNATURE" == *"(runtime)"* && "$SIGNATURE" == *"Timestamp="* ]] \
   || { echo "The app isn't signed with the hardened runtime and a timestamp, which notarisation asks for." >&2; exit 1; }
+# With passkeys, the app's signature and the profile in it both carry the
+# entitlement; without, neither asks for it.
+SIGNED_ENTITLEMENTS="$(codesign --display --entitlements - --xml "$APP" 2>/dev/null || true)"
+if [[ -n "${PASSKEYS:-}" ]]; then
+  [[ "$SIGNED_ENTITLEMENTS" == *"$PASSKEY_KEY"* ]] \
+    || { echo "The app isn't signed with $PASSKEY_KEY." >&2; exit 1; }
+  security cms -D -i "$APP/Contents/embedded.provisionprofile" 2>/dev/null | grep -q "$PASSKEY_KEY" \
+    || { echo "The profile in the app doesn't grant $PASSKEY_KEY: the app wouldn't open." >&2; exit 1; }
+elif [[ "$SIGNED_ENTITLEMENTS" == *"$PASSKEY_KEY"* ]]; then
+  echo "The app is signed with $PASSKEY_KEY without PASSKEYS=1." >&2
+  exit 1
+fi
 
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$APP/Contents/Info.plist")"
 BUILD="$(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "$APP/Contents/Info.plist")"

@@ -2,7 +2,9 @@
 // entitlements of its own. Apple's browser entitlement is the iPad's; a Mac
 // app is a browser by saying it opens web addresses (Mac/Info.plist). It is
 // a DMG signed with Developer ID, outside the App Sandbox, with the
-// hardened runtime (Config/eGluMac.entitlements says why).
+// hardened runtime (Config/eGluMac.entitlements says why). Apple's passkey
+// entitlement for browsers is in Config/eGluMacReleasePasskeys.entitlements
+// alone, for Release/mac.sh with PASSKEYS=1 once Apple has granted it.
 //
 // iCloud and pushes need a provisioning profile. To run a build signed only
 // for this Mac, without them, set in Config/Local.xcconfig (or on
