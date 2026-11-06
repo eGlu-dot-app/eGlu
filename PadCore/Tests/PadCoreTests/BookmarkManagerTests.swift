@@ -118,6 +118,25 @@ final class BookmarkManagerTests: XCTestCase {
         XCTAssertEqual(Self.shape(try XCTUnwrap(w.space(fresh)).bookmarks), Self.shape(items))
     }
 
+    func testAnImportThatOnlyBringsFoldersSaysSoAndIsNoDuplicate() throws {
+        var w = Workspace.onFigma()
+        let space = w.spaces[0].id
+        let name = w.spaces[0].name
+        w.spaces[0].bookmarks = [Bookmark(title: "Figma", url: figma)]
+        let read = BookmarkFile.parse(BookmarkFile.export([Bookmark(title: "Figma", url: figma),
+                                                          Bookmark(folder: "Later", children: [])]))
+        let outcome = w.importBookmarks(read, into: space)
+        XCTAssertEqual(outcome, .imported(added: 0, total: 1, space: name, folders: 1))
+        XCTAssertEqual(w.spaces[0].bookmarks.map(\.title), ["Figma", "Later"])
+        XCTAssertEqual(outcome.title, "Folders Imported")
+        XCTAssertEqual(outcome.message, "1 folders added to \(name). The 1 bookmarks in the file were already there.")
+        // A save that fails and then succeeds keeps saying what it brought.
+        let unsaved = outcome.acknowledgingSave(false)
+        XCTAssertEqual(unsaved, .notSaved(added: 0, total: 1, space: name, folders: 1))
+        XCTAssertTrue(unsaved.message.hasPrefix("1 folders were added to \(name)"))
+        XCTAssertEqual(unsaved.acknowledgingSave(true), outcome)
+    }
+
     func testAnotherBrowsersEmptyFoldersStayOut() throws {
         let chrome = """
         <DL><p>

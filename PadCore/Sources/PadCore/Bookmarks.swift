@@ -321,12 +321,14 @@ public struct BookmarkImportRetry: Equatable, Sendable {
 }
 
 public enum BookmarkImportOutcome: Equatable, Sendable {
-    case imported(added: Int, total: Int, space: String)
+    /// `folders`: new folders it brought, which only eGlu's own export
+    /// brings without links in them (BookmarkImport.keepsEmptyFolders).
+    case imported(added: Int, total: Int, space: String, folders: Int = 0)
     case duplicates(total: Int, space: String)
     case unreadable, archiveWithoutBookmarks, empty, cancelled
     case destinationMissing(BookmarkImport)
     case workspaceUnavailable
-    case notSaved(added: Int, total: Int, space: String, retry: BookmarkImportRetry? = nil)
+    case notSaved(added: Int, total: Int, space: String, retry: BookmarkImportRetry? = nil, folders: Int = 0)
 
     public var isComplete: Bool {
         switch self {
@@ -355,23 +357,26 @@ public enum BookmarkImportOutcome: Equatable, Sendable {
     /// Recheck identity after an asynchronous save or before a retry. A matching
     /// name is not enough to make a replacement space the import destination.
     public func validatingDestination(in workspace: Workspace) -> Self {
-        guard case let .notSaved(added, total, _, retry?) = self else { return self }
+        guard case let .notSaved(added, total, _, retry?, folders) = self else { return self }
         guard let space = workspace.space(retry.destination) else { return .destinationMissing(retry.bookmarks) }
-        return .notSaved(added: added, total: total, space: space.name, retry: retry)
+        return .notSaved(added: added, total: total, space: space.name, retry: retry, folders: folders)
     }
 
     public func acknowledgingSave(_ saved: Bool, retry: BookmarkImportRetry? = nil) -> Self {
         switch self {
-        case let .imported(added, total, space) where !saved: return .notSaved(added: added, total: total, space: space, retry: retry)
+        case let .imported(added, total, space, folders) where !saved:
+            return .notSaved(added: added, total: total, space: space, retry: retry, folders: folders)
         case let .duplicates(total, space) where !saved: return .notSaved(added: 0, total: total, space: space, retry: retry)
-        case let .notSaved(added, total, space, _) where saved:
-            return added > 0 ? .imported(added: added, total: total, space: space) : .duplicates(total: total, space: space)
+        case let .notSaved(added, total, space, _, folders) where saved:
+            return added > 0 || folders > 0 ? .imported(added: added, total: total, space: space, folders: folders)
+                : .duplicates(total: total, space: space)
         default: return self
         }
     }
 
     public var title: String {
         switch self {
+        case let .imported(added, _, _, folders) where added == 0 && folders > 0: return BrowserText.localized("Folders Imported")
         case .imported: return BrowserText.localized("Bookmarks Imported")
         case .duplicates: return BrowserText.localized("Bookmarks Already Present")
         case .unreadable: return BrowserText.localized("Could Not Read the File")
@@ -386,7 +391,10 @@ public enum BookmarkImportOutcome: Equatable, Sendable {
 
     public var message: String {
         switch self {
-        case let .imported(added, total, space):
+        // Only folders new: the file's bookmarks were all there already.
+        case let .imported(added, total, space, folders) where added == 0 && folders > 0:
+            return String(format: BrowserText.localized("%1$lld folders added to %2$@. The %3$lld bookmarks in the file were already there."), folders, space, total)
+        case let .imported(added, total, space, _):
             return String(format: BrowserText.localized("%1$lld of %2$lld bookmarks added to %3$@. They appear in this space's bookmarks and on new tabs."), added, total, space)
         case let .duplicates(total, space): return String(format: BrowserText.localized("All %1$lld bookmarks in the file are already in %2$@."), total, space)
         case .unreadable: return BrowserText.localized("Choose the file again, or save a local copy first. You can also import later in Settings.")
@@ -395,7 +403,9 @@ public enum BookmarkImportOutcome: Equatable, Sendable {
         case .cancelled: return BrowserText.localized("No bookmarks were imported.")
         case .destinationMissing: return BrowserText.localized("The destination space was removed while the file was being read. The file has been read. Choose an existing space to import into.")
         case .workspaceUnavailable: return BrowserText.localized("Recover and save the workspace before importing bookmarks. The bookmark file is unchanged.")
-        case let .notSaved(added, _, space, _):
+        case let .notSaved(added, _, space, _, folders) where added == 0 && folders > 0:
+            return String(format: BrowserText.localized("%1$lld folders were added to %2$@ in this session, but the workspace could not be saved. Keep eGlu open and retry saving."), folders, space)
+        case let .notSaved(added, _, space, _, _):
             return String(format: BrowserText.localized("%1$lld bookmarks were added to %2$@ in this session, but the workspace could not be saved. Keep eGlu open and retry saving."), added, space)
         }
     }

@@ -1024,10 +1024,18 @@ public struct Workspace: Codable, Equatable, Sendable {
     public mutating func importBookmarks(_ bookmarks: BookmarkImport, into space: UUID) -> BookmarkImportOutcome {
         guard let s = spaces.firstIndex(where: { $0.id == space }) else { return .destinationMissing(bookmarks) }
         guard bookmarks.count > 0 else { return .empty }
+        let before = Self.folderCount(spaces[s].bookmarks)
         let added = Bookmarks.merge(bookmarks.items, into: &spaces[s].bookmarks, keepingEmpty: bookmarks.keepsEmptyFolders)
+        // Folders it brought with no new links in them (eGlu's own export
+        // keeps its empty ones) change the space too: no duplicate, that.
+        let folders = Self.folderCount(spaces[s].bookmarks) - before
         let name = spaces[s].name
-        return added > 0 ? .imported(added: added, total: bookmarks.count, space: name)
+        return added > 0 || folders > 0 ? .imported(added: added, total: bookmarks.count, space: name, folders: folders)
             : .duplicates(total: bookmarks.count, space: name)
+    }
+
+    private static func folderCount(_ items: [Bookmark]) -> Int {
+        items.reduce(0) { $0 + ($1.isFolder ? 1 + folderCount($1.children ?? []) : 0) }
     }
 
     /// Puts right what a damaged or hand-edited file got wrong: no spaces, a

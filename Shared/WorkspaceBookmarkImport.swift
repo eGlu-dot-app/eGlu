@@ -54,7 +54,8 @@ extension Session {
         let saved = await saveWorkspaceNow()
         guard let destination = workspace.space(space) else { done(.destinationMissing(bookmarks)); return }
         switch result {
-        case let .imported(added, total, _): result = .imported(added: added, total: total, space: destination.name)
+        case let .imported(added, total, _, folders):
+            result = .imported(added: added, total: total, space: destination.name, folders: folders)
         case let .duplicates(total, _): result = .duplicates(total: total, space: destination.name)
         default: break
         }
