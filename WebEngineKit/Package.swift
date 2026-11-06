@@ -3,14 +3,14 @@ import PackageDescription
 
 let package = Package(
     name: "WebEngineKit",
-    platforms: [.macOS("26.0")],
+    platforms: [.macOS("26.0"), .iOS("17.0")],
     products: [
         .library(name: "WebEngineCore", targets: ["WebEngineCore"]),
         .library(name: "WebEngineAppKit", targets: ["WebEngineAppKit"])
     ],
     targets: [
         .target(name: "WebEngineCore"),
-        .target(name: "WebEngineAppKit"),
+        .target(name: "WebEngineAppKit", dependencies: ["WebEngineCore"]),
         .testTarget(name: "WebEngineCoreTests", dependencies: ["WebEngineCore"]),
         .testTarget(name: "WebEngineAppKitTests", dependencies: ["WebEngineAppKit"])
     ],

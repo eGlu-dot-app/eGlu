@@ -2,7 +2,7 @@ import AppKit
 import PadCore
 import SwiftUI
 import WebEngineCore
-import WebKit
+import WebEngineAppKit
 
 /// A site's picture-in-picture window (DocumentPicture.swift): the blank
 /// page picture.js opened, floating above every window and every app, on
@@ -25,9 +25,10 @@ import WebKit
 /// in Liquid Glass on macOS 27, a titled window's title bar covered what
 /// the app put there, though AppKit laid it out and drew it.
 @MainActor
-final class PictureWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate {
+final class PictureWindow: NSObject, NSWindowDelegate, WebPicturePageEvents {
     private(set) weak var opener: Page?
-    let view: WKWebView
+    let backend: any WebPicturePage
+    var view: NSView { backend.view }
     private let panel: NSPanel
     /// Opened by the app when the tab was left (Page.leftScreen), and so
     /// closed when the tab is back on screen, as Chrome's is.
@@ -42,12 +43,8 @@ final class PictureWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, WKU
 
     /// The web view for the window picture.js opens, made with WebKit's
     /// `configuration` so the site keeps its hold on the page in it.
-    init(opener: Page, configuration: WKWebViewConfiguration, features: WebWindowFeatures, request: DocumentPicture.Request) {
+    init?(opener: Page, child: any WebChildRequest, request: DocumentPicture.Request) {
         self.opener = opener
-        // None of the opener's scripts: the page in it is the site's to fill.
-        configuration.userContentController = WKUserContentController()
-        // A call's videos, moved here, play on in a page no one has clicked yet.
-        configuration.mediaTypesRequiringUserActionForPlayback = []
         // The screen of the window the tab is in, or was in a moment ago (a
         // tab just left has no window of its own any more).
         let session = Session.shared
@@ -56,18 +53,17 @@ final class PictureWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, WKU
         let room = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1280, height: 800)
         // The page at the size the site asked for, the pane round it. At that
         // size from the start: a site reads the window's size as soon as it has it.
-        let page = DocumentPicture.size(width: features.width, height: features.height, within: room.size)
-        view = PictureView(frame: NSRect(origin: .zero, size: page), configuration: configuration)
+        let page = DocumentPicture.size(width: child.features.width, height: child.features.height, within: room.size)
+        guard let backend = opener.enginePage.makePicturePage(from: child, size: page) else { return nil }
+        self.backend = backend
         panel = PicturePanel(contentRect: NSRect(origin: .zero, size: PicturePane.window(around: page)),
                              styleMask: [.borderless, .resizable, .nonactivatingPanel],
                              backing: .buffered, defer: false)
-        let url = opener.committed ?? opener.view.url
+        let url = opener.committed ?? opener.pageURL
         let host = url?.host() ?? ""
         frameName = "Picture \(host)"
         super.init()
-        view.navigationDelegate = self
-        view.uiDelegate = self
-        view.isInspectable = true
+        backend.connect(events: self)
         panel.isFloatingPanel = true
         panel.level = .floating
         panel.hidesOnDeactivate = false
@@ -167,9 +163,7 @@ final class PictureWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, WKU
     private func finish() {
         guard !finished else { return }
         finished = true
-        view.navigationDelegate = nil
-        view.uiDelegate = nil
-        view.removeFromSuperview()
+        backend.tearDown()
         panel.contentView = nil
         panel.delegate = nil
         // The panel is in the middle of closing, and the opener lets go of
@@ -193,21 +187,17 @@ final class PictureWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, WKU
 
     // MARK: The page in it
 
-    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
-                 decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void) {
+    func decidePictureNavigation(url: URL?, targetIsMainFrame: Bool, reply: @MainActor (Bool) -> Void) {
         // Its frames go where they like; the window itself stays on its blank page.
-        guard navigationAction.targetFrame?.isMainFrame ?? true else { return decisionHandler(.allow) }
-        let url = navigationAction.request.url
-        if url?.scheme?.lowercased() == "about" { return decisionHandler(.allow) }
-        decisionHandler(.cancel)
+        guard targetIsMainFrame else { return reply(true) }
+        if url?.scheme?.lowercased() == "about" { return reply(true) }
+        reply(false)
         if let url { openBesideOpener(url) }
     }
 
     /// A link in the window asking for a window of its own: a tab beside the opener's.
-    func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
-                 for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-        if let url = navigationAction.request.url { openBesideOpener(url) }
-        return nil
+    func pictureRequestedWindow(url: URL?) {
+        if let url { openBesideOpener(url) }
     }
 
     private func openBesideOpener(_ url: URL) {
@@ -225,12 +215,12 @@ final class PictureWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, WKU
     }
 
     /// The site closed it (`pipWindow.close()`).
-    func webViewDidClose(_ webView: WKWebView) {
+    func pictureCloseRequested() {
         close()
     }
 
     /// The opener's process ended, and this page with it.
-    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+    func pictureProcessEnded() {
         close()
     }
 }
@@ -264,7 +254,7 @@ private final class PicturePanel: NSPanel {
 struct PicturePane: View {
     let url: URL?
     let host: String
-    let web: WKWebView
+    let web: NSView
     /// Whether Back to Tab shows (the site didn't set `disallowReturnToOpener`).
     let returns: Bool
     let back: () -> Void
@@ -317,7 +307,7 @@ struct PicturePane: View {
                     .contentShape(Rectangle())
                     .gesture(WindowDragGesture())
             }
-            SurfaceView(web: web)
+            PictureSurfaceView(web: web)
                 .clipShape(RoundedRectangle(cornerRadius: PopupMetrics.page, style: .continuous))
                 .padding([.horizontal, .bottom], PopupMetrics.inset)
         }
@@ -342,8 +332,9 @@ private final class PictureHost: NSHostingView<PicturePane> {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
-/// The window's web view: a click on a button in it works the first time,
-/// with eGlu behind another app, as the controls of a call must.
-private final class PictureView: WKWebView {
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+/// Places the engine's own view, with no wrapper around its responder chain.
+private struct PictureSurfaceView: NSViewRepresentable {
+    let web: NSView
+    func makeNSView(context: Context) -> NSView { web }
+    func updateNSView(_ view: NSView, context: Context) {}
 }

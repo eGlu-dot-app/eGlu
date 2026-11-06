@@ -1,9 +1,10 @@
 import WebEngineCore
 import WebKit
+import WebKitSupport
 
 /// The web view's whole navigation delegate: decisions, lifecycle and downloads.
 /// WebKit's private UI-delegate callbacks (context menu and unused wheel events)
-/// are not navigation-delegate calls and stay with Page as its UI delegate.
+/// are not navigation-delegate calls and belong to WebKitUIAdapter.
 @MainActor
 public final class WebKitNavigationAdapter: NSObject, WKNavigationDelegate, WebRequestLoading {
     private weak var view: WKWebView?

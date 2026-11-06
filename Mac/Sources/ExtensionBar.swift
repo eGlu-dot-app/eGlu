@@ -1,7 +1,7 @@
 import AppKit
 import PadCore
 import SwiftUI
-import WebKit
+import WebEngineAppKit
 
 /// Where extensions show in a window (Docs/ExtensionsDesign.md, section 2,
 /// "Where extensions show"): the puzzle button, with this space's
@@ -232,7 +232,7 @@ private struct UseTile: View {
     var body: some View {
         // Read again whenever WebKit says an action changed (actionsChanged).
         let _ = extensions.actionsChanged
-        let action = extensions.action(for: item.id, in: model)
+        let action = extensions.action(for: item.id, in: model, iconSize: CGSize(width: Self.icon, height: Self.icon))
         let warning = extensions.warning(item.id, in: model.spaceID)
         let unavailable = extensions.unavailableReason(item.id, in: model)
         let enabled = unavailable == nil
@@ -245,7 +245,7 @@ private struct UseTile: View {
         } label: {
             VStack(spacing: 5) {
                 Group {
-                    if let icon = action?.icon(for: CGSize(width: Self.icon, height: Self.icon)) ?? extensions.icon(of: item.id, in: model.spaceID) {
+                    if let icon = action?.icon ?? extensions.icon(of: item.id, in: model.spaceID) {
                         Image(nsImage: icon).resizable().interpolation(.high)
                     } else {
                         Image(systemName: "puzzlepiece.extension").resizable().scaledToFit().foregroundStyle(.secondary)
@@ -478,7 +478,7 @@ private struct ExtensionMenu: View {
     var body: some View {
         let on = item.spaces.contains(model.spaceID)
         let incompatible = extensions.isIncompatible(item.id)
-        if on, !incompatible, extensions.context(item.id, in: model.spaceID)?.optionsPageURL != nil {
+        if on, !incompatible, extensions.optionsPageURL(item.id, in: model.spaceID) != nil {
             Button("Options") {
                 model.extensionsShown = false
                 extensions.openOptions(item.id, in: model)
@@ -589,7 +589,7 @@ private struct DetailPage: View {
                 .padding(.bottom, 4)
                 Divider()
                 VStack(spacing: 0) {
-                    if on, !incompatible, extensions.context(id, in: model.spaceID)?.optionsPageURL != nil {
+                    if on, !incompatible, extensions.optionsPageURL(id, in: model.spaceID) != nil {
                         PanelButton(action: {
                             model.extensionsShown = false
                             extensions.openOptions(id, in: model)
@@ -938,13 +938,13 @@ private struct Reorder: DropDelegate {
 /// one, with its badge (a count, a word) at the corner.
 private struct ExtensionIcon: View {
     let item: Extensions.Installed
-    let action: WKWebExtension.Action?
+    let action: WebExtensionAction?
     let space: UUID
     @ObservedObject private var extensions = Extensions.shared
 
     var body: some View {
         Group {
-            if let icon = action?.icon(for: CGSize(width: 20, height: 20)) ?? extensions.icon(of: item.id, in: space) {
+            if let icon = action?.icon ?? extensions.icon(of: item.id, in: space) {
                 Image(nsImage: icon).resizable().interpolation(.high)
             } else {
                 Image(systemName: "puzzlepiece.extension").resizable().scaledToFit().foregroundStyle(.secondary)

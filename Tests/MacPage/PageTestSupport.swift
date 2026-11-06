@@ -1,4 +1,5 @@
 import WebKit
+import WebKitMacPlugin
 import XCTest
 @testable import eGluMac
 
@@ -50,7 +51,7 @@ class PageTestCase: XCTestCase {
     // MARK: Pages and tabs
 
     /// A configuration whose store keeps nothing, made by the test, not by
-    /// the app's engine (`AppWebKitEngine.configuration(space:)`), which would
+    /// the app's engine (`WebKitMacPageFactory.configuration(space:)`), which would
     /// use the space's lasting store.
     static func keepingNothing() -> WKWebViewConfiguration {
         let configuration = WKWebViewConfiguration()
@@ -63,7 +64,7 @@ class PageTestCase: XCTestCase {
     /// or with a configuration of the test's own.
     func makePage(tab: UUID = UUID(), space: UUID = UUID(),
                   configuration: WKWebViewConfiguration? = nil) -> Page {
-        let page = Page(tab: tab, space: space, configuration: configuration ?? Self.keepingNothing())
+        let page = Page(tab: tab, space: space, enginePage: PageWebKitForTests.page(configuration: configuration ?? Self.keepingNothing()))
         made.append(page)
         return page
     }
@@ -76,7 +77,7 @@ class PageTestCase: XCTestCase {
         let space = try XCTUnwrap(session.workspace.spaces.first?.id)
         let tab = try XCTUnwrap(session.change { $0.openTab(nil, in: space) })
         opened.append(tab)
-        let page = session.pages.adopt(tab: tab, space: space, configuration: Self.keepingNothing())
+        let page = session.pages.adopt(tab: tab, space: space, child: PageWebKitForTests.child(configuration: Self.keepingNothing()))
         return (tab, space, page)
     }
 

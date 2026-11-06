@@ -3,6 +3,7 @@ import PadCore
 import WebEngineCore
 import WebKit
 import WebKitMacPlugin
+import WebKitSupport
 import XCTest
 @testable import eGluMac
 
@@ -17,12 +18,14 @@ import XCTest
 ///
 /// No download here saves anything. One handed over by hand is WebKit's own,
 /// started at an address of the test's scheme, whose handler never answers,
-/// so there is never an answer to save. The one through WebKit is a data:
-/// address, whose answer comes at once: the moment the page has handed it to
-/// Downloads, it gets a delegate of the test's, which tells WebKit to save it
-/// nowhere, and WebKit stops it. Each is then cancelled through Downloads and
-/// its activity cleared, in the test run's own data folder. The test's files
-/// are written in a folder of its own in the temporary folder, removed after.
+/// so there is never an answer to save, wrapped as the adapter wraps one
+/// (`WebKitDownload`, which is WebKit's download's delegate). The one through
+/// WebKit is a data: address, whose answer comes at once: the moment the page
+/// has handed it to Downloads, its wrapper gets a delegate of the test's,
+/// which tells WebKit to save it nowhere, and WebKit stops it. Each is then
+/// cancelled through Downloads and its activity cleared, in the test run's
+/// own data folder. The test's files are written in a folder of its own in
+/// the temporary folder, removed after.
 ///
 /// Not here: a download that saves a file (where Downloads puts it, its
 /// progress, its finish); a link that asks to be saved, clicked through
@@ -75,10 +78,11 @@ final class PageDownloadAndFileTests: PageTestCase {
     // MARK: A download handed over by hand
 
     /// A download a navigation became, handed to the page as the adapter
-    /// hands it, a real one of WebKit's whose answer never comes: Downloads
-    /// takes it over, as its delegate, with an item at its address, named
-    /// after it, in the page's space, as a GET, being downloaded, and the
-    /// page's. Cancelled through Downloads, it stops, the page has nothing
+    /// hands it, a real one of WebKit's whose answer never comes, in its
+    /// wrapper: Downloads takes it over, as the wrapper's delegate (the
+    /// wrapper staying WebKit's download's), with an item at its address,
+    /// named after it, in the page's space, as a GET, being downloaded, and
+    /// the page's. Cancelled through Downloads, it stops, the page has nothing
     /// downloading, and clearing finished activity takes the item away.
     func testADownloadIsTakenOverByDownloads() async throws {
         try requireOwnDataFolder()
@@ -87,6 +91,7 @@ final class PageDownloadAndFileTests: PageTestCase {
 
         let handed = try await handOver("report.bin", to: page, delegate: saves)
         XCTAssertTrue(handed.delegate === Downloads.shared, "Downloads isn't the download's delegate")
+        XCTAssertTrue(handed.download.delegate === handed.wrapper, "the wrapper isn't WebKit's download's delegate")
         XCTAssertEqual(handed.item.source, NeverAnswers.address("report.bin"))
         XCTAssertEqual(handed.item.name, "report.bin")
         XCTAssertEqual(handed.item.space, page.space)
@@ -94,7 +99,7 @@ final class PageDownloadAndFileTests: PageTestCase {
         XCTAssertEqual(handed.item.phase, .downloading)
         XCTAssertNil(handed.item.file)
         XCTAssertTrue(Downloads.shared.isDownloading(for: page), "Downloads doesn't have it as the page's")
-        XCTAssertTrue(Self.running(for: page).contains { $0 === handed.download })
+        XCTAssertTrue(Self.running(for: page).contains { $0 === handed.wrapper })
 
         await stop(handed.item, of: page)
         XCTAssertEqual(saves.asked, 0, "WebKit asked where to save a download whose answer never comes")
@@ -153,9 +158,9 @@ final class PageDownloadAndFileTests: PageTestCase {
     /// adapter it became one, the adapter the page, and the page gives it to
     /// Downloads (an item at its address, in its space) and, having shown
     /// nothing, tells its host it closed. Nothing is committed and no
-    /// failure shown. When the host is told, the download gets the test's
-    /// delegate, which WebKit then asks where to save it: nowhere, so
-    /// nothing is saved.
+    /// failure shown. When the host is told, the download's wrapper gets the
+    /// test's delegate, which WebKit then asks, through the wrapper, where to
+    /// save it: nowhere, so nothing is saved.
     func testAnAnswerToSaveBecomesTheTabsDownload() async throws {
         try requireOwnDataFolder()
         // First, that a download the page handed over is found in Downloads'
@@ -163,7 +168,7 @@ final class PageDownloadAndFileTests: PageTestCase {
         let scratch = makeNeverAnsweringPage()
         let checking = SavesNothing()
         let check = try await handOver("check.bin", to: scratch, delegate: checking)
-        let found = Self.running(for: scratch).contains { $0 === check.download }
+        let found = Self.running(for: scratch).contains { $0 === check.wrapper }
         await stop(check.item, of: scratch)
         guard found else {
             return XCTFail("Downloads' own list can't be read, so no download whose answer comes is started")
@@ -210,15 +215,16 @@ final class PageDownloadAndFileTests: PageTestCase {
     /// nothing on: the page isn't one and answers none of its callbacks;
     /// the adapter answers those it has, the downloads' among them, and none
     /// it hasn't (a sign-in challenge, the decision's `preferences:` form);
-    /// and it neither answers nor forwards the page's own UI-delegate
-    /// questions, WebKit's private ones among them, which the adapter that
-    /// forwarded to the page (step 4c) answered.
+    /// and it neither answers nor forwards the UI delegate's questions,
+    /// WebKit's private ones among them, which the adapter that forwarded to
+    /// the page (step 4c) answered. Since step 7b the UI delegate is the
+    /// plugin's `WebKitUIAdapter`, which answers them (PageUIDelegateTests).
     func testTheAdapterIsTheWholeNavigationDelegate() throws {
         let page = makePage()
         let adapter = try XCTUnwrap(page.view.navigationDelegate as? WebKitNavigationAdapter,
                                     "the view's navigation delegate isn't the adapter")
         XCTAssertFalse((page as AnyObject) is WKNavigationDelegate, "the page is still a navigation delegate")
-        XCTAssertTrue(page.view.uiDelegate === page)
+        let ui = try XCTUnwrap(page.view.uiDelegate as? WebKitUIAdapter, "the view's UI delegate isn't the UI adapter")
 
         let adapters = ["webView:decidePolicyForNavigationAction:decisionHandler:",
                         "webView:decidePolicyForNavigationResponse:decisionHandler:",
@@ -235,15 +241,15 @@ final class PageDownloadAndFileTests: PageTestCase {
         let nobodys = ["webView:didReceiveAuthenticationChallenge:completionHandler:",
                        "webView:authenticationChallenge:shouldAllowDeprecatedTLS:",
                        "webView:decidePolicyForNavigationAction:preferences:decisionHandler:"].map(NSSelectorFromString)
-        let pages = ["webView:createWebViewWithConfiguration:forNavigationAction:windowFeatures:",
-                     "webViewDidClose:",
-                     "webView:runJavaScriptAlertPanelWithMessage:initiatedByFrame:completionHandler:",
-                     "_webView:getContextMenuFromProposedMenu:forElement:userInfo:completionHandler:",
-                     "_webView:didNotHandleWheelEvent:"].map(NSSelectorFromString)
-        for selector in pages {
-            XCTAssertTrue(page.responds(to: selector), "the page doesn't answer \(selector), so it proves nothing")
+        let uis = ["webView:createWebViewWithConfiguration:forNavigationAction:windowFeatures:",
+                   "webViewDidClose:",
+                   "webView:runJavaScriptAlertPanelWithMessage:initiatedByFrame:completionHandler:",
+                   "_webView:getContextMenuFromProposedMenu:forElement:userInfo:completionHandler:",
+                   "_webView:didNotHandleWheelEvent:"].map(NSSelectorFromString)
+        for selector in uis {
+            XCTAssertTrue(ui.responds(to: selector), "the UI adapter doesn't answer \(selector), so it proves nothing")
         }
-        for selector in nobodys + pages {
+        for selector in nobodys + uis {
             XCTAssertFalse(adapter.responds(to: selector), "the adapter answers \(selector)")
             XCTAssertNil(adapter.forwardingTarget(for: selector), "the adapter forwards \(selector)")
         }
@@ -302,24 +308,28 @@ final class PageDownloadAndFileTests: PageTestCase {
     /// A download handed to a page, and what came of it.
     private struct HandedOver {
         let download: WKDownload
+        /// The download as the page was handed it, kept by the test as by Downloads.
+        let wrapper: WebKitDownload
         /// The item Downloads made for it.
         let item: DownloadRecord
-        /// The download's delegate once the page had handed it over, before the test's.
+        /// The wrapper's delegate once the page had handed it over, before the test's.
         let delegate: AnyObject?
     }
 
     /// A download of WebKit's at the test's scheme, whose answer never comes,
-    /// handed to `page` as the adapter hands one, then given `delegate`.
+    /// handed to `page` as the adapter hands one (wrapped), its wrapper then
+    /// given `delegate`.
     private func handOver(_ name: String, to page: Page, delegate: SavesNothing,
                           file: StaticString = #filePath, line: UInt = #line) async throws -> HandedOver {
         let download = try await startDownload(NeverAnswers.address(name), on: page, file: file, line: line)
         let before = Set(Downloads.shared.items.map(\.id))
-        page.navigationBecameDownload(WebKitDownload(download))
-        let taken = download.delegate
-        download.delegate = delegate
+        let wrapper = WebKitDownload(download)
+        page.navigationBecameDownload(wrapper)
+        let taken = wrapper.delegate
+        wrapper.delegate = delegate
         let item = try XCTUnwrap(Downloads.shared.items.first { !before.contains($0.id) },
                                  "Downloads has no item for the download", file: file, line: line)
-        return HandedOver(download: download, item: item, delegate: taken)
+        return HandedOver(download: download, wrapper: wrapper, item: item, delegate: taken)
     }
 
     /// A download WebKit starts by itself at `url`, with no navigation.
@@ -358,19 +368,19 @@ final class PageDownloadAndFileTests: PageTestCase {
                        file: file, line: line)
     }
 
-    /// The downloads of WebKit's Downloads is running for `page`, read from
-    /// the list it keeps to itself (`running`): the only way to the download
-    /// WebKit handed the page, to give it the test's delegate.
-    private static func running(for page: Page) -> [WKDownload] {
+    /// The downloads Downloads is running for `page`, read from the list it
+    /// keeps to itself (`running`): the only way to the download WebKit
+    /// handed the page, to give it the test's delegate.
+    private static func running(for page: Page) -> [any WebEngineCore.WebDownload] {
         let owner = ObjectIdentifier(page)
         guard let running = Mirror(reflecting: Downloads.shared).children.first(where: { $0.label == "running" })?.value
         else { return [] }
-        return Mirror(reflecting: running).children.compactMap { entry -> WKDownload? in
+        return Mirror(reflecting: running).children.compactMap { entry -> (any WebEngineCore.WebDownload)? in
             guard let value = Mirror(reflecting: entry.value).children.first(where: { $0.label == "value" })?.value
             else { return nil }
             let fields = Mirror(reflecting: value).children
             guard fields.first(where: { $0.label == "page" })?.value as? ObjectIdentifier == owner else { return nil }
-            return fields.first { $0.label == "download" }?.value as? WKDownload
+            return fields.first { $0.label == "download" }?.value as? any WebEngineCore.WebDownload
         }
     }
 
@@ -404,25 +414,26 @@ private final class NeverAnswers: NSObject, WKURLSchemeHandler {
     func webView(_ webView: WKWebView, stop urlSchemeTask: any WKURLSchemeTask) {}
 }
 
-/// A download's delegate that saves nothing: asked where to save, it says
-/// nowhere, which stops the download. It counts what WebKit told it.
+/// A download's delegate that saves nothing, set on its wrapper: asked
+/// where to save, it says nowhere, which stops the download. It counts what
+/// WebKit told it through the wrapper.
 @MainActor
-private final class SavesNothing: NSObject, WKDownloadDelegate {
+private final class SavesNothing: WebEngineCore.WebDownloadDelegate {
     private(set) var asked = 0
     private(set) var failed = 0
     private(set) var finished = 0
 
-    func download(_ download: WKDownload, decideDestinationUsing response: URLResponse, suggestedFilename: String,
-                  completionHandler: @escaping @MainActor (URL?) -> Void) {
+    func download(_ download: any WebEngineCore.WebDownload, decideDestinationUsing response: URLResponse,
+                  suggestedFilename: String, completionHandler: @escaping @MainActor (URL?) -> Void) {
         asked += 1
         completionHandler(nil)
     }
 
-    func download(_ download: WKDownload, didFailWithError error: any Error, resumeData: Data?) {
+    func download(_ download: any WebEngineCore.WebDownload, didFailWithError error: any Error, resumeData: Data?) {
         failed += 1
     }
 
-    func downloadDidFinish(_ download: WKDownload) {
+    func downloadDidFinish(_ download: any WebEngineCore.WebDownload) {
         finished += 1
     }
 }

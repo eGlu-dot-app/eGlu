@@ -102,8 +102,8 @@ public enum Scripts {
 
     /// The measuring tool (measure.js), run once in the app's own world with
     /// `guides` (the guide and ruler settings) as its argument. It resolves
-    /// when the tool ends, and while it runs it talks through the egluMeasure
-    /// script message handler.
+    /// when the tool ends, and while it runs it talks through egluBridge on the
+    /// egluMeasure channel.
     public static let measure = load("measure", "js")
 
     /// The JSON view over a page that is JSON (json-view.js), injected at

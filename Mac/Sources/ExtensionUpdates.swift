@@ -1,8 +1,7 @@
 import AppKit
-import CryptoKit
 import PadCore
 import SwiftUI
-import WebKit
+import WebEngineAppKit
 
 /// Updates from the Chrome Web Store, and extensions loaded from a folder
 /// (Docs/ExtensionsDesign.md, section 3).
@@ -98,12 +97,8 @@ extension Extensions {
         }
         do {
             let crx = try await download(item.id, from: update.package)
-            if let size = update.size, size != crx.count { throw Refused.notChecked(String(localized: "The downloaded size did not match the store's reply.")) }
-            if let hash = update.sha256, hash.lowercased() != Self.sha256(crx) { throw Refused.notChecked(String(localized: "The downloaded update did not match the store's checksum.")) }
-            let archive = try CRXFile.archive(of: crx, id: item.id, fromStore: true)
-            guard let manifestData = ZipFile.file(in: archive, matching: { $0 == "manifest.json" }) else { throw Refused.noManifest }
-            let manifest = try ExtensionManifest(json: manifestData)
-            guard let version = ExtensionVersion(manifest.version), version == offered else { throw Refused.badVersion }
+            let (archive, manifest, version) = try installExecution.verifyUpdate(crx, id: item.id, size: update.size,
+                                                                            sha256: update.sha256, version: offered.description)
             guard installed.first(where: { $0.id == item.id }) == item else { return result(.deferred, String(localized: "Its settings changed while the update downloaded. Check again.")) }
             let wants = manifest.grants
             let had = item.granted ?? []
@@ -111,17 +106,17 @@ extension Extensions {
                 guard let owner = host ?? Session.shared.frontWindow?.window, owner.isVisible else {
                     return result(.deferred, String(localized: "Open Extensions in Settings to review the additional access, then check for updates again."))
                 }
-                guard await askToUpdate(item, version: version.description, wanting: Set(wants).subtracting(had).sorted(), host: owner) else {
-                    declined[item.id] = version.description
+                guard await askToUpdate(item, version: version, wanting: Set(wants).subtracting(had).sorted(), host: owner) else {
+                    declined[item.id] = version
                     UserDefaults.standard.set(declined, forKey: Self.declinedUpdatesKey)
-                    return result(.declined, String(localized: "Version \(version.description) was declined. The installed version keeps working."))
+                    return result(.declined, String(localized: "Version \(version) was declined. The installed version keeps working."))
                 }
                 guard installed.first(where: { $0.id == item.id }) == item else { return result(.deferred, String(localized: "The extension changed while you reviewed its access. Check again.")) }
             }
-            let name = manifest.displayName(in: archive, fallback: item.name)
+            let name = manifest.name(fallback: item.name)
             try await trial(archive, id: item.id)
             guard installed.first(where: { $0.id == item.id }) == item else { return result(.deferred, String(localized: "The extension changed during verification. Check again.")) }
-            let installation = try keep(archive, id: item.id, name: name, version: version.description, source: .store,
+            let installation = try keep(archive, id: item.id, name: name, version: version, source: .store,
                                         access: item.siteAccess, spaces: item.spaces, granted: wants)
             guard await installation.value else { return result(.failed, String(localized: "The new version could not start. eGlu retained the previous version; report the problem or try again later.")) }
             declined[item.id] = nil
@@ -139,15 +134,14 @@ extension Extensions {
     /// own steps (`apply`), which say why one didn't happen.
     @discardableResult
     private func replace(_ item: Installed, with archive: Data, folder: String? = nil) async throws -> Bool {
-        guard let manifestData = ZipFile.file(in: archive, matching: { $0 == "manifest.json" }) else { throw Refused.noManifest }
-        let manifest = try ExtensionManifest(json: manifestData)
-        guard let version = ExtensionVersion(manifest.version) else { throw Refused.badVersion }
+        let manifest = try installExecution.readArchive(archive)
+        let version = try manifest.checkedVersion()
         guard installed.first(where: { $0.id == item.id }) == item else { return false }
         // One that won't start leaves the version there is in place.
         try await trial(archive, id: item.id)
         guard installed.first(where: { $0.id == item.id }) == item else { return false }
-        try keep(archive, id: item.id, name: manifest.displayName(in: archive, fallback: item.name),
-                 version: version.description, source: item.source, access: item.siteAccess, spaces: item.spaces,
+        try keep(archive, id: item.id, name: manifest.name(fallback: item.name),
+                 version: version, source: item.source, access: item.siteAccess, spaces: item.spaces,
                  granted: manifest.grants, folder: folder)
         return true
     }
@@ -156,18 +150,7 @@ extension Extensions {
     /// controller that keeps nothing (ExtensionTrial), before it takes the
     /// old one's place; nothing of it is left behind either way.
     func trial(_ archive: Data, id: String) async throws {
-        let room = FileManager.default.temporaryDirectory.appendingPathComponent("eglu-trial-\(UUID().uuidString)", isDirectory: true)
-        defer { try? FileManager.default.removeItem(at: room) }
-        let file = room.appendingPathComponent("package.zip")
-        let folder = room.appendingPathComponent("prepared", isDirectory: true)
-        try FileManager.default.createDirectory(at: room, withIntermediateDirectories: true)
-        try archive.write(to: file)
-        try await Task.detached(priority: .utility) { try Self.prepare(file, into: folder) }.value
-        try await ExtensionTrial.start(try await WKWebExtension(resourceBaseURL: folder), id: id)
-    }
-
-    static func sha256(_ data: Data) -> String {
-        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        try await installExecution.trial(archive, id: id)
     }
 
     /// A reloaded folder that wants more: asked in a sheet, as an update is.
@@ -216,9 +199,8 @@ extension Extensions {
             guard await choose(panel, host: host) == .OK, let folder = panel.url else { return }
             do {
                 // Its real path, links resolved, as Chrome makes the id from.
-                let path = folder.resolvingSymlinksInPath().standardizedFileURL.path
-                let id = ExtensionID.id(forUnpackedPath: path)
-                try await offer(try await Self.zipped(folder), id: id, source: .unpacked, in: window, folder: path, host: host)
+                let snapshot = try await installExecution.snapshot(folder)
+                try await offer(snapshot.archive, id: snapshot.id, source: .unpacked, in: window, folder: snapshot.path, host: host)
             } catch {
                 tell(error, in: window, host: host)
             }
@@ -235,8 +217,7 @@ extension Extensions {
                 let archive = try await Self.zipped(URL(fileURLWithPath: path, isDirectory: true))
                 // A folder that now asks for more is asked about first, as an
                 // update is; no leaves the version loaded now. (Search)
-                guard let manifestData = ZipFile.file(in: archive, matching: { $0 == "manifest.json" }) else { throw Refused.noManifest }
-                let more = Set(try ExtensionManifest(json: manifestData).grants).subtracting(item.granted ?? []).sorted()
+                let more = Set(try installExecution.readArchive(archive).grants).subtracting(item.granted ?? []).sorted()
                 if !more.isEmpty {
                     guard let owner = host ?? Session.shared.frontWindow?.window, await askToReload(item, wanting: more, host: owner) else { return }
                 }
@@ -245,45 +226,5 @@ extension Extensions {
                 tell(error, in: nil, host: host, title: String(localized: "The extension could not be reloaded."))
             }
         }
-    }
-
-    /// The most a folder may hold, measured before it is zipped: as much as
-    /// a package may unpack to (ExtensionPreparation), in at most as many
-    /// files as a ZIP can list.
-    static let largestFolder = 512 * 1024 * 1024
-    static let mostFiles = 65_000
-
-    /// A folder as a ZIP with its contents at the top, by ditto, the Mac's
-    /// own; measured first, and read off the main thread.
-    static func zipped(_ folder: URL) async throws -> Data {
-        guard FileManager.default.fileExists(atPath: folder.appendingPathComponent("manifest.json").path) else {
-            throw Refused.noManifest
-        }
-        let fits = await Task.detached(priority: .userInitiated) { () -> Bool in
-            guard let walk = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey]) else { return false }
-            var total = 0, count = 0
-            for case let file as URL in walk {
-                count += 1
-                total += (try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-                if count > mostFiles || total > largestFolder { return false }
-            }
-            return true
-        }.value
-        guard fits else { throw Refused.notChecked(String(localized: "That folder is larger than an extension can be.")) }
-        let out = FileManager.default.temporaryDirectory.appendingPathComponent("eglu-unpacked-\(UUID().uuidString).zip")
-        defer { try? FileManager.default.removeItem(at: out) }
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
-        process.arguments = ["-c", "-k", "--norsrc", "--noextattr", folder.path, out.path]
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        let status: Int32 = try await withCheckedThrowingContinuation { done in
-            process.terminationHandler = { done.resume(returning: $0.terminationStatus) }
-            do { try process.run() } catch { done.resume(throwing: error) }
-            // A minute at most: a folder of special files could hold it for ever.
-            DispatchQueue.global().asyncAfter(deadline: .now() + 60) { if process.isRunning { process.terminate() } }
-        }
-        guard status == 0 else { throw Refused.notChecked(String(localized: "The folder couldn't be read.")) }
-        return try await Task.detached(priority: .userInitiated) { try Data(contentsOf: out) }.value
     }
 }

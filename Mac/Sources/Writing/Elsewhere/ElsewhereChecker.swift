@@ -1,7 +1,7 @@
 import AppKit
 import ApplicationServices
 import Combine
-import Engines
+import WritingServiceKit
 import PadCore
 
 /// Checking what is typed in other apps' fields (Docs/Tasks/03): the
@@ -25,7 +25,7 @@ final class ElsewhereChecker {
     private var caret: Int?
     /// The lints of the last run, in the field's UTF-16 offsets, moved
     /// along with the text when it changes elsewhere.
-    private var lints: [GrammarLint] = []
+    private var lints: [WritingIssue] = []
     private var caretSettle = CaretSettle()
     /// What the panel is showing: the lint's index and its word.
     private var shown: (index: Int, word: String)?
@@ -369,7 +369,7 @@ final class ElsewhereChecker {
     /// A suggestion's button text: the answer itself, "Remove" for a word
     /// to delete, Insert “x” for one to add. Harper's suggestion type, not
     /// the command bar's Suggestion that PadCore also has.
-    private static func label(for suggestion: GrammarLint.Suggestion) -> String {
+    private static func label(for suggestion: WritingSuggestion) -> String {
         switch suggestion {
         case .replace(let text): return text
         case .insert(let text): return String(localized: "Insert “\(text)”")
@@ -389,7 +389,7 @@ final class ElsewhereChecker {
     }
 
     /// A panel button, and for a suggestion which of them.
-    private func act(_ action: PopupAction, on lint: GrammarLint,
+    private func act(_ action: PopupAction, on lint: WritingIssue,
                      word: String, suggestion: Int) {
         // The panel closed itself: it opens again only when the caret moves.
         shown = nil
@@ -421,7 +421,7 @@ final class ElsewhereChecker {
     /// Write the suggestion into the field through the app's own text
     /// setting or typing, so its Undo takes it back (FieldWriter), then
     /// lint again (B1 step 5): the text changed, or the lint was stale.
-    private func apply(_ suggestion: GrammarLint.Suggestion, to lint: GrammarLint, word: String) {
+    private func apply(_ suggestion: WritingSuggestion, to lint: WritingIssue, word: String) {
         guard let field, let app = FrontField.shared.app else { return }
         let replacement: String
         switch suggestion {

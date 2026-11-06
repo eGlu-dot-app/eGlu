@@ -3,6 +3,7 @@ import Combine
 import PadCore
 import Security
 import UniformTypeIdentifiers
+import WebEngineCore
 
 /// What every window shares: the spaces and their tabs, the settings, the
 /// pages, and the windows themselves. The iPad's Session, for a Mac.
@@ -96,7 +97,7 @@ final class Session: ObservableObject {
     /// tests give one of theirs to a `Pages` of their own, never to a second
     /// Session, which would open and write the same workspace.
     private init() {
-        let engine = AppWebKitEngine()
+        let engine = EngineComposition.makePageEngine()
         self.engine = engine
         pages = Pages(engine: engine)
         let opened = store.open()
@@ -392,7 +393,7 @@ final class Session: ObservableObject {
         guard workspace.spaceID(of: tab) == space else { return }
         let old = keepingOld ? pages.live[tab] : nil
         let kept = old.flatMap { page in
-            page.view.url.flatMap { address in page.view.interactionState.map { Replaced(space: space, url: address, state: $0) } }
+            page.state.url.flatMap { address in page.restorationData.map { Replaced(space: space, url: address, state: $0) } }
         }
         // The old site's name goes too: the new page names itself.
         change { $0.record(tab, url: url, title: "") }
@@ -465,7 +466,7 @@ final class Session: ObservableObject {
         // Its extensions and their data first: WebKit won't remove a store
         // that an extension controller still holds.
         Extensions.shared.removeSpace(id)
-        Stores.erase(id)
+        engine.eraseStore(space: id)
         HistoryRecorder.shared.removeSpace(id)
     }
 
@@ -632,5 +633,18 @@ extension SiteIcons {
     /// folder of its own (EGLU_DATA_ROOT) leaves the Caches folder alone:
     /// out of the sandbox, it is the real app's too.
     static let shared = SiteIcons(data: Session.folder,
-                                  caches: Session.dataRootOverride == nil ? .cachesDirectory : nil)
+                                  caches: Session.dataRootOverride == nil ? .cachesDirectory : nil,
+                                  rasterizer: Session.shared.engine.svgRasterizer)
+}
+
+extension Downloads {
+    static func retryStarter(space: UUID) -> any WebDownloadStarting {
+        Session.shared.engine.downloadStarter(space: space)
+    }
+}
+
+extension ContentBlocker {
+    static func makeRuleStore() -> (any WebRuleListStore)? {
+        Session.shared.engine.ruleListStore()
+    }
 }

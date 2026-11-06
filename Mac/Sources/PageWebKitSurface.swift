@@ -6,7 +6,7 @@ import WebEngineAppKit
 final class PageWebKitSurface: WebEngineSurface {
     let view: NSView
 
-    init(view: PageView) {
+    init(view: NSView) {
         self.view = view
     }
 

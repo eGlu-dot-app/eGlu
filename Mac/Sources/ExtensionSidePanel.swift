@@ -1,7 +1,7 @@
 import AppKit
 import PadCore
 import SwiftUI
-import WebKit
+import WebEngineAppKit
 
 /// `chrome.sidePanel`, which WebKit lacks: an extension's own page in a
 /// card beside the page's, as Chrome shows one beside its tab
@@ -28,14 +28,14 @@ final class ExtensionSidePanels: ObservableObject {
 
     @MainActor final class Panel: ObservableObject, Identifiable {
         let id = UUID()
-        let surface: ExtensionSurface
+        let surface: any WebExtensionSurface
         /// The page it was opened at, which its own links may have left.
         let entry: URL
         let name: String
         let icon: NSImage?
         weak var window: WindowModel?
 
-        init(surface: ExtensionSurface, entry: URL, name: String, icon: NSImage?, window: WindowModel) {
+        init(surface: any WebExtensionSurface, entry: URL, name: String, icon: NSImage?, window: WindowModel) {
             self.surface = surface
             self.entry = entry
             self.name = name
@@ -81,25 +81,23 @@ final class ExtensionSidePanels: ObservableObject {
     func opensOnAction(_ id: String, in space: UUID) -> Bool { onAction.contains(key(id, space)) }
 
     private func defaultPath(_ id: String, in space: UUID) -> String? {
-        let manifest = Extensions.shared.context(id, in: space)?.webExtension.manifest
-        return (manifest?["side_panel"] as? [String: Any])?["default_path"] as? String
+        Extensions.shared.sidePanelDefaultPath(id, in: space)
     }
 
     // MARK: Showing it
 
     /// Its page for the tab on screen in the window, if it has one and is on there.
     func open(_ id: String, in window: WindowModel) {
-        guard let context = Extensions.shared.context(id, in: window.spaceID) else { return }
+        guard let source = Extensions.shared.sidePanelSource(id, in: window.spaceID) else { return }
         let asked = options(id, in: window.spaceID, tab: window.tabID)
         guard asked["enabled"] as? Bool != false, let path = asked["path"] as? String,
-              let url = URL(string: path, relativeTo: context.baseURL)?.absoluteURL else { return }
+              let url = source.entry(path) else { return }
         // The same page kept, wherever its own links have taken it.
         if let open = panel(in: window), open.surface.extensionID == id, open.entry == url { return }
         close(in: window)
-        guard let surface = ExtensionSurface(url, for: context, in: window.spaceID) else { return }
-        let package = context.webExtension
-        let panel = Panel(surface: surface, entry: url, name: package.displayName ?? id,
-                          icon: package.icon(for: CGSize(width: 32, height: 32)), window: window)
+        guard let page = source.makePage(url, window.spaceID) else { return }
+        let surface = page.surface
+        let panel = Panel(surface: surface, entry: url, name: page.name, icon: page.icon, window: window)
         let key = ObjectIdentifier(window)
         surface.onClose = { [weak self, weak panel] in
             guard let self, let panel, self.shown[key] === panel else { return }
@@ -205,7 +203,7 @@ struct ExtensionSidePanelView: View {
                 }
                 .padding(.horizontal, 12)
                 .frame(height: 36)
-                SurfaceView(web: panel.surface.web)
+                SurfaceView(surface: panel.surface)
                     .id(panel.id)
             }
             .frame(width: width)

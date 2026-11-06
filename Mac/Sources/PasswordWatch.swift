@@ -1,5 +1,5 @@
 import Foundation
-import WebKit
+import WebEngineCore
 
 /// Whether the page on screen has a password field, as the iPad's bridge.js
 /// tells its page (SignIn.swift): such a page is a sign-in page wherever it
@@ -7,7 +7,7 @@ import WebKit
 /// (PageHistory.signInFound). The Mac runs no bridge.js, so this script,
 /// in the app's own world where the page can't reach it, does that part.
 @MainActor
-final class PasswordWatch: NSObject, WKScriptMessageHandler {
+final class PasswordWatch {
     static let name = "egluPassword"
 
     /// Looks again a little after the page changes; off screen only for the
@@ -25,7 +25,7 @@ final class PasswordWatch: NSObject, WKScriptMessageHandler {
         const present = !!document.querySelector('input[type="password" i]');
         if (present === password) return;
         password = present;
-        window.webkit.messageHandlers.\(name).postMessage({ present });
+        globalThis.egluBridge.post("\(name)", { present });
       }
       const loaded = Date.now();
       function soon() {
@@ -46,11 +46,9 @@ final class PasswordWatch: NSObject, WKScriptMessageHandler {
         self.page = page
     }
 
-    nonisolated func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
-        MainActor.assumeIsolated {
-            guard let page, message.frameInfo.isMainFrame, message.world == Page.world,
-                  let body = message.body as? [String: Any], let present = body["present"] as? Bool else { return }
-            page.password(present)
-        }
+    func received(_ message: WebMessage) {
+        guard let page, message.isMainFrame, message.world == .app,
+              let body = message.body.foundation as? [String: Any], let present = body["present"] as? Bool else { return }
+        page.password(present)
     }
 }

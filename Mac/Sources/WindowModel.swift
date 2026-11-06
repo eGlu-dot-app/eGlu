@@ -1,5 +1,5 @@
 import AppKit
-import Engines
+import WritingServiceKit
 import PadCore
 import SwiftUI
 import WebEngineCore
@@ -199,7 +199,7 @@ final class WindowModel: ObservableObject, PageHost {
         case "writingPanel":
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                 let json = #"{"start":0,"end":4,"rule":"SpellCheck","kind":"Spelling","message":"Did you mean to spell `IPTV` this way?","priority":0,"suggestions":[],"context":"IPTV"}"#
-                guard let lint = try? JSONDecoder().decode(GrammarLint.self, from: Data(json.utf8)),
+                guard let lint = try? JSONDecoder().decode(WritingIssue.self, from: Data(json.utf8)),
                       let frame = self.window?.frame, let screen = self.window?.screen ?? NSScreen.main else { return }
                 let rect = CGRect(x: frame.midX - 20, y: screen.frame.maxY - frame.midY, width: 40, height: 18)
                 WritingPanel.shared.show(lint: lint, at: rect, suggestions: ["IP's", "Int", "Iota"],
@@ -322,7 +322,6 @@ final class WindowModel: ObservableObject, PageHost {
     /// The page's state, read again for the sidebar and the card.
     func refresh() {
         let record = tab
-        let view = page?.view
         let state = page?.state
         url = page?.displayURL ?? record?.url
         title = state?.title.flatMap { $0.isEmpty ? nil : $0 } ?? record?.label ?? ""
@@ -333,7 +332,7 @@ final class WindowModel: ObservableObject, PageHost {
         secure = page?.failure == nil && url?.scheme == "https" && (state?.hasOnlySecureContent ?? true)
         failure = page?.failure
         statusCode = page?.statusCode
-        zoom = Double(view?.pageZoom ?? 1)
+        zoom = page?.pageZoom ?? 1
         window?.title = record == nil ? (space?.name ?? "eGlu") : title
         syncPeek()
     }
@@ -467,7 +466,7 @@ final class WindowModel: ObservableObject, PageHost {
             withAnimation(.bar) { show(tab: record.id, inSpace: spaceID) }
             newTabOpened = record.id
         } else if replacing, let record = tab, record.id == newTabOpened, !record.isPinned, record.url != url,
-                  Extensions.shared.isNewTabPage(record.url, in: spaceID), session.pages.live[record.id]?.view.canGoBack != true {
+                  Extensions.shared.isNewTabPage(record.url, in: spaceID), session.pages.live[record.id]?.state.canGoBack != true {
             // The new tab ⌘T just opened, another extension's page still
             // where it opened (a yes to the question as it opened): this
             // one's page in its place, not a second new tab. Any other tab
@@ -994,11 +993,11 @@ final class WindowModel: ObservableObject, PageHost {
         let beside = split && peekCanSplit
         guard let peek, let opener = peek.opener, let space = session.workspace.spaceID(of: opener.tab),
               let child = peek.handOver() else { return }
-        let url = child.view.url ?? peek.url
+        let url = child.state.url ?? peek.url
         session.pages.adopt(child)
         let opened = session.change { workspace -> Bool in
             guard workspace.openTab(url, in: space, after: opener.tab, id: child.tab) != nil else { return false }
-            workspace.record(child.tab, url: nil, title: child.view.title)
+            workspace.record(child.tab, url: nil, title: child.state.title)
             if beside { workspace.split(opener.tab, with: child.tab) }
             return true
         }
@@ -1016,7 +1015,7 @@ final class WindowModel: ObservableObject, PageHost {
     /// Whether Handoff can be asked for here: on in Settings, on a Mac with
     /// Apple Intelligence, for a page that isn't hands-off.
     var canHandoff: Bool {
-        canHandoffFiles && page?.view.url != nil && page?.isHandsOff == false
+        canHandoffFiles && page?.state.url != nil && page?.isHandsOff == false
     }
 
     /// Whether a file can be handed off from here: a chosen or dropped one,
@@ -1052,7 +1051,7 @@ final class WindowModel: ObservableObject, PageHost {
                 chosen = file
             } else {
                 // Asked after the wait: the page may have gone, or another taken its place.
-                guard let page, self.page === page, !page.isHandsOff, page.view.url != nil else { return }
+                guard let page, self.page === page, !page.isHandsOff, page.state.url != nil else { return }
                 chosen = page
             }
             handoffChoosing = false
@@ -1149,9 +1148,9 @@ final class WindowModel: ObservableObject, PageHost {
     /// A developer tool's button or key. WebKit opens the inspector itself
     /// where it answers the private calls; where it doesn't, the way is
     /// Safari's Develop menu, said once in a toast.
-    func showInspector(_ part: WebInspector.Part) {
-        guard let view = toolsPage?.view else { return }
-        if !WebInspector.show(part, for: view) {
+    func showInspector(_ part: WebDeveloperTool) {
+        guard let page = toolsPage else { return }
+        if !page.showDeveloperTool(part) {
             show(ActionToast(symbol: "hammer", text: WebInspector.unavailable))
         }
     }
@@ -1293,7 +1292,7 @@ final class WindowModel: ObservableObject, PageHost {
             if let window { Session.shared.chooseBookmarksFile(into: spaceID, in: window) }
         case .inspector: showInspector(.inspector)
         case .console: showInspector(.console)
-        case .selectElement: showInspector(.elements)
+        case .selectElement: showInspector(.elementSelection)
         case .elementPicture: elementPicture()
         case .reloadOrigin: toolsPage?.reloadFromOrigin()
         case .measure: page?.toggleMeasuring()
@@ -1372,7 +1371,7 @@ final class WindowModel: ObservableObject, PageHost {
     /// "Handoff Linked File" in the page's menu: fetched through the
     /// tab's own view and read as the document it is.
     func page(_ page: Page, handOffFileAt url: URL) {
-        startHandoff(source: DocumentSource(link: url, view: page.view))
+        startHandoff(source: DocumentSource(link: url, downloads: page.downloadStarter))
     }
 
     // MARK: PageHost

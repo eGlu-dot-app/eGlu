@@ -230,6 +230,7 @@ final class PolicyTests: XCTestCase {
             "WebKitEngine/Sources",
             "WritingServiceKit/Sources",
             "DocumentServiceKit/Sources",
+            "EnginePlugins/Sources",
             "HarperPlugin/Sources",
             "DocumentsPlugin/Sources",
         ]
@@ -253,64 +254,138 @@ final class PolicyTests: XCTestCase {
 
     /// On the iPad (App/) and on the Mac (Mac/), each with a Page.swift of its
     /// own; in what both compile (Shared/), only PageShared.swift, the half of
-    /// Page.swift the two share. SVGRaster.swift, there,
-    /// calls into a page of the app's own, where sites' SVG icons are drawn:
-    /// it may, so long as that page is never a site's. So may the Mac's
+    /// Page.swift the two share. In the WebKit plugin's support code, which
+    /// both link, WebKitSVGRaster.swift calls into a page of the
+    /// app's own, where sites' SVG icons are drawn, and may, so long as that
+    /// page is never a site's; WebKitHiddenPage.swift calls the reader of
+    /// PageShared.swift's Unseen, in the app's world only, on a site page
+    /// Unseen has asked HandsOff about and whose steps it decides.
+    /// WebKitFilterScripts.swift adds only the two scripts its owner gives
+    /// it, in their own worlds, at document start in the main frame; and
+    /// WebKitPageScripts.swift is the Mac Page's own way into its page,
+    /// passing on only the scripts and calls Page.swift gives it. On the
+    /// Mac, WebKitExtensions' ExtensionCapture.swift calls only an
+    /// extension's own page, for its recording. So may WebKitExtensions'
     /// ExtensionBlankPage.swift, an empty page of the app's own at a removed
-    /// extension's address, where what it kept is cleared; and its
-    /// ExtensionPopup.swift, whose views (an extension's popup and side
+    /// extension's address, where what it kept is cleared; and the runtime's
+    /// ExtensionSurface.swift, whose views (an extension's popup and side
     /// panel) only ever load that extension's own pages.
     func testOnlyPageSwiftCallsIntoPagesAndItAsksHandsOffFirst() throws {
-        let ownPage = "SVGRaster.swift"
         let sharedPage = "PageShared.swift"
         let blank = "ExtensionBlankPage.swift"
-        let surface = "ExtensionPopup.swift"
+        let surface = "ExtensionSurface.swift"
+        let capture = "ExtensionCapture.swift"
         for folder in ["App", "Mac", "Shared"] {
             let swift = try sources(in: folder, ending: ".swift")
-            if let page = swift.first(where: { $0.0 == blank })?.1 {
-                XCTAssertTrue(page.contains("loadHTMLString(\"<!doctype html>\", baseURL: base)") && page.contains("base.scheme == Extensions.scheme"),
-                              "\(blank)'s page must be an empty one at an extension's own address")
-                for load in ["load(URLRequest", ".load(", "loadFileURL", "addUserScript", "evaluateJavaScript"] {
-                    XCTAssertFalse(page.contains(load), "\(blank) must never load a site or add a script to one")
-                }
-            }
-            if let page = swift.first(where: { $0.0 == surface })?.1 {
-                XCTAssertTrue(page.contains("guard url.scheme == Extensions.scheme, url.host() == context.uniqueIdentifier"),
-                              "\(surface)'s views must load only their extension's own pages")
-                for load in ["loadHTMLString", "loadFileURL", "addUserScript"] {
-                    XCTAssertFalse(page.contains(load), "\(surface) must never load a site or add a script to one")
-                }
-            }
-            // The first-seconds checks try content scripts on an empty page
-            // at a reserved address, never a site, and only the extension's
-            // own popup and settings page.
-            if let trial = swift.first(where: { $0.0 == "ExtensionTrial.swift" })?.1 {
-                XCTAssertTrue(trial.contains("loadHTMLString(\"<!doctype html>\", baseURL: testPage)")
-                              && trial.contains("static let testPage = URL(string: \"https://test.eglu.invalid/\")!"),
-                              "ExtensionTrial.swift's test page must be an empty one at a .invalid address")
-                XCTAssertTrue(trial.contains("url.scheme == Extensions.scheme, url.host() == id"),
-                              "ExtensionTrial.swift must load only the extension's own pages")
-                XCTAssertFalse(trial.contains("loadFileURL"), "ExtensionTrial.swift must never load a file")
-            }
             let pageFile = folder == "Shared" ? sharedPage : "Page.swift"
-            for (name, text) in swift where name != pageFile && name != ownPage && name != blank && name != surface {
+            for (name, text) in swift where name != pageFile {
                 for call in ["evaluateJavaScript", "callAsyncJavaScript", "addUserScript"] {
                     XCTAssertFalse(text.contains(call), "\(folder)/\(name) calls \(call); calls into pages go through Page.swift")
                 }
             }
-            if let raster = swift.first(where: { $0.0 == ownPage })?.1 {
-                XCTAssertTrue(raster.contains("loadHTMLString(") && raster.contains("baseURL: nil"),
-                              "\(ownPage)'s page must be the app's own, with no site for its origin")
-                for load in ["load(URLRequest", ".load(", "loadFileURL", "addUserScript"] {
-                    XCTAssertFalse(raster.contains(load), "\(ownPage) must never load a site or add a script to one")
-                }
-            }
-            if folder == "Shared" {
-                XCTAssertNotNil(swift.first { $0.0 == ownPage }, "Shared/ has no \(ownPage)")
-            }
             let text = try XCTUnwrap(swift.first { $0.0 == pageFile }?.1, "\(folder) has no \(pageFile)")
             XCTAssertTrue(text.contains("HandsOff.covers"), "\(folder)/\(pageFile) doesn't ask HandsOff")
         }
+        let ownPage = "WebKitSVGRaster.swift"
+        let hiddenPage = "WebKitHiddenPage.swift"
+        let filterScripts = "WebKitFilterScripts.swift"
+        let pageScripts = "WebKitPageScripts.swift"
+        let support = try sources(in: "WebKitEngine/Sources", ending: ".swift")
+        do {
+            let page = try XCTUnwrap(support.first(where: { $0.0 == capture })?.1, "WebKitEngine has no \(capture)")
+            XCTAssertEqual(page.components(separatedBy: "guard web.url?.scheme?.lowercased() == scheme").count - 1, 2,
+                           "\(capture)'s two calls must each be into an extension's own page")
+            XCTAssertEqual(page.components(separatedBy: "JavaScript(").count - 1, 2,
+                           "\(capture) must call into pages only in its two extension helpers")
+            for load in ["addUserScript", "loadHTMLString", "loadFileURL", ".load("] {
+                XCTAssertFalse(page.contains(load), "\(capture) must never load a page or add a script to one")
+            }
+        }
+        do {
+            let page = try XCTUnwrap(support.first(where: { $0.0 == surface })?.1, "WebKitEngine has no \(surface)")
+            XCTAssertTrue(page.contains("guard url.scheme == scheme, url.host() == extensionID"),
+                          "\(surface)'s views must load only their extension's own pages")
+            for load in ["loadHTMLString", "loadFileURL", "addUserScript"] {
+                XCTAssertFalse(page.contains(load), "\(surface) must never load a site or add a script to one")
+            }
+        }
+        do {
+            let page = try XCTUnwrap(support.first(where: { $0.0 == blank })?.1, "WebKitEngine has no \(blank)")
+            XCTAssertTrue(page.contains("loadHTMLString(\"<!doctype html>\", baseURL: base)") && page.contains("base.scheme == scheme"),
+                          "\(blank)'s page must be an empty one at an extension's own address")
+            for load in ["load(URLRequest", ".load(", "loadFileURL", "addUserScript", "evaluateJavaScript"] {
+                XCTAssertFalse(page.contains(load), "\(blank) must never load a site or add a script to one")
+            }
+        }
+        // The first-seconds checks try content scripts on an empty page
+        // at a reserved address, never a site, and only the extension's
+        // own popup and settings page.
+        do {
+            let trial = try XCTUnwrap(support.first(where: { $0.0 == "ExtensionTrial.swift" })?.1, "WebKitEngine has no ExtensionTrial.swift")
+            XCTAssertTrue(trial.contains("loadHTMLString(\"<!doctype html>\", baseURL: testPage)")
+                          && trial.contains("static let testPage = URL(string: \"https://test.eglu.invalid/\")!"),
+                          "ExtensionTrial.swift's test page must be an empty one at a .invalid address")
+            XCTAssertTrue(trial.contains("url.scheme == scheme, url.host() == id"),
+                          "ExtensionTrial.swift must load only the extension's own pages")
+            XCTAssertFalse(trial.contains("loadFileURL"), "ExtensionTrial.swift must never load a file")
+        }
+        for (name, text) in support where name != ownPage && name != hiddenPage && name != filterScripts && name != pageScripts && name != blank && name != surface && name != capture && name != "ExtensionTrial.swift" {
+            for call in ["evaluateJavaScript", "callAsyncJavaScript", "addUserScript"] {
+                XCTAssertFalse(text.contains(call), "WebKitEngine's \(name) calls \(call)")
+            }
+        }
+        let raster = try XCTUnwrap(support.first { $0.0 == ownPage }?.1, "WebKitEngine has no \(ownPage)")
+        XCTAssertTrue(raster.contains("loadHTMLString(") && raster.contains("baseURL: nil"),
+                      "\(ownPage)'s page must be the app's own, with no site for its origin")
+        for load in ["load(URLRequest", ".load(", "loadFileURL", "addUserScript"] {
+            XCTAssertFalse(raster.contains(load), "\(ownPage) must never load a site or add a script to one")
+        }
+        let hidden = try XCTUnwrap(support.first { $0.0 == hiddenPage }?.1, "WebKitEngine has no \(hiddenPage)")
+        XCTAssertTrue(hidden.contains("contentWorld: appWorld") && hidden.contains("guard allows(url)"),
+                      "\(hiddenPage) must call only in the app's world and load only what its owner allows")
+        for call in ["evaluateJavaScript", "addUserScript", "loadFileURL", "loadHTMLString"] {
+            XCTAssertFalse(hidden.contains(call), "\(hiddenPage) must not \(call)")
+        }
+        // The Mac Page's own scripting passes on what Page.swift gives it:
+        // no script of its own (no string literal but the import lines'),
+        // no load, and the main frame only (WebKit's nil frame).
+        let scripting = try XCTUnwrap(support.first { $0.0 == pageScripts }?.1, "WebKitEngine has no \(pageScripts)")
+        XCTAssertFalse(scripting.contains("\""), "\(pageScripts) must add or call only the scripts it is given")
+        for load in ["loadHTMLString", "loadFileURL", ".load("] {
+            XCTAssertFalse(scripting.contains(load), "\(pageScripts) must never load a page")
+        }
+        XCTAssertEqual(scripting.components(separatedBy: ".evaluateJavaScript(").count
+                       + scripting.components(separatedBy: ".callAsyncJavaScript(").count - 2,
+                       scripting.components(separatedBy: "in: nil").count - 1,
+                       "\(pageScripts) must call into the main frame only")
+        let filters = try XCTUnwrap(support.first { $0.0 == filterScripts }?.1, "WebKitEngine has no \(filterScripts)")
+        // Check the whole helper, apart from comments and whitespace: no
+        // other script, world, frame, injection time or page call is allowed.
+        let expectedFilters = """
+            import WebKit
+            extension WKUserContentController {
+                @MainActor
+                public func addFilterScripts(blocker: String?, scriptlets: String?, appWorld: WKContentWorld) {
+                    if let script = blocker {
+                        addUserScript(WKUserScript(source: script, injectionTime: .atDocumentStart,
+                                                   forMainFrameOnly: true, in: appWorld))
+                    }
+                    if let script = scriptlets {
+                        addUserScript(WKUserScript(source: script, injectionTime: .atDocumentStart,
+                                                   forMainFrameOnly: true, in: .page))
+                    }
+                }
+            }
+            """
+        func code(_ text: String) -> [Substring] {
+            text.split(separator: "\n").filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+                .flatMap { $0.split(whereSeparator: \.isWhitespace) }
+        }
+        XCTAssertEqual(code(filters), code(expectedFilters),
+                       "\(filterScripts) must only add the given blocker and scriptlets, in that order and in their worlds")
+        let unseen = try XCTUnwrap(try sources(in: "Shared", ending: ".swift").first { $0.0 == sharedPage }?.1)
+        XCTAssertTrue(unseen.contains("guard !HandsOff.covers(url), await hidden.begin("),
+                      "Unseen must ask HandsOff before its hidden page loads")
     }
 
     /// What Apple's browser entitlement asks of the app

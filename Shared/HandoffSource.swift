@@ -36,8 +36,14 @@ extension Handoff {
 }
 
 extension Page: HandoffSource {
+    #if os(macOS)
+    // The engine page's own address and title (WebKit's, read through the plugin).
+    var address: URL? { state.url }
+    var title: String { state.title ?? "" }
+    #else
     var address: URL? { view.url }
     var title: String { view.title ?? "" }
+    #endif
     var isFile: Bool { false }
     /// A PDF read as a document is a file's facts (handoffDocument).
     var file: FileFacts? { handoffDocument?.file }

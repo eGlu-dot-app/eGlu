@@ -321,8 +321,8 @@ private struct ExtensionDetail: View {
         }
         // Its commands' keys, none until you give one (ExtensionKeys);
         // from its manifest while it is on in no space.
-        let commands = extensions.contexts.values.compactMap { $0[item.id] }.first
-            .map { $0.commands.map { ExtensionManifest.Command(id: $0.id, title: $0.title) } }
+        let commands = extensions.commands(of: item.id)
+            .map { $0.map { ExtensionManifest.Command(id: $0.id, title: $0.title) } }
             ?? ExtensionKeys.shared.declaredCommands(of: item)
         if !commands.isEmpty {
             Section {

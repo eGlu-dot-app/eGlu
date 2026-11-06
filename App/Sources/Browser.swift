@@ -3200,7 +3200,7 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
     /// "Handoff Linked File" in a link's menu: fetched through the tab's
     /// own view and read as the document it is.
     func page(_ page: Page, handOffFileAt url: URL) {
-        handoff(source: DocumentSource(link: url, view: page.view))
+        handoff(source: DocumentSource(link: url, downloads: page.downloadStarter))
     }
 
     /// "Handoff" beside a finished download: the sheet goes first, since

@@ -1,6 +1,6 @@
 import Combine
 import PadCore
-import WebKit
+import WebEngineCore
 #if os(macOS)
 import AppKit
 #else
@@ -25,7 +25,7 @@ final class ContentBlocker: ObservableObject {
     static let shared = ContentBlocker()
 
     /// The compiled lists, in the order a page gets them.
-    private(set) var lists: [WKContentRuleList] = []
+    private(set) var lists: [any WebRuleList] = []
     /// The filters for the script in a site's pages.
     private(set) var scripted = ScriptedTable()
     /// What Settings and Diagnostics say about it.
@@ -49,7 +49,7 @@ final class ContentBlocker: ObservableObject {
         case ready(made: Date?, rules: Int)
     }
 
-    private let store = WKContentRuleListStore.default()
+    private let store: (any WebRuleListStore)? = ContentBlocker.makeRuleStore()
     private var saved = Saved()
     private var building = false
     /// The lists the build now running is making rules from, by id.
@@ -239,10 +239,10 @@ final class ContentBlocker: ObservableObject {
         guard let store else { return false }
         // Made from no lists at all (every one turned off): nothing to look up, and nothing missing.
         if saved.identifiers.isEmpty { return saved.used.isEmpty }
-        var found: [WKContentRuleList] = []
+        var found: [any WebRuleList] = []
         for id in saved.identifiers {
-            guard let list = await withCheckedContinuation({ (done: CheckedContinuation<WKContentRuleList?, Never>) in
-                store.lookUpContentRuleList(forIdentifier: id) { list, _ in done.resume(returning: list) }
+            guard let list = await withCheckedContinuation({ (done: CheckedContinuation<(any WebRuleList)?, Never>) in
+                store.lookUp(forIdentifier: id) { list, _ in done.resume(returning: list) }
             }) else { return false }
             found.append(list)
         }
@@ -324,13 +324,13 @@ final class ContentBlocker: ObservableObject {
             }
             return Made(plan: planner.plan(), table: table, stamps: planner.stamps, counts: planner.kept, expires: planner.expires)
         }.value
-        var compiled: [WKContentRuleList] = []
+        var compiled: [any WebRuleList] = []
         var rules = 0
         var dropped = 0
         for index in made.plan.entries.indices {
             let planned = await Task.detached(priority: .utility) { made.plan.list(index) }.value
-            let list = await withCheckedContinuation { (done: CheckedContinuation<WKContentRuleList?, Never>) in
-                store.compileContentRuleList(forIdentifier: planned.id, encodedContentRuleList: planned.json) { list, _ in
+            let list = await withCheckedContinuation { (done: CheckedContinuation<(any WebRuleList)?, Never>) in
+                store.compile(forIdentifier: planned.id, encodedRules: planned.json) { list, _ in
                     done.resume(returning: list)
                 }
             }
@@ -343,7 +343,7 @@ final class ContentBlocker: ObservableObject {
         }
         lists = compiled
         scripted = made.table
-        saved.identifiers = compiled.compactMap(\.identifier)
+        saved.identifiers = compiled.map(\.identifier)
         saved.used = used.map(\.id)
         // The lists' own rules, each once: the rule lists hold more, since
         // every list of blocking ends with the exceptions again.
@@ -362,11 +362,7 @@ final class ContentBlocker: ObservableObject {
     /// Lists compiled from older versions, gone from the disk.
     private func removeOld(keeping: Set<String>) {
         guard let store else { return }
-        store.getAvailableContentRuleListIdentifiers { identifiers in
-            for id in identifiers ?? [] where id.hasPrefix("blocking.") && !keeping.contains(id) {
-                store.removeContentRuleList(forIdentifier: id) { _ in }
-            }
-        }
+        store.removeOld(withPrefix: "blocking.", keeping: keeping)
     }
 
     /// Every page takes the new lists for its next load; Settings and

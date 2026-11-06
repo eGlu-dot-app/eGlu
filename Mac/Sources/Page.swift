@@ -3,8 +3,6 @@ import PadCore
 import UniformTypeIdentifiers
 import WebEngineAppKit
 import WebEngineCore
-import WebKit
-import WebKitMacPlugin
 
 /// What a page asks of whoever is showing it: a window (WindowModel), a
 /// Peek over a tab (PeekPage), a little window (LittleWindow) or a sign-in
@@ -31,102 +29,9 @@ protocol PageHost: AnyObject {
     var hostWindow: NSWindow? { get }
 }
 
-/// A page's web view: WebKit's, with its menu saying "Tab" where WebKit's says
-/// "Window", since a page asking for a window gets a tab here as in Safari.
 extension PageHost {
     func page(_ page: Page, handOffFileAt url: URL) {}
     var takesHandoffFiles: Bool { false }
-}
-
-final class PageView: WKWebView {
-    weak var page: Page?
-
-    private static let renamed: [String: String] = [
-        "WKMenuItemIdentifierOpenLinkInNewWindow": String(localized: "Open Link in New Tab"),
-        "WKMenuItemIdentifierOpenImageInNewWindow": String(localized: "Open Image in New Tab"),
-        "WKMenuItemIdentifierOpenMediaInNewWindow": String(localized: "Open Video in New Tab"),
-        "WKMenuItemIdentifierOpenFrameInNewWindow": String(localized: "Open Frame in New Tab"),
-    ]
-
-    /// One of WebKit's items for an extension: its own class, the one
-    /// mark WebKit gives them.
-    static func isExtensionItem(_ item: NSMenuItem) -> Bool {
-        NSStringFromClass(type(of: item)) == "_WKWebExtensionMenuItem"
-    }
-
-    override func willOpenMenu(_ menu: NSMenu, with event: NSEvent) {
-        for item in menu.items {
-            if let id = item.identifier?.rawValue, let title = Self.renamed[id] { item.title = title }
-        }
-        // Open Link in Peek, after Open Link in New Tab, on a page in a
-        // window's tab: WebKit's own item for the link under the pointer,
-        // with the window it opens made a Peek (Page.peekAsked).
-        if let page, page.canPeek, !page.isHandsOff,
-           let newTab = menu.items.first(where: { $0.identifier?.rawValue == "WKMenuItemIdentifierOpenLinkInNewWindow" }) {
-            let item = NSMenuItem(title: String(localized: "Open Link in Peek"), action: #selector(openLinkInPeek(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = newTab
-            menu.insertItem(item, at: menu.index(of: newTab) + 1)
-            // Handoff Linked File, after it, for a link to a file eGlu
-            // reads, where the window's Handoff is on (takesHandoffFiles).
-            // The link's address comes from the context menu's own element
-            // (Page.linkForMenu): WebKit's items carry none.
-            if let link = page.linkForMenu, DocumentSource.linkExtensions.contains(link.pathExtension.lowercased()),
-               page.host?.takesHandoffFiles == true, !page.isHandsOff {
-                let off = NSMenuItem(title: String(localized: "Handoff Linked File"),
-                                     action: #selector(handOffLinkedFile(_:)), keyEquivalent: "")
-                off.target = self
-                off.representedObject = link
-                menu.insertItem(off, at: menu.index(of: item) + 1)
-            }
-        }
-        // WebKit puts the extensions' own items (contextMenus) in itself,
-        // after the page's; on Google's sign-in they are taken out, with
-        // the line WebKit drew above them.
-        if page?.isHandsOff == true {
-            for item in menu.items.reversed() where Self.isExtensionItem(item) {
-                let index = menu.index(of: item)
-                menu.removeItem(item)
-                if index > 0, menu.items[index - 1].isSeparatorItem,
-                   index == menu.items.count || menu.items[index].isSeparatorItem {
-                    menu.removeItem(at: index - 1)
-                }
-            }
-        }
-        super.willOpenMenu(menu, with: event)
-    }
-
-    @objc private func handOffLinkedFile(_ sender: NSMenuItem) {
-        guard let link = sender.representedObject as? URL, let page else { return }
-        page.host?.page(page, handOffFileAt: link)
-    }
-
-    @objc private func openLinkInPeek(_ sender: NSMenuItem) {
-        guard let newTab = sender.representedObject as? NSMenuItem, let action = newTab.action else { return }
-        page?.peekAsked = Date()
-        NSApp.sendAction(action, to: newTab.target, from: newTab)
-    }
-
-    /// Two fingers on the trackpad: the swipe back and forward's first
-    /// (PageSwipe), and the page's whatever the swipe doesn't take.
-    override func scrollWheel(with event: NSEvent) {
-        if page?.swipe?.scrolled(event) == true { return }
-        super.scrollWheel(with: event)
-    }
-
-    /// Three fingers sideways, where System Settings has those swipe between pages.
-    override func swipe(with event: NSEvent) {
-        if page?.swipe?.swiped(event) == true { return }
-        super.swipe(with: event)
-    }
-
-    /// Off the screen (another tab shown, another window's), or onto it: a
-    /// swipe under way is called off, its arrow with it.
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        page?.swipe?.callOff()
-        if window == nil, let page { ApplePasswordsCard.shared.left(page) }
-    }
 }
 
 /// One tab's page while it is live: its web view, the content blocker's
@@ -139,28 +44,50 @@ final class PageView: WKWebView {
 /// may (PolicyTests keeps it that way).
 @MainActor
 final class Page: NSObject {
-    /// The app's own content world: what it asks a page lives here, out of the page's sight.
-    static let world = WKContentWorld.world(name: "eGlu")
-
     let tab: UUID
     let space: UUID
-    let view: PageView
+    let enginePage: any WebMacPage
     /// The same view, for hosts to place, move and give the keys.
-    private(set) lazy var surface: any WebEngineSurface = PageWebKitSurface(view: view)
-    private var navigationAdapter: WebKitNavigationAdapter!
-    private let controller: WKUserContentController
+    private(set) lazy var surface: any WebEngineSurface = PageWebKitSurface(view: enginePage.contentView)
+    private let channels: any WebMessageChannels
+    private let services: any WebFind & WebZoom & WebMediaCapture & WebUserAgent & WebPrinting & WebDeveloperTools & WebBackForward & WebRestoration & WebDownloadStarting
+    private let ruleListTarget: any WebRuleListTarget
     weak var host: PageHost?
 
     /// What WebKit reports now, without the tab's replacement history.
-    var state: PageState {
-        PageState(url: view.url, title: view.title, isLoading: view.isLoading,
-                  estimatedProgress: view.estimatedProgress, canGoBack: view.canGoBack,
-                  canGoForward: view.canGoForward, hasOnlySecureContent: view.hasOnlySecureContent)
+    var state: PageState { enginePage.state }
+
+    var restorationData: Any? {
+        get { services.restorationData }
+        set {
+            // Restoration only ever supplied a saved state, never nil.
+            guard let newValue else { return }
+            services.restorationData = newValue
+        }
     }
+
+    var pageURL: URL? { enginePage.state.url }
+    var pageTitle: String? { enginePage.state.title }
+
+    func callInAppWorld(_ body: String, arguments: [String: Any]) async throws -> Any? {
+        try await enginePage.scripting.callAsyncJavaScript(body, arguments: arguments, world: .app)
+    }
+
+    func hiddenPage(allowing allows: @escaping @MainActor @Sendable (URL?) -> Bool) -> any WebHiddenPage {
+        enginePage.hiddenPage(ruleLists: blocksContent ? ContentBlocker.shared.lists : [],
+                              allows: allows)
+    }
+
+    var downloadStarter: any WebDownloadStarting { services }
+
+    var pageZoom: Double { services.pageZoom }
+    var magnification: Double { services.magnification }
+
+    func showDeveloperTool(_ tool: WebDeveloperTool) -> Bool { services.show(tool) }
 
     /// Whether Back can use the page's history or the page it replaced.
     var canGoBack: Bool {
-        view.canGoBack || Session.shared.canGoBackPastReplacement(tab)
+        enginePage.state.canGoBack || Session.shared.canGoBackPastReplacement(tab)
     }
 
     /// The site's adapter, for what its own reader can add to a handoff (a
@@ -193,10 +120,13 @@ final class Page: NSObject {
     /// Why the last load failed, to show in place of the page; nil once one loads.
     private(set) var failure: String?
     private var loadState = PageLoadState()
-    var displayURL: URL? { held ?? loadState.displayURL(current: view.url) }
+    var displayURL: URL? { held ?? loadState.displayURL(current: enginePage.state.url) }
     private(set) var refusedAppLink: URL?
     private var pendingDialog: (show: () -> Void, cancel: () -> Void)?
     var hasPendingDialog: Bool { pendingDialog != nil }
+
+    var extensionIsCapturing: Bool { EngineComposition.pageCapture.isCapturing(enginePage.contentView) }
+    func releaseExtensionCapture() { EngineComposition.pageCapture.release(enginePage.contentView) }
 
     func reviewPendingDialog() {
         guard host?.isShowing(self) == true, let pendingDialog else { return }
@@ -215,7 +145,7 @@ final class Page: NSObject {
     private func beginNavigation(_ url: URL?) {
         if held != nil {
             held = nil
-            Extensions.shared.tabs.addressChanged(self)
+            Extensions.shared.adapters.addressChanged(enginePage, tab: tab, in: space)
         }
         cancelPendingDialog()
         loadState.begin(url)
@@ -255,9 +185,6 @@ final class Page: NSObject {
     /// configuration. It stays one: a navigation to a website goes to a new
     /// tab, as one from a website to an extension's page does.
     let isExtensionPage: Bool
-    private var observations: [NSKeyValueObservation] = []
-    /// An extension's page's UI delegate, which the view holds weakly.
-    private var extensionDelegate: ExtensionPageDelegate?
     /// Back and forward by two fingers on the trackpad; nil where WebKit's own swipe has them.
     private(set) var swipe: PageSwipe?
     /// The visit the document on screen is, in its space's history (PageHistory).
@@ -311,78 +238,37 @@ final class Page: NSObject {
         #endif
     }()
 
-    /// `configuration`: supplied by the page engine. A page gets a script
-    /// controller of its own unless it is an extension's page, so scripts
-    /// swapped for one page never touch another's.
-    init(tab: UUID, space: UUID, configuration: WKWebViewConfiguration, extensionPage: Bool = false) {
+    /// The engine made the page from the configuration chosen for this tab.
+    init(tab: UUID, space: UUID, enginePage: any WebMacPage) {
         self.tab = tab
         self.space = space
-        isExtensionPage = extensionPage
-        let config = configuration
-        // An extension's page keeps the controller WebKit made for it.
-        let controller = extensionPage ? config.userContentController : WKUserContentController()
-        config.userContentController = controller
-        self.controller = controller
-        view = PageView(frame: .zero, configuration: config)
+        self.enginePage = enginePage
+        isExtensionPage = enginePage.isExtensionPage
+        channels = enginePage.channels
+        services = enginePage.services
+        ruleListTarget = enginePage.ruleListTarget
         super.init()
-        view.page = self
-        navigationAdapter = WebKitNavigationAdapter(view: view, policy: self, events: self)
-        view.navigationDelegate = navigationAdapter
-        // An extension's page has WebKit's question about recording the
-        // screen answered by eGlu's recording channel (ExtensionCapture).
-        if extensionPage {
-            let delegate = ExtensionPageDelegate(next: self)
-            extensionDelegate = delegate
-            view.uiDelegate = delegate
-        } else {
-            view.uiDelegate = self
-        }
+        enginePage.connect(policy: self, navigation: self, ui: self, presenter: self,
+                           state: self, view: self)
         setUp()
     }
 
     private func setUp() {
-        // A two-finger swipe goes back and forward, after a shorter way than
-        // WebKit's own swipe goes (PageSwipe); WebKit's where this macOS lacks
-        // what that asks of it. A pinch zooms, as in Safari.
-        if PageSwipe.works(on: view) {
-            swipe = PageSwipe(view: view)
-        } else {
-            view.allowsBackForwardNavigationGestures = true
-        }
-        view.allowsMagnification = true
-        view.isInspectable = true
-        observations = [
-            view.observe(\.title) { [weak self] _, _ in MainActor.assumeIsolated { self?.changed() } },
-            view.observe(\.url) { [weak self] _, _ in MainActor.assumeIsolated { self?.changed() } },
-            // How a load is going is the window's to show and not the workspace's to keep.
-            view.observe(\.isLoading) { [weak self] _, _ in
-                MainActor.assumeIsolated {
-                    guard let self else { return }
-                    self.progressed()
-                    Extensions.shared.tabs.loadingChanged(self)
-                }
-            },
-            view.observe(\.estimatedProgress) { [weak self] _, _ in MainActor.assumeIsolated { self?.progressed() } },
-            view.observe(\.canGoBack) { [weak self] _, _ in MainActor.assumeIsolated { self?.wentSomewhere() } },
-            view.observe(\.canGoForward) { [weak self] _, _ in MainActor.assumeIsolated { self?.wentSomewhere() } },
-            view.observe(\.hasOnlySecureContent) { [weak self] _, _ in MainActor.assumeIsolated { self?.progressed() } },
-        ]
         // The Chrome Web Store's button asks through this, from the app's
         // own world (StoreButton).
         if !isExtensionPage {
-            controller.add(StoreButton(page: self), contentWorld: Page.world, name: StoreButton.name)
+            channels.open(StoreButton.name, in: .app) { [store = StoreButton(page: self)] in store.received($0) }
             // A password field on the page, for history (PasswordWatch).
-            controller.add(PasswordWatch(page: self), contentWorld: Page.world, name: PasswordWatch.name)
+            channels.open(PasswordWatch.name, in: .app) { [watch = PasswordWatch(page: self)] in watch.received($0) }
             // Grammar checking's questions to the Mac, from the app's own
             // world (WritingHandler, writing.js).
-            controller.addScriptMessageHandler(WritingHandler(page: self),
-                                               contentWorld: Page.world, name: WritingHandler.name)
-            // The measuring tool's word from the page (MeasureHandler).
-            controller.add(MeasureHandler(page: self), contentWorld: Page.world, name: MeasureHandler.name)
+            channels.open(WritingHandler.name, in: .app) { [writing = WritingHandler(page: self)] in writing.handle($0, reply: $1) }
+            // The measuring tool's word from the page (MeasureChannel).
+            channels.open(MeasureChannel.name, in: .app) { [tool = MeasureChannel(page: self)] in tool.received($0) }
             // Apple Passwords under the sign-in box, only in a build that
             // may run Apple's helper (ApplePasswords).
             if ApplePasswords.entitled {
-                controller.add(ApplePasswordsHandler(page: self), contentWorld: Page.world, name: ApplePasswordsForm.name)
+                channels.open(ApplePasswordsForm.name, in: .app) { [apple = ApplePasswordsHandler(page: self)] in apple.received($0) }
             }
         }
     }
@@ -390,11 +276,11 @@ final class Page: NSObject {
     /// Where the page is, or what it is called, is another: kept, and shown.
     private func changed() {
         Session.shared.pages.navigationChanged(self)
-        if let url = view.url {
-            Session.shared.record(tab, url: url, title: view.title)
+        if let url = enginePage.state.url {
+            Session.shared.record(tab, url: url, title: enginePage.state.title)
         }
-        history.changed(url: view.url, title: view.title, entry: view.backForwardList.currentItem,
-                        loading: view.isLoading, space: space, tab: tab)
+        history.changed(url: enginePage.state.url, title: enginePage.state.title, entry: services.currentEntry,
+                        loading: enginePage.state.isLoading, space: space, tab: tab)
         host?.pageDidChange(self)
     }
 
@@ -417,19 +303,13 @@ final class Page: NSObject {
         ApplePasswordsCard.shared.left(self)
         picture?.close()
         peek?.close()
-        observations.forEach { $0.invalidate() }
-        observations = []
+        enginePage.stopObserving()
         swipe?.stop()
         swipe = nil
-        controller.removeAllUserScripts()
-        blocking.remove(from: controller)
-        if isExtensionPage { ExtensionCapture.shared.release(view) }
-        view.stopLoading()
-        navigationAdapter.tearDown()
-        view.navigationDelegate = nil
-        view.uiDelegate = nil
-        view.page = nil
-        view.removeFromSuperview()
+        enginePage.scripting.removeAllUserScripts()
+        blocking.remove(from: ruleListTarget)
+        if isExtensionPage { releaseExtensionCapture() }
+        enginePage.tearDown()
         host = nil
     }
 
@@ -437,23 +317,23 @@ final class Page: NSObject {
 
     /// Back in WebKit, or past a replaced page when its history is empty.
     func goBack() {
-        if !view.canGoBack, Session.shared.wentBackPastReplacement(tab) { return }
-        view.goBack()
+        if !enginePage.state.canGoBack, Session.shared.wentBackPastReplacement(tab) { return }
+        enginePage.goBack()
     }
 
     /// Forward in the page's own history.
     func goForward() {
-        view.goForward()
+        enginePage.goForward()
     }
 
     /// Stop the load under way.
     func stopLoading() {
-        view.stopLoading()
+        enginePage.stopLoading()
     }
 
     /// Reload from origin without the page's retry or crash reset.
     func reloadFromOrigin() {
-        view.reloadFromOrigin()
+        enginePage.reloadFromOrigin()
     }
 
     func load(_ url: URL) {
@@ -517,7 +397,7 @@ final class Page: NSObject {
     /// workspace, where it would be saved and synced.
     func hold(_ url: URL) {
         held = url
-        Extensions.shared.tabs.addressChanged(self)
+        Extensions.shared.adapters.addressChanged(enginePage, tab: tab, in: space)
         host?.pageDidChange(self)
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(4))
@@ -534,26 +414,8 @@ final class Page: NSObject {
     /// on a hands-off page.
     func fillApplePassword(host: String, user: String, password: String) async {
         guard !isHandsOff else { return }
-        _ = try? await view.callAsyncJavaScript("return globalThis.__egluApplePasswordsFill ? globalThis.__egluApplePasswordsFill(host, user, password) : false;",
-                                                arguments: ["host": host, "user": user, "password": password], in: nil, contentWorld: Page.world)
-    }
-
-    // MARK: An extension's own page, for its recording (ExtensionCapture)
-
-    /// Whether an extension's own page is seen, as WebKit counts it; never
-    /// asked of a website's.
-    static func extensionPageVisible(_ web: WKWebView) async -> Bool {
-        guard web.url?.scheme?.lowercased() == Extensions.scheme else { return false }
-        return (try? await web.evaluateJavaScript("document.visibilityState")) as? String == "visible"
-    }
-
-    /// The shim's recording call in an extension's own page, made by the
-    /// app so WebKit counts it as a click (ExtensionCapture.force); never in
-    /// a website's.
-    static func startExtensionRecording(in web: WKWebView, token: String, video: Any) async throws -> Any? {
-        guard web.url?.scheme?.lowercased() == Extensions.scheme else { return nil }
-        return try await web.callAsyncJavaScript("return await globalThis[Symbol.for('eglu.capture')](token, video);",
-                                                 arguments: ["token": token, "video": video], in: nil, contentWorld: .page)
+        _ = try? await enginePage.scripting.callAsyncJavaScript("return globalThis.__egluApplePasswordsFill ? globalThis.__egluApplePasswordsFill(host, user, password) : false;",
+                                                arguments: ["host": host, "user": user, "password": password], world: .app)
     }
 
     /// The http or https site this page was last asked to go to: what an
@@ -592,7 +454,7 @@ final class Page: NSObject {
     /// its fields still filled in, to send again, which a reload would empty;
     /// otherwise the page again.
     func retry() {
-        if sendingFailed, view.url != nil {
+        if sendingFailed, enginePage.state.url != nil {
             failure = nil
             sendingFailed = false
             host?.pageDidChange(self)
@@ -607,38 +469,38 @@ final class Page: NSObject {
     private func request(_ url: URL) {
         if url.isFileURL {
             FileAccess.open(url)
-            navigationAdapter.loadFile(url, allowingReadAccessTo: url)
+            enginePage.loadFile(url, allowingReadAccessTo: url)
         } else {
-            navigationAdapter.load(URLRequest(url: url))
+            enginePage.load(URLRequest(url: url))
         }
     }
 
     /// `byHand`: asked for, so the count of endings starts over.
     func reload(byHand: Bool = true) {
         let retry = loadState.failed
-        beginNavigation(retry ?? view.url)
+        beginNavigation(retry ?? enginePage.state.url)
         exhausted = false
         if byHand { crashes.reset() }
         if let retry {
             request(retry)
-        } else if view.url == nil, let url = committed ?? Session.shared.workspace.tab(tab)?.url {
+        } else if enginePage.state.url == nil, let url = committed ?? Session.shared.workspace.tab(tab)?.url {
             request(url)
         } else {
-            view.reload()
+            enginePage.reload()
         }
         host?.pageDidChange(self)
     }
 
     var isHandsOff: Bool {
-        HandsOff.covers(view.url) || HandsOff.covers(committed)
+        HandsOff.covers(enginePage.state.url) || HandsOff.covers(committed)
     }
 
     #if DEBUG
     /// What the store page's button says, for the command-line check.
     func storeButtonLabel() async -> String? {
-        guard StoreButton.isStore(view.url) else { return nil }
+        guard StoreButton.isStore(enginePage.state.url) else { return nil }
         let script = "const b = document.querySelector('button[data-eglu=\"add\"]'); return b ? b.textContent.trim() + (b.disabled ? ' (off)' : '') : 'none'"
-        return (try? await view.callAsyncJavaScript(script, contentWorld: Page.world)) as? String
+        return (try? await enginePage.scripting.callAsyncJavaScript(script, world: .app)) as? String
     }
 
     /// A line of the test page's own script, in the page's world, for the
@@ -646,30 +508,30 @@ final class Page: NSObject {
     /// goes through here as every call into a page does. Never on a hands-off page.
     func pictureTestCall(_ body: String, arguments: [String: Any] = [:]) async -> Any? {
         guard !isHandsOff else { return nil }
-        return try? await view.callAsyncJavaScript(body, arguments: arguments, in: nil, contentWorld: .page)
+        return try? await enginePage.scripting.callAsyncJavaScript(body, arguments: arguments, world: .page)
     }
     #endif
 
     /// The Chrome Web Store page's button told what is installed and what
     /// is on its way (StoreButton), in the app's own world; only there.
     func tellStore(_ state: String) {
-        guard !isHandsOff, StoreButton.isStore(view.url) else { return }
-        view.evaluateJavaScript("window.__egluStore && window.__egluStore.state(\(state))", in: nil, in: Page.world)
+        guard !isHandsOff, StoreButton.isStore(enginePage.state.url) else { return }
+        enginePage.scripting.evaluateJavaScript("window.__egluStore && window.__egluStore.state(\(state))", world: .app)
     }
 
     var isSignIn: Bool {
-        SignIn.isSignInPage(view.url)
+        SignIn.isSignInPage(enginePage.state.url)
     }
 
     var isHeavy: Bool {
-        adapter.isHeavy(view.url)
+        adapter.isHeavy(enginePage.state.url)
     }
 
     /// Only a live page can keep these going: a call, a recording, a download,
     /// a picture-in-picture window, whose page is this one's.
     var mustStay: Bool {
-        hasPendingDialog || isHandsOff || view.cameraCaptureState != .none || view.microphoneCaptureState != .none
-            || (isExtensionPage && ExtensionCapture.screen(view))
+        hasPendingDialog || isHandsOff || services.isCapturing
+            || (isExtensionPage && extensionIsCapturing)
             || Downloads.shared.isDownloading(for: self) || picture != nil || videoFloated || floatingVideo || enteringPicture || peek != nil
     }
 
@@ -681,7 +543,7 @@ final class Page: NSObject {
     private func prepare(for url: URL?) {
         preparedFor = url
         let handsOff = HandsOff.covers(url)
-        blocking.apply(for: url, to: controller)
+        blocking.apply(for: url, to: ruleListTarget)
         adapter = Adapters.adapter(for: url)
         let filters = blocksContent ? ContentBlocker.shared.scriptedRules(for: url) : PageRules()
         let store = StoreButton.isStore(url)
@@ -699,49 +561,49 @@ final class Page: NSObject {
             + (apple ? "|apple" : "")
         guard wanted != installed else { return }
         installed = wanted
-        controller.removeAllUserScripts()
+        enginePage.scripting.removeAllUserScripts()
         guard !handsOff else { return }
         if !isExtensionPage {
-            controller.addUserScript(WKUserScript(source: PasswordWatch.script, injectionTime: .atDocumentEnd,
-                                                  forMainFrameOnly: true, in: Page.world))
+            enginePage.scripting.addUserScript(source: Self.bridged(PasswordWatch.script, using: channels), injectionTime: .atDocumentEnd,
+                                                  forMainFrameOnly: true, world: .app)
             // English typed here is checked by Harper on this Mac, where
             // Settings › Writing is on and the site isn't off (writing.js).
             // Its strings are the String Catalog's, written in as data.
             if writing {
-                controller.addUserScript(WKUserScript(source: Self.writingScript,
+                enginePage.scripting.addUserScript(source: writingScript,
                                                       injectionTime: .atDocumentEnd,
-                                                      forMainFrameOnly: true, in: Page.world))
+                                                      forMainFrameOnly: true, world: .app)
             }
         }
         // Document Picture-in-Picture, in the page's own world before its
         // scripts look for it, on the sites given it.
         if picture {
-            controller.addUserScript(WKUserScript(source: Scripts.picture, injectionTime: .atDocumentStart,
-                                                  forMainFrameOnly: true, in: .page))
+            enginePage.scripting.addUserScript(source: Scripts.picture, injectionTime: .atDocumentStart,
+                                                  forMainFrameOnly: true, world: .page)
         }
         if apple {
-            controller.addUserScript(WKUserScript(source: ApplePasswordsForm.script, injectionTime: .atDocumentEnd,
-                                                  forMainFrameOnly: true, in: Page.world))
+            enginePage.scripting.addUserScript(source: Self.bridged(ApplePasswordsForm.script, using: channels), injectionTime: .atDocumentEnd,
+                                                  forMainFrameOnly: true, world: .app)
         }
         // In the page's own world, where WebKit's browser is, before the
         // page's scripts look for chrome. The page's own frame only: a
         // frame inside it can be Google's sign-in, which nothing of eGlu's
         // touches (HandsOff), and a user script can't be kept from one frame.
         if let external {
-            controller.addUserScript(WKUserScript(source: external, injectionTime: .atDocumentStart,
-                                                  forMainFrameOnly: true, in: .page))
+            enginePage.scripting.addUserScript(source: external, injectionTime: .atDocumentStart,
+                                                  forMainFrameOnly: true, world: .page)
         }
-        controller.addFilterScripts(for: filters)
+        enginePage.scripting.addFilterScripts(blocker: Scripts.blocker(for: filters), scriptlets: Scripts.scriptlets(for: filters))
         if store {
-            controller.addUserScript(WKUserScript(source: Scripts.extensionStore, injectionTime: .atDocumentEnd,
-                                                  forMainFrameOnly: true, in: Page.world))
+            enginePage.scripting.addUserScript(source: Self.bridged(Scripts.extensionStore, using: channels), injectionTime: .atDocumentEnd,
+                                                  forMainFrameOnly: true, world: .app)
         }
         // The JSON view, while Settings formats JSON and the response's type
         // says the document is (the stamp's |json re-prepares where the
         // answer only comes with the response).
         if json {
-            controller.addUserScript(WKUserScript(source: Scripts.jsonView, injectionTime: .atDocumentEnd,
-                                                  forMainFrameOnly: true, in: Page.world))
+            enginePage.scripting.addUserScript(source: Scripts.jsonView, injectionTime: .atDocumentEnd,
+                                                  forMainFrameOnly: true, world: .app)
         }
     }
 
@@ -750,7 +612,7 @@ final class Page: NSObject {
     /// WritingSites always count as off), a document text is typed in (not
     /// a PDF or a picture) and not an extension's own page.
     func checksWriting(on url: URL? = nil) -> Bool {
-        let page = url ?? committed ?? view.url
+        let page = url ?? committed ?? enginePage.state.url
         let typedIn = mimeType.map { $0 != "application/pdf" && !$0.hasPrefix("image/") } ?? true
         return Session.shared.preferences.writing && !isExtensionPage && typedIn
             && !WritingSites.isOff(page, sites: Session.shared.preferences.writingOffSites)
@@ -761,15 +623,20 @@ final class Page: NSObject {
 
     /// writing.js with the card's words and the Mac's key for its first
     /// suggestion (Edit › Accept Writing Suggestion).
-    private static let writingScript = WritingScript.source(acceptKey: "⌃⌥G", acceptShortcut: "Control+Alt+G")
+    private static let writingSource = WritingScript.source(acceptKey: "⌃⌥G", acceptShortcut: "Control+Alt+G")
+    private var writingScript: String { Self.bridged(Self.writingSource, using: channels) }
+
+    private static func bridged(_ script: String, using channels: any WebMessageChannels) -> String {
+        channels.bridgeScript + "\n" + script
+    }
 
     /// ⌃⌥G takes the open card's first suggestion: the fix goes in the way
     /// the page's own Undo takes back (writing.js apply()).
     func writingAcceptFirst() async -> Bool {
         guard checksWriting(), !isHandsOff else { return false }
-        let accepted = try? await view.callAsyncJavaScript(
+        let accepted = try? await enginePage.scripting.callAsyncJavaScript(
             "return window.__egluWriting ? window.__egluWriting.acceptFirst() : false",
-            contentWorld: Page.world)
+            world: .app)
         return accepted as? Bool == true
     }
 
@@ -778,9 +645,9 @@ final class Page: NSObject {
     /// hands-off page.
     private func writingStop() {
         guard !isHandsOff else { return }
-        view.callAsyncJavaScript(
+        enginePage.scripting.callAsyncJavaScript(
             "window.__egluWriting && window.__egluWriting.stop(); return true;",
-            arguments: [:], in: nil, in: Page.world) { _ in }
+            arguments: [:], world: .app) { _ in }
     }
 
     /// Writing's script put into the document that is up, for checking
@@ -788,7 +655,7 @@ final class Page: NSObject {
     /// One already there, stopped, starts again instead.
     private func writingStart() {
         guard !isHandsOff else { return }
-        view.callAsyncJavaScript(Self.writingScript, arguments: [:], in: nil, in: Page.world) { _ in }
+        enginePage.scripting.callAsyncJavaScript(writingScript, arguments: [:], world: .app) { _ in }
     }
 
     /// Whether the page on screen has ads and trackers blocked, for its menu.
@@ -798,7 +665,7 @@ final class Page: NSObject {
 
     /// The content blocker has new lists: this page's next load has them.
     func blockingChanged() {
-        blocking.apply(for: committed ?? view.url, to: controller)
+        blocking.apply(for: committed ?? enginePage.state.url, to: ruleListTarget)
     }
 
     /// After Settings changed: from the next page. Writing, turned off here
@@ -809,14 +676,14 @@ final class Page: NSObject {
     /// the sign-in box script, as its next load would.
     func applePasswordsTurnedOn() {
         let had = installed?.contains("|apple") == true
-        prepare(for: committed ?? view.url)
-        guard !had, installed?.contains("|apple") == true, !isHandsOff, !HandsOff.covers(view.url), !isExtensionPage else { return }
-        view.evaluateJavaScript(ApplePasswordsForm.script, in: nil, in: Page.world) { _ in }
+        prepare(for: committed ?? enginePage.state.url)
+        guard !had, installed?.contains("|apple") == true, !isHandsOff, !HandsOff.covers(enginePage.state.url), !isExtensionPage else { return }
+        enginePage.scripting.evaluateJavaScript(Self.bridged(ApplePasswordsForm.script, using: channels), world: .app) { _ in }
     }
 
     func settingsChanged() {
         let wasWriting = installed?.contains(Self.writingStamp) == true
-        prepare(for: committed ?? view.url)
+        prepare(for: committed ?? enginePage.state.url)
         let writing = installed?.contains(Self.writingStamp) == true
         if wasWriting, !writing { writingStop() }
         if writing, !wasWriting { writingStart() }
@@ -842,13 +709,9 @@ final class Page: NSObject {
 
     /// The next place the words are on the page, after the selection or
     /// before it; `found` hears whether there is one.
-    func find(_ text: String, backwards: Bool = false, found: @escaping (Bool) -> Void) {
+    func find(_ text: String, backwards: Bool = false, found: @escaping @MainActor @Sendable (Bool) -> Void) {
         guard !text.isEmpty else { return found(false) }
-        let configuration = WKFindConfiguration()
-        configuration.backwards = backwards
-        configuration.caseSensitive = false
-        configuration.wraps = true
-        view.find(text, configuration: configuration) { result in found(result.matchFound) }
+        services.find(text, backwards: backwards, caseSensitive: false, wraps: true, found: found)
     }
 
     /// Safari's steps of zoom, from half to three times.
@@ -866,7 +729,7 @@ final class Page: NSObject {
         }
         // Sizes are whole percents (setZoom), so a margin well under one
         // takes a typed 99% up to 100% and 299% up to 300%.
-        let now = view.pageZoom
+        let now = CGFloat(services.pageZoom)
         let next = step > 0 ? Self.zooms.first { $0 > now + 0.001 } : Self.zooms.last { $0 < now - 0.001 }
         guard let next else { return false }
         setZoom(Double(next))
@@ -876,15 +739,13 @@ final class Page: NSObject {
     /// Any zoom within Safari's, as a size typed in asks, to the whole percent the field shows.
     func setZoom(_ zoom: Double) {
         let zoom = min(max((zoom * 100).rounded() / 100, Self.zoomRange.lowerBound), Self.zoomRange.upperBound)
-        view.pageZoom = CGFloat(zoom)
+        services.pageZoom = zoom
         host?.pageDidChange(self)
     }
 
     func print() {
         guard let window = host?.hostWindow else { return }
-        let operation = view.printOperation(with: NSPrintInfo.shared)
-        operation.view?.frame = view.bounds
-        operation.runModal(for: window, delegate: nil, didRun: nil, contextInfo: nil)
+        services.printOperation(with: NSPrintInfo.shared).runModal(for: window, delegate: nil, didRun: nil, contextInfo: nil)
     }
 
     // MARK: Calls into the page
@@ -896,8 +757,8 @@ final class Page: NSObject {
             done(nil)
             return
         }
-        view.callAsyncJavaScript(Scripts.draftCall,
-                                 arguments: ["handsOff": HandsOff.hosts], in: nil, in: Page.world) { result in
+        enginePage.scripting.callAsyncJavaScript(Scripts.draftCall,
+                                 arguments: ["handsOff": HandsOff.hosts], world: .app) { result in
             if case .success(let value) = result { done(value as? Bool) } else { done(nil) }
         }
     }
@@ -905,11 +766,11 @@ final class Page: NSObject {
     /// Bounded rendered text for an extension's authorized language request.
     /// The tab adapter separately owns its per-space and website-grant checks.
     func extensionLanguageText() async throws -> String? {
-        guard !HandsOff.covers(view.url), !HandsOff.covers(committed), let url = view.url else { return nil }
-        let value = try await view.callAsyncJavaScript(ExtensionLanguage.sampleText,
+        guard !HandsOff.covers(enginePage.state.url), !HandsOff.covers(committed), let url = enginePage.state.url else { return nil }
+        let value = try await enginePage.scripting.callAsyncJavaScript(ExtensionLanguage.sampleText,
             arguments: ["limit": ExtensionLanguage.maximumScalars, "expectedURL": url.absoluteString, "protectedHosts": HandsOff.hosts],
-            in: nil, contentWorld: Page.world)
-        guard !HandsOff.covers(view.url), !HandsOff.covers(committed), view.url == url else { return nil }
+            world: .app)
+        guard !HandsOff.covers(enginePage.state.url), !HandsOff.covers(committed), enginePage.state.url == url else { return nil }
         return value as? String
     }
 
@@ -917,12 +778,11 @@ final class Page: NSObject {
     /// to look at a page with too few words to go by (HandoffJob). A picture,
     /// not a script: nil when the page is not in a window.
     func picture(pixels: CGFloat) async -> CGImage? {
-        guard view.window != nil, view.bounds.width > 0, view.bounds.height > 0 else { return nil }
-        let configuration = WKSnapshotConfiguration()
-        configuration.afterScreenUpdates = false
-        configuration.snapshotWidth = NSNumber(value: Double(pixels / max(1, view.window?.backingScaleFactor ?? 2)))
+        guard enginePage.contentView.window != nil, enginePage.contentView.bounds.width > 0, enginePage.contentView.bounds.height > 0 else { return nil }
+        let configuration = WebSnapshotOptions(afterScreenUpdates: false,
+            width: Double(pixels / max(1, enginePage.contentView.window?.backingScaleFactor ?? 2)))
         return await withCheckedContinuation { continuation in
-            view.takeSnapshot(with: configuration) { image, _ in
+            enginePage.takeSnapshot(with: configuration) { image, _ in
                 continuation.resume(returning: image?.cgImage(forProposedRect: nil, context: nil, hints: nil))
             }
         }
@@ -937,18 +797,17 @@ final class Page: NSObject {
     /// the view's points, whatever the zoom or the pinch).
     func pickElement() async -> CGRect? {
         guard !isHandsOff else { return nil }
-        let value = try? await view.callAsyncJavaScript(Scripts.elementPick, arguments: [:],
-                                                        in: nil, contentWorld: Page.world)
-        return DeveloperMode.pickedRect(value, view: view.bounds.size)
+        let value = try? await enginePage.scripting.callAsyncJavaScript(Scripts.elementPick, arguments: [:],
+                                                        world: .app)
+        return DeveloperMode.pickedRect(value, view: enginePage.contentView.bounds.size)
     }
 
     /// The part of the view in `rect` (pickElement's) as a picture.
     func picture(of rect: CGRect) async -> NSImage? {
-        guard view.window != nil, !rect.isEmpty else { return nil }
-        let configuration = WKSnapshotConfiguration()
-        configuration.rect = rect
+        guard enginePage.contentView.window != nil, !rect.isEmpty else { return nil }
+        let configuration = WebSnapshotOptions(rect: rect)
         return await withCheckedContinuation { continuation in
-            view.takeSnapshot(with: configuration) { image, _ in continuation.resume(returning: image) }
+            enginePage.takeSnapshot(with: configuration) { image, _ in continuation.resume(returning: image) }
         }
     }
 
@@ -974,11 +833,11 @@ final class Page: NSObject {
         guard measure == nil, !isHandsOff, !isExtensionPage else { return }
         measureRuns += 1
         let model = MeasureModel(guides: MeasureGuides(preferences: Session.shared.preferences), run: measureRuns)
-        model.pageURL = view.url?.absoluteString ?? ""
+        model.pageURL = enginePage.state.url?.absoluteString ?? ""
         model.window = { [weak self] in
-            guard let view = self?.view else { return "" }
+            guard let view = self?.enginePage.contentView, let services = self?.services else { return "" }
             return MeasureNotes.window(width: Double(view.frame.width), height: Double(view.frame.height),
-                                       zoom: Double(view.pageZoom))
+                                       zoom: services.pageZoom)
         }
         // The tab's notes, from an earlier run on this page too.
         model.notes = measureNotes
@@ -992,14 +851,15 @@ final class Page: NSObject {
         model.unpin = { [weak self] id in self?.unpinNote(id: id.uuidString) }
         measure = model
         host?.pageDidChange(self)
-        let view = view
+        let scripting = enginePage.scripting
+        let channels = channels
         Task { [weak self] in
             // The tool ends its own way (Escape, the page put away): the
             // promise resolves and this run's model is let go.
             // The notes' dots again, found by their elements' names.
             let notes = model.notes.map { ["id": $0.id.uuidString, "name": $0.name, "number": $0.number] as [String: Any] }
-            _ = try? await view.callAsyncJavaScript(Scripts.measure, arguments: ["guides": model.argument.merging(["notes": notes]) { _, new in new }],
-                                                    in: nil, contentWorld: Page.world)
+            _ = try? await scripting.callAsyncJavaScript(Self.bridged(Scripts.measure, using: channels), arguments: ["guides": model.argument.merging(["notes": notes]) { _, new in new }],
+                                                    world: .app)
             guard let self, self.measure === model else { return }
             self.measure = nil
             self.host?.pageDidChange(self)
@@ -1020,7 +880,7 @@ final class Page: NSObject {
         measure == nil ? startMeasuring() : stopMeasuring()
     }
 
-    /// What the tool said (MeasureHandler), this run's only: a selection's
+    /// What the tool said (MeasureChannel), this run's only: a selection's
     /// details, a distance, what shows, a tapped point, its ending.
     func measured(_ body: [String: Any]) {
         guard let model = measure, (body["run"] as? NSNumber)?.intValue == model.run else { return }
@@ -1042,7 +902,7 @@ final class Page: NSObject {
     /// The tool's calls after its start: never on a hands-off host.
     private func measureCall(_ body: String, _ arguments: [String: Any]) {
         guard !isHandsOff else { return }
-        view.callAsyncJavaScript(body, arguments: arguments, in: nil, in: Page.world) { _ in }
+        enginePage.scripting.callAsyncJavaScript(body, arguments: arguments, world: .app) { _ in }
     }
 
     /// A colour picked from anywhere on the screen, the Mac's way:
@@ -1086,7 +946,7 @@ final class Page: NSObject {
     /// The page loaded: whether it has a JSON view, and whether it is drawn.
     private func learnJSONView() {
         guard isJSON, !isHandsOff else { jsonView = nil; return }
-        view.evaluateJavaScript("window.__egluJSON ? window.__egluJSON.drawn() : null", in: nil, in: Page.world) { [weak self] result in
+        enginePage.scripting.evaluateJavaScript("window.__egluJSON ? window.__egluJSON.drawn() : null", world: .app) { [weak self] result in
             guard let self, case .success(let value) = result else { return }
             self.jsonView = value as? Bool
             self.changed()
@@ -1096,7 +956,7 @@ final class Page: NSObject {
     /// Raw or the view again: the bar's Raw, answered by the script.
     func toggleJSONView() {
         guard jsonView != nil, !isHandsOff else { return }
-        view.evaluateJavaScript("window.__egluJSON ? window.__egluJSON.toggle() : null", in: nil, in: Page.world) { [weak self] result in
+        enginePage.scripting.evaluateJavaScript("window.__egluJSON ? window.__egluJSON.toggle() : null", world: .app) { [weak self] result in
             guard let self, case .success(let value) = result, let shown = value as? Bool else { return }
             self.jsonView = shown
             self.changed()
@@ -1112,10 +972,10 @@ final class Page: NSObject {
     /// Full puts both back: WebKit's own agent, the card's whole room.
     func size(_ size: CGSize?, pad: Bool) {
         deviceSize = size
-        view.customUserAgent = size == nil ? nil
+        services.customUserAgent = size == nil ? nil
             : Identity.mobileUserAgent(for: ProcessInfo.processInfo.operatingSystemVersion, pad: pad)
         changed()
-        view.reload()
+        enginePage.reload()
     }
 
     /// The icons the page names, best first, as bridge.js's siteIcons() has
@@ -1164,9 +1024,9 @@ final class Page: NSObject {
     /// Asks the page for its icons once it has loaded, unless SiteIcons has
     /// the site's already. Never on a hands-off host.
     private func learnIcons() {
-        guard let url = view.url, ["http", "https"].contains(url.scheme ?? ""), !HandsOff.covers(url),
+        guard let url = enginePage.state.url, ["http", "https"].contains(url.scheme ?? ""), !HandsOff.covers(url),
               SiteIcons.shared.needs(url) else { return }
-        view.callAsyncJavaScript(Self.iconsCall, arguments: [:], in: nil, in: Page.world) { result in
+        enginePage.scripting.callAsyncJavaScript(Self.iconsCall, arguments: [:], world: .app) { result in
             guard case .success(let value) = result, let strings = value as? [String] else { return }
             SiteIcons.shared.learn(strings.compactMap(URL.init(string:)), for: url)
         }
@@ -1175,14 +1035,14 @@ final class Page: NSObject {
     /// What the page says it is about (its meta description), for its
     /// history to be found by; never its own text, never on a hands-off host.
     private func learnAbout() {
-        guard !isHandsOff, let origin = history.metadataOrigin, let url = view.url,
+        guard !isHandsOff, let origin = history.metadataOrigin, let url = enginePage.state.url,
               ["http", "https"].contains(url.scheme ?? ""), !HandsOff.covers(url) else { return }
         let call = """
             const meta = document.querySelector('meta[name="description" i], meta[property="og:description" i]');
             return meta && meta.content ? String(meta.content).trim().slice(0, 400) : '';
             """
-        view.callAsyncJavaScript(call, arguments: [:], in: nil, in: Page.world) { [weak self] result in
-            guard let self, !self.isHandsOff, self.view.url == url, self.history.metadataOrigin == origin,
+        enginePage.scripting.callAsyncJavaScript(call, arguments: [:], world: .app) { [weak self] result in
+            guard let self, !self.isHandsOff, self.enginePage.state.url == url, self.history.metadataOrigin == origin,
                   case .success(let value) = result, let text = value as? String else { return }
             history.described(text, url: url, space: space, origin: origin)
         }
@@ -1210,7 +1070,7 @@ final class Page: NSObject {
         case .ask:
             guard let window = host?.hostWindow, window.attachedSheet == nil else { return }
             let alert = NSAlert()
-            let asker = (committed ?? view.url)?.host ?? String(localized: "This page")
+            let asker = (committed ?? enginePage.state.url)?.host ?? String(localized: "This page")
             alert.messageText = String(localized: "Open in Another App?")
             let appName = NSWorkspace.shared.urlForApplication(toOpen: url)
                 .flatMap { Bundle(url: $0)?.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
@@ -1283,7 +1143,7 @@ final class Page: NSObject {
     /// The page is a tab's now, as it was: a Peek's or a little window's,
     /// opened in a tab. What it shows goes into the space's history.
     func becameTab() {
-        history.adopted(url: view.url, title: view.title, entry: view.backForwardList.currentItem, space: space, tab: tab)
+        history.adopted(url: enginePage.state.url, title: enginePage.state.title, entry: services.currentEntry, space: space, tab: tab)
     }
 
     /// The Peek is gone, closed or given a tab. The tab may freeze now.
@@ -1307,7 +1167,7 @@ final class Page: NSObject {
         case .other: kind = .script
         default: kind = .history
         }
-        return Peek.opensFromPinned(from: committed ?? view.url, to: action.request.url, kind: kind,
+        return Peek.opensFromPinned(from: committed ?? enginePage.state.url, to: action.request.url, kind: kind,
                                     method: action.request.httpMethod, mainFrame: action.targetIsMainFrame ?? true)
     }
 
@@ -1319,13 +1179,13 @@ final class Page: NSObject {
     }
 
     /// The window picture.js asked for, in place of the one open: one at a time, as in Chrome.
-    private func openPicture(_ child: WebKitChildRequest,
-                             request: DocumentPicture.Request) -> WKWebView {
+    private func openPicture(_ child: any WebChildRequest,
+                             request: DocumentPicture.Request) -> (any WebEngineSurface)? {
         picture?.close()
-        let window = PictureWindow(opener: self, configuration: child.configuration, features: child.features, request: request)
+        guard let window = PictureWindow(opener: self, child: child, request: request) else { return nil }
         window.automatic = enteringPicture
         picture = window
-        return window.view
+        return window.backend
     }
 
     /// The window is gone, however it went. The tab may freeze now, once
@@ -1345,12 +1205,12 @@ final class Page: NSObject {
     /// The site's handler for leaving the tab, called, if it has one.
     /// `otherwise`: what to do when the site has no handler to call.
     func enterPicture(otherwise: (() -> Void)? = nil) {
-        guard picture == nil, !enteringPicture, !HandsOff.covers(view.url), !HandsOff.covers(committed),
-              Self.offersPicture(committed ?? view.url)
+        guard picture == nil, !enteringPicture, !HandsOff.covers(enginePage.state.url), !HandsOff.covers(committed),
+              Self.offersPicture(committed ?? enginePage.state.url)
         else { return }
         enteringPicture = true
-        view.callAsyncJavaScript("return typeof __egluEnterPicture === 'function' ? __egluEnterPicture() : false",
-                                 arguments: [:], in: nil, in: .page) { [weak self] result in
+        enginePage.scripting.callAsyncJavaScript("return typeof __egluEnterPicture === 'function' ? __egluEnterPicture() : false",
+                                 arguments: [:], world: .page) { [weak self] result in
             guard let self else { return }
             self.enteringPicture = false
             guard self.videoWanted, Session.shared.preferences.automaticPictureInPicture else {
@@ -1373,11 +1233,11 @@ final class Page: NSObject {
     /// (any playing video in a call, whose sound may come separately).
     func appWentBehind() {
         guard Session.shared.preferences.automaticPictureInPicture,
-              !HandsOff.covers(view.url), !HandsOff.covers(committed) else { return }
+              !HandsOff.covers(enginePage.state.url), !HandsOff.covers(committed) else { return }
         videoWanted = true
         guard picture == nil, !videoFloated, !floatingVideo, !enteringPicture else { return }
-        let inCall = view.cameraCaptureState != .none || view.microphoneCaptureState != .none
-        if Self.offersPicture(committed ?? view.url) {
+        let inCall = services.isCapturing
+        if Self.offersPicture(committed ?? enginePage.state.url) {
             return enterPicture { [weak self] in self?.floatVideo(anyPlaying: inCall) }
         }
         floatVideo(anyPlaying: inCall)
@@ -1386,7 +1246,7 @@ final class Page: NSObject {
     private func floatVideo(anyPlaying: Bool) {
         guard videoWanted, !videoFloated, !floatingVideo else { return }
         floatingVideo = true
-        view.callAsyncJavaScript(VideoPicture.float, arguments: ["anyPlaying": anyPlaying], in: nil, in: Page.world) { [weak self] result in
+        enginePage.scripting.callAsyncJavaScript(VideoPicture.float, arguments: ["anyPlaying": anyPlaying], world: .app) { [weak self] result in
             guard let self else { return }
             self.floatingVideo = false
             guard case .success(let floated) = result, floated as? Bool == true else { return }
@@ -1406,8 +1266,8 @@ final class Page: NSObject {
         videoWanted = false
         guard videoFloated else { return }
         videoFloated = false
-        guard !HandsOff.covers(view.url), !HandsOff.covers(committed) else { return }
-        view.callAsyncJavaScript(VideoPicture.sink, arguments: [:], in: nil, in: Page.world) { _ in }
+        guard !HandsOff.covers(enginePage.state.url), !HandsOff.covers(committed) else { return }
+        enginePage.scripting.callAsyncJavaScript(VideoPicture.sink, arguments: [:], world: .app) { _ in }
     }
 
     // MARK: When the page's process ends
@@ -1430,43 +1290,22 @@ final class Page: NSObject {
     }
 }
 
-// MARK: - WebKit's questions
+// MARK: Page UI events and dialogs
 
-extension Page: WKUIDelegate {
-    /// WebKit's private way to hear which element a context menu is for:
-    /// its link is kept for "Handoff Linked File", the menu itself shown
-    /// as proposed, so willOpenMenu sees it all.
-    @objc func _webView(_ webView: WKWebView, getContextMenuFromProposedMenu menu: NSMenu,
-                        forElement element: NSObject?, userInfo: Any?,
-                        completionHandler: @escaping (NSMenu?) -> Void) {
-        linkForMenu = element.flatMap(Self.link(of:))
-        completionHandler(menu)
+extension Page: WebPageUIEvents, WebDialogPresenter {
+    func contextMenuOpening(link: URL?) {
+        linkForMenu = link
     }
 
-    /// The link a menu's element is on. The element is WebKit's private
-    /// _WKContextMenuElementInfo, whose hit test result holds the link
-    /// (absoluteLinkURL): each step is asked first, as picture in picture
-    /// asks, since a key it doesn't have would raise.
-    private static func link(of element: NSObject) -> URL? {
-        guard element.responds(to: NSSelectorFromString("hitTestResult")),
-              let result = element.value(forKey: "hitTestResult") as? NSObject,
-              result.responds(to: NSSelectorFromString("absoluteLinkURL")) else { return nil }
-        return result.value(forKey: "absoluteLinkURL") as? URL
-    }
-
-    /// WebKit's private word that the page left a scroll unused, the
-    /// answer its own swipe waits for: the swipe's (PageSwipe.leftAlone).
-    @objc func _webView(_ webView: WKWebView, didNotHandleWheelEvent event: NSEvent) {
+    func scrollNotHandled(_ event: NSEvent) {
         swipe?.leftAlone(event)
     }
 
     private var isDark: Bool {
-        view.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        enginePage.contentView.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
     }
 
-    func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
-                 for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-        let request = WebKitChildRequest(configuration: configuration, action: navigationAction, features: windowFeatures)
+    func childRequested(_ request: any WebChildRequest) -> (any WebEngineSurface)? {
         let navigation = request.navigation
         // A website's window opened on an extension's page: only a page the
         // extension shows that site, as a navigation to one is held to
@@ -1486,7 +1325,7 @@ extension Page: WKUIDelegate {
         // Anywhere else, the same address is an ordinary pop-up.
         // The source can be absent; the old non-optional sourceFrame read would crash then.
         if let pictureRequest = DocumentPicture.Request(url: navigation.request.url), navigation.sourceIsMainFrame == true,
-           Self.offersPicture(committed ?? view.url) {
+           Self.offersPicture(committed ?? enginePage.state.url) {
             // Asked for on leaving the tab, but the tab is back on screen, with eGlu in front, by now: no window.
             if enteringPicture, !videoWanted || !Session.shared.preferences.automaticPictureInPicture { return nil }
             return openPicture(request, request: pictureRequest)
@@ -1498,51 +1337,50 @@ extension Page: WKUIDelegate {
         if let asked = peekAsked {
             peekAsked = nil
             if Date().timeIntervalSince(asked) < 5, canPeek {
-                return openPeek(navigation.request.url, child: request).page.view
+                return openPeek(navigation.request.url, child: request).page.surface
             }
         }
         let made = host?.page(self, openChild: request)
         if let child = made, child !== self {
             child.wasOpened = true
         }
-        return made?.view
+        return made?.surface
     }
 
-    func webViewDidClose(_ webView: WKWebView) {
+    func closeRequested() {
         host?.pageDidClose(self)
     }
 
-    func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String,
-                 initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping @MainActor () -> Void) {
+    /// `frameHost`: the asking frame's host (not the page's `host`, its window).
+    func alert(_ message: String, host frameHost: String, done: @escaping @MainActor () -> Void) {
         let alert = NSAlert()
-        alert.messageText = frame.securityOrigin.host.isEmpty ? String(localized: "This page says") : String(localized: "\(frame.securityOrigin.host) says")
+        alert.messageText = frameHost.isEmpty ? String(localized: "This page says") : String(localized: "\(frameHost) says")
         alert.informativeText = message
         alert.addButton(withTitle: String(localized: "OK"))
-        present(alert) { _ in completionHandler() }
+        present(alert) { _ in done() }
     }
 
-    func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String,
-                 initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping @MainActor (Bool) -> Void) {
+    func confirm(_ message: String, host frameHost: String, done: @escaping @MainActor (Bool) -> Void) {
         let alert = NSAlert()
-        alert.messageText = frame.securityOrigin.host.isEmpty ? String(localized: "This page asks") : String(localized: "\(frame.securityOrigin.host) asks")
+        alert.messageText = frameHost.isEmpty ? String(localized: "This page asks") : String(localized: "\(frameHost) asks")
         alert.informativeText = message
         alert.addButton(withTitle: String(localized: "OK"))
         alert.addButton(withTitle: String(localized: "Cancel"))
-        present(alert) { completionHandler($0 == .alertFirstButtonReturn) }
+        present(alert) { done($0 == .alertFirstButtonReturn) }
     }
 
-    func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String, defaultText: String?,
-                 initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping @MainActor (String?) -> Void) {
+    func prompt(_ message: String, defaultText: String?, host frameHost: String,
+                done: @escaping @MainActor (String?) -> Void) {
         let alert = NSAlert()
-        alert.messageText = frame.securityOrigin.host.isEmpty ? String(localized: "This page asks") : String(localized: "\(frame.securityOrigin.host) asks")
-        alert.informativeText = prompt
+        alert.messageText = frameHost.isEmpty ? String(localized: "This page asks") : String(localized: "\(frameHost) asks")
+        alert.informativeText = message
         let field = NSTextField(string: defaultText ?? "")
         field.frame = NSRect(x: 0, y: 0, width: 260, height: 24)
         alert.accessoryView = field
         alert.addButton(withTitle: String(localized: "OK"))
         alert.addButton(withTitle: String(localized: "Cancel"))
         alert.window.initialFirstResponder = field
-        present(alert) { completionHandler($0 == .alertFirstButtonReturn ? field.stringValue : nil) }
+        present(alert) { done($0 == .alertFirstButtonReturn ? field.stringValue : nil) }
     }
 
     /// Retain one background dialog until its tab is shown or explicitly reviewed.
@@ -1558,19 +1396,19 @@ extension Page: WKUIDelegate {
 
     /// A page's upload field: the files chosen in the system's panel, which
     /// the sandbox then lets the page read.
-    func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters,
-                 initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping @MainActor ([URL]?) -> Void) {
+    func openFiles(allowsMultiple: Bool, allowsDirectories: Bool,
+                   done: @escaping @MainActor ([URL]?) -> Void) {
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
-        panel.canChooseDirectories = parameters.allowsDirectories
-        panel.allowsMultipleSelection = parameters.allowsMultipleSelection
-        let done: (NSApplication.ModalResponse) -> Void = { response in
-            completionHandler(response == .OK ? panel.urls : nil)
+        panel.canChooseDirectories = allowsDirectories
+        panel.allowsMultipleSelection = allowsMultiple
+        let completed: (NSApplication.ModalResponse) -> Void = { response in
+            done(response == .OK ? panel.urls : nil)
         }
         if let window = host?.hostWindow {
-            panel.beginSheetModal(for: window, completionHandler: done)
+            panel.beginSheetModal(for: window, completionHandler: completed)
         } else {
-            done(panel.runModal())
+            completed(panel.runModal())
         }
     }
 }
@@ -1581,12 +1419,8 @@ extension Page: WebNavigationEvents {
     /// A tab that was only ever the file's way in, with no page of its own
     /// to show, goes once the download has begun, as Safari's does.
     func navigationBecameDownload(_ download: any WebEngineCore.WebDownload) {
-        guard let download = (download as? WebKitDownload)?.download else {
-            assertionFailure("Expected a WebKitDownload")
-            return
-        }
         Downloads.shared.adopt(download, from: self)
-        if committed == nil, !view.canGoBack { host?.pageDidClose(self) }
+        if committed == nil, !enginePage.state.canGoBack { host?.pageDidClose(self) }
     }
 
     func navigationStarted(url: URL?) {
@@ -1610,13 +1444,13 @@ extension Page: WebNavigationEvents {
         videoWanted = false
         videoFloated = false
         committed = url
-        status.committed(view.backForwardList.currentItem)
+        status.committed(services.currentEntry)
         googleRefused = SignIn.googleRefused(url)
         failure = nil
         sendingFailed = false
         jsonView = nil
         refusedElsewhere = 0
-        history.committed(url: url, title: view.title, entry: view.backForwardList.currentItem,
+        history.committed(url: url, title: enginePage.state.title, entry: services.currentEntry,
                           space: space, tab: tab)
         passwordField = false
         // The old document's card went with it, unannounced.
@@ -1731,7 +1565,7 @@ extension Page: WebNavigationPolicy {
         }
         if mainFrame, let request = askingInLightOrDark(navigation) {
             reply(.cancel)
-            navigationAdapter.load(request)
+            enginePage.load(request)
             return
         }
         if mainFrame {
@@ -1752,7 +1586,7 @@ extension Page: WebNavigationPolicy {
             reply(.cancel)
             var again = URLRequest(url: url)
             again.setValue(value, forHTTPHeaderField: ColorSchemeHint.header)
-            navigationAdapter.load(again)
+            enginePage.load(again)
             return
         }
         // What WebKit can't show (a ZIP, an installer) and what the server says to save is a download.
@@ -1789,5 +1623,92 @@ extension Page: WebNavigationPolicy {
         var again = request
         again.setValue(value, forHTTPHeaderField: ColorSchemeHint.header)
         return again
+    }
+}
+
+// MARK: Engine state and view events
+
+extension Page: WebPageStateEvents, WebPageViewEvents {
+    func titleOrAddressChanged() { changed() }
+    func loadingChanged() {
+        progressed()
+        Extensions.shared.adapters.loadingChanged(tab: tab, in: space)
+    }
+    func progressChanged() { progressed() }
+    func backOrForwardChanged() { wentSomewhere() }
+    func secureContentChanged() { progressed() }
+
+    func prepareSwipe() -> Bool {
+        swipe = makePageSwipe()
+        return swipe != nil
+    }
+    func scrollWheel(_ event: NSEvent) -> Bool { swipe?.scrolled(event) == true }
+    func swipe(_ event: NSEvent) -> Bool { swipe?.swiped(event) == true }
+    func movedToWindow() {
+        swipe?.callOff()
+        if enginePage.contentView.window == nil { ApplePasswordsCard.shared.left(self) }
+    }
+    var menus: any WebPageMenus { PageMenus(page: self) }
+}
+
+/// The view keeps this after Page goes, just as the page view kept its menu
+/// methods. The page stays weak, and teardown clears it before detaching.
+@MainActor
+private final class PageMenus: NSObject, WebPageMenus {
+    private weak var page: Page?
+
+    init(page: Page) { self.page = page }
+    func detachPage() { page = nil }
+
+    func willOpenMenu(_ menu: NSMenu, context: any WebContextMenu) {
+        for item in menu.items {
+            if let id = item.identifier?.rawValue, let title = context.title(for: id) { item.title = title }
+        }
+        // Open Link in Peek, after Open Link in New Tab, on a page in a
+        // window's tab: WebKit's own item for the link under the pointer,
+        // with the window it opens made a Peek (Page.peekAsked).
+        if let page, page.canPeek, !page.isHandsOff,
+           let newTab = menu.items.first(where: { $0.identifier?.rawValue == context.openLinkInNewWindowIdentifier }) {
+            let item = NSMenuItem(title: String(localized: "Open Link in Peek"), action: #selector(openLinkInPeek(_:)), keyEquivalent: "")
+            item.target = context.actionTarget
+            item.representedObject = newTab
+            menu.insertItem(item, at: menu.index(of: newTab) + 1)
+            // Handoff Linked File, after it, for a link to a file eGlu
+            // reads, where the window's Handoff is on (takesHandoffFiles).
+            // The link's address comes from the context menu's own element
+            // (Page.linkForMenu): WebKit's items carry none.
+            if let link = page.linkForMenu, DocumentSource.linkExtensions.contains(link.pathExtension.lowercased()),
+               page.host?.takesHandoffFiles == true, !page.isHandsOff {
+                let off = NSMenuItem(title: String(localized: "Handoff Linked File"),
+                                     action: #selector(handOffLinkedFile(_:)), keyEquivalent: "")
+                off.target = context.actionTarget
+                off.representedObject = link
+                menu.insertItem(off, at: menu.index(of: item) + 1)
+            }
+        }
+        // WebKit puts the extensions' own items (contextMenus) in itself,
+        // after the page's; on Google's sign-in they are taken out, with
+        // the line WebKit drew above them.
+        if page?.isHandsOff == true {
+            for item in menu.items.reversed() where context.isExtensionItem(item) {
+                let index = menu.index(of: item)
+                menu.removeItem(item)
+                if index > 0, menu.items[index - 1].isSeparatorItem,
+                   index == menu.items.count || menu.items[index].isSeparatorItem {
+                    menu.removeItem(at: index - 1)
+                }
+            }
+        }
+    }
+
+    @objc func handOffLinkedFile(_ sender: NSMenuItem) {
+        guard let link = sender.representedObject as? URL, let page else { return }
+        page.host?.page(page, handOffFileAt: link)
+    }
+
+    @objc func openLinkInPeek(_ sender: NSMenuItem) {
+        guard let newTab = sender.representedObject as? NSMenuItem, let action = newTab.action else { return }
+        page?.peekAsked = Date()
+        NSApp.sendAction(action, to: newTab.target, from: newTab)
     }
 }

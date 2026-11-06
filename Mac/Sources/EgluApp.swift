@@ -1,8 +1,8 @@
 import AppKit
-import Engines
 import OSLog
 import PadCore
 import SwiftUI
+import WritingServiceKit
 
 /// eGlu for Mac: the iPad's spaces, pinned tabs and blocking in Arc's
 /// shape, a sidebar down the window's side and the page beside it, drawn
@@ -118,7 +118,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // which launch need not wait for.
         Task.detached(priority: .utility) {
             Logger(subsystem: "net.taehee.safience", category: "engines")
-                .log("engines linked: \((try? Grammar.rules().count) ?? -1) grammar rules")
+                .log("engines linked: \((try? WritingChecker.engine.rules().count) ?? -1) grammar rules")
         }
         #endif
         // Before anything reads the workspace or the settings: they were in

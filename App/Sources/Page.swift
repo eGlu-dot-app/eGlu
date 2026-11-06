@@ -1,6 +1,8 @@
 import PadCore
 import UIKit
 import WebKit
+import WebKitSupport
+import WebEngineCore
 
 /// What a page asks of whoever is showing it: a window (Browser) or a
 /// sign-in pop-up (Popup).
@@ -73,8 +75,10 @@ final class Page: NSObject {
 
     let tab: UUID
     let space: UUID
+    let downloadStarter: any WebDownloadStarting
     let view: PageView
     private let controller: WKUserContentController
+    private let ruleListTarget: any WebRuleListTarget
     weak var host: PageHost?
     /// Watches the find bar until it has gone (find()).
     private var findWatch: Timer?
@@ -266,6 +270,20 @@ final class Page: NSObject {
     }
     var stats = Stats()
 
+    var pageURL: URL? { view.url }
+    var pageTitle: String? { view.title }
+
+    func callInAppWorld(_ body: String, arguments: [String: Any]) async throws -> Any? {
+        try await view.callAsyncJavaScript(body, arguments: arguments, in: nil, contentWorld: Page.world)
+    }
+
+    func hiddenPage(allowing allows: @escaping @MainActor @Sendable (URL?) -> Bool) -> any WebHiddenPage {
+        // Served the site as a computer is, as the page beside it may not be.
+        WebKitHiddenPage(beside: view, ruleLists: blocksContent ? ContentBlocker.shared.lists : [], appWorld: Page.world,
+                         customUserAgent: Identity.macUserAgent(applicationName: view.configuration.applicationNameForUserAgent ?? ""),
+                         allows: allows)
+    }
+
     /// `configuration`: WebKit's, for a page opened by another page; a new
     /// one in the space's store otherwise. Either way the page gets a script
     /// controller of its own, so the scripts swapped for one page (none at
@@ -279,7 +297,9 @@ final class Page: NSObject {
         let controller = WKUserContentController()
         config.userContentController = controller
         self.controller = controller
+        ruleListTarget = WebKitRuleListTarget(controller: controller)
         view = PageView(frame: .zero, configuration: config, keyboardByWindow: keyboardByWindow)
+        downloadStarter = WebKitDownloadStarter(view: view)
         super.init()
         view.page = self
         view.navigationDelegate = self
@@ -295,7 +315,7 @@ final class Page: NSObject {
 
     static func configuration(space: UUID) -> WKWebViewConfiguration {
         let config = WKWebViewConfiguration()
-        config.websiteDataStore = Stores.store(for: space)
+        config.websiteDataStore = WebKitStores.store(for: space)
         // Safari on a Mac, by name and by layout: desktop pages, and the end
         // of the user agent that WebKit leaves to the app (Identity.swift).
         config.defaultWebpagePreferences.preferredContentMode = .desktop
@@ -396,7 +416,7 @@ final class Page: NSObject {
         dropWheels()
         zoom = nil
         controller.removeAllUserScripts()
-        blocking.remove(from: controller)
+        blocking.remove(from: ruleListTarget)
         controller.removeScriptMessageHandler(forName: Page.handlerName, contentWorld: Page.world)
         controller.removeScriptMessageHandler(forName: WritingHandler.name, contentWorld: Page.world)
         controller.removeScriptMessageHandler(forName: MeasureHandler.name, contentWorld: Page.world)
@@ -467,7 +487,7 @@ final class Page: NSObject {
     /// decisions, so the document starts with the right ones.
     private func prepare(for url: URL?) {
         let handsOff = HandsOff.covers(url)
-        blocking.apply(for: url, to: controller)
+        blocking.apply(for: url, to: ruleListTarget)
         adapter = Adapters.adapter(for: url)
         bridges = Session.shared.preferences.bridges(for: adapter)
         if handsOff {
@@ -511,7 +531,8 @@ final class Page: NSObject {
                                                   injectionTime: .atDocumentEnd,
                                                   forMainFrameOnly: true, in: Page.world))
         }
-        controller.addFilterScripts(for: filters)
+        controller.addFilterScripts(blocker: Scripts.blocker(for: filters), scriptlets: Scripts.scriptlets(for: filters),
+                                    appWorld: Page.world)
         // Under the iPhone Duo's strip, what can be pressed moved out from under its items.
         if let strip {
             controller.addUserScript(WKUserScript(source: Scripts.strip + "\n" + Scripts.strip(set: strip),
@@ -559,7 +580,7 @@ final class Page: NSObject {
 
     /// The content blocker has new lists: this page's next load has them.
     func blockingChanged() {
-        blocking.apply(for: committed ?? view.url, to: controller)
+        blocking.apply(for: committed ?? view.url, to: ruleListTarget)
     }
 
     /// Whether English in this page's fields is checked, for Settings ›
@@ -579,7 +600,7 @@ final class Page: NSObject {
 
     /// writing.js with the card's words. No key beside its first suggestion:
     /// most of these devices have no keyboard to press it on.
-    private static let writingScript = WritingScript.source(acceptKey: nil, acceptShortcut: nil)
+    private static let writingScript = WebKitScriptBridge.source + "\n" + WritingScript.source(acceptKey: nil, acceptShortcut: nil)
 
     /// ⌃⌥G takes the open card's first suggestion: the fix goes in the way
     /// the page's own Undo takes back (writing.js apply()).
@@ -1171,7 +1192,7 @@ final class Page: NSObject {
             // promise resolves and this run's model is let go.
             // The notes' dots again, found by their elements' names.
             let notes = model.notes.map { ["id": $0.id.uuidString, "name": $0.name, "number": $0.number] as [String: Any] }
-            _ = try? await view.callAsyncJavaScript(Scripts.measure, arguments: ["guides": model.argument.merging(["notes": notes]) { _, new in new }],
+            _ = try? await view.callAsyncJavaScript(WebKitScriptBridge.source + "\n" + Scripts.measure, arguments: ["guides": model.argument.merging(["notes": notes]) { _, new in new }],
                                                     in: nil, contentWorld: Page.world)
             guard let self, self.measure === model else { return }
             self.measure = nil
@@ -1993,11 +2014,11 @@ extension Page: WKNavigationDelegate {
     }
 
     func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {
-        Downloads.shared.adopt(download, for: self)
+        Downloads.shared.adopt(WebKitDownload(download), for: self)
     }
 
     func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) {
-        Downloads.shared.adopt(download, for: self)
+        Downloads.shared.adopt(WebKitDownload(download), for: self)
     }
 }
 

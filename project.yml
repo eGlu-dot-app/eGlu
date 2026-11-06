@@ -28,6 +28,12 @@ settings:
     MARKETING_VERSION: "1.1.1"
     CURRENT_PROJECT_VERSION: "52"
 packages:
+  WritingServiceKit:
+    path: WritingServiceKit
+  DocumentServiceKit:
+    path: DocumentServiceKit
+  EnginePlugins:
+    path: EnginePlugins
   WebEngineKit:
     path: WebEngineKit
   WebKitEngine:
@@ -62,19 +68,38 @@ targetTemplates:
       - path: Shared
     dependencies:
       - package: PadCore
-      - package: Engines
+      - package: WritingServiceKit
+      - package: DocumentServiceKit
+      - package: EnginePlugins
+        product: HarperPlugin
+      - package: EnginePlugins
+        product: DocumentsPlugin
       - package: WebEngineKit
         product: WebEngineCore
       - package: WebEngineKit
         product: WebEngineAppKit
       - package: WebKitEngine
         product: WebKitMacPlugin
+      - package: WebKitEngine
+        product: WebKitExtensions
+      - package: WebKitEngine
+        product: WebKitSupport
       # In Contents/PlugIns, where the Dock looks for the plug-in Mac/Info.plist names.
       - target: eGlu Dock Tile
         embed: true
         codeSign: true
         copy:
           destination: plugins
+    # The interface talks to its engines only through contracts
+    # (Docs/WebEngine.md): no file of Mac/ or Shared/ imports WebKit or
+    # Engines, and only Mac/Sources/EngineComposition.swift imports the
+    # WebKit plugin's modules. The build stops at the first that does.
+    preBuildScripts:
+      - name: Engine boundary
+        basedOnDependencyAnalysis: false
+        script: |
+          cd "$SRCROOT"
+          /usr/bin/python3 Tests/engine-inventory.py --strict
     settings:
       base:
         PRODUCT_NAME: eGlu
@@ -100,8 +125,18 @@ targets:
       - path: App
       - path: Shared
     dependencies:
+      - package: WebEngineKit
+        product: WebEngineCore
       - package: PadCore
       - package: Engines
+      - package: WritingServiceKit
+      - package: DocumentServiceKit
+      - package: EnginePlugins
+        product: HarperPlugin
+      - package: EnginePlugins
+        product: DocumentsPlugin
+      - package: WebKitEngine
+        product: WebKitSupport
     settings:
       base:
         INFOPLIST_FILE: App/Info.plist
@@ -168,9 +203,12 @@ targets:
     platform: macOS
     sources:
       - path: Shared/SiteIcons.swift
-      - path: Shared/SVGRaster.swift
       - path: Tests/SiteIconsTests.swift
     dependencies:
+      - package: WebKitEngine
+        product: WebKitSupport
+      - package: WebEngineKit
+        product: WebEngineCore
       - package: PadCore
     settings:
       base:
