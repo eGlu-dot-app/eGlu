@@ -99,23 +99,26 @@ extension Handoff {
             code[index] = fenced != nil
             if fenced == nil { levels[index] = headingLevel(line) }
         }
-        var found = levels.compactMap { $0 }
+        // The site's transcript, where there is one: the last heading as its
+        // reader writes it, which comes after all of the page's own text. A
+        // part of the page's called the same, before it, stays a part. Its
+        // heading is the reader's and not the page's: it has no say in which
+        // headings part the page (on a page of "###" headings alone, the
+        // transcript's "##" was taken for the page's title, its text going
+        // into the page's last part).
+        let spoken = outline.transcript
+            ? lines.indices.last { levels[$0] != nil && lines[$0] == Transcript.heading } : nil
+        var found = levels.indices.filter { $0 != spoken }.compactMap { levels[$0] }
         // One heading above all the others is the page's title, not its only part: it is left out,
         // the card over the outline saying what the page is called.
         if let level = found.min(), found.count(where: { $0 == level }) == 1, found.contains(where: { $0 > level }),
-           let title = levels.firstIndex(of: level) {
+           let title = levels.indices.first(where: { levels[$0] == level && $0 != spoken }) {
             levels[title] = nil
             skipped = title
             found.removeAll { $0 == level }
         }
         // The parts are under the highest headings the page has more than one of; one above them all is a part too.
         let top = Set(found).sorted().first { level in found.count(where: { $0 == level }) > 1 } ?? found.min()
-
-        // The site's transcript, where there is one: the last heading as its
-        // reader writes it, which comes after all of the page's own text. A
-        // part of the page's called the same, before it, stays a part.
-        let spoken = outline.transcript
-            ? lines.indices.last { levels[$0] != nil && lines[$0] == Transcript.heading } : nil
         var heading = ""
         var headed: Int?
         var under: [Int] = []
@@ -131,8 +134,8 @@ extension Handoff {
         let transcriptLevel = headingLevel(Transcript.heading) ?? 2
         var inSpoken = false
         for index in lines.indices where index != skipped {
-            guard let level = levels[index], let top,
-                  level <= top || index == spoken || (inSpoken && level <= transcriptLevel) else {
+            guard let level = levels[index],
+                  level <= (top ?? 0) || index == spoken || (inSpoken && level <= transcriptLevel) else {
                 under.append(index)
                 continue
             }

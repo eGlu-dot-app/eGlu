@@ -271,6 +271,20 @@ struct HandoffOutlineReviewTests {
         #expect(outline.transcript)
     }
 
+    @Test func theSitesTranscriptIsNotTakenForAPageTitle() {
+        let body = "### Intro\n\nWords of the page.\n\n### Details\n\nA label\n\n## Transcript\n\n0:00 Hello there."
+        let outline = Handoff.outline(of: Handoff.Composed(kind: .media, body: body), reading: Self.spoken())
+        #expect(outline.sections.map(\.heading) == ["Intro", "Details"])
+        #expect(outline.sections[1].opening == "A label")
+    }
+
+    @Test func aPageWithNoHeadingsButTheTranscript() {
+        let body = "The page's only paragraph.\n\n## Transcript\n\n0:00 Hello there."
+        let outline = Handoff.outline(of: Handoff.Composed(kind: .media, body: body), reading: Self.spoken())
+        #expect(outline.sections == [Handoff.Outline.Section(heading: "", opening: "The page's only paragraph.")])
+        #expect(outline.transcript)
+    }
+
     @Test func aTranscriptOfThePagesOwnIsAPart() {
         var composed = Handoff.Composed(kind: .media, body: "## Description\n\nA video.\n\n## Transcript\n\n0:00 Hello there.")
         composed.transcript = true
