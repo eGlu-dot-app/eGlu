@@ -265,6 +265,11 @@ public enum Bookmarks {
     /// many links it added.
     @discardableResult
     public static func merge(_ imported: [Bookmark], into existing: inout [Bookmark], asWritten: Bool = false) -> Int {
+        merge(imported, into: &existing, asWritten: asWritten, top: true)
+    }
+
+    /// `merge` at one level: `top` only for the space's own top, where the bar is.
+    private static func merge(_ imported: [Bookmark], into existing: inout [Bookmark], asWritten: Bool, top: Bool) -> Int {
         var added = 0
         // The bar by any spelling of its name is the one bar.
         func name(_ folder: Bookmark) -> String { isBar(folder) ? barName : folder.title }
@@ -276,6 +281,12 @@ public enum Bookmarks {
         }
         let present = asWritten ? linksHere(imported, pairedWith: existing) : linksHere(imported, onceIn: existing)
         var paired = Set<Int>()
+        // The file's bar goes into the space's bar, the first so named: a later
+        // folder of that name with more in common is only a folder, and pairing
+        // with it would leave the bar without what the file's bar brings.
+        let fileBar = top && asWritten ? bar(in: imported)?.id : nil
+        let spaceBar = fileBar == nil ? nil : existing.firstIndex(where: isBar)
+        if let spaceBar { paired.insert(spaceBar) }
         for (offset, item) in imported.enumerated() {
             if let link = item.url {
                 guard !present.contains(offset) else { continue }
@@ -285,17 +296,17 @@ public enum Bookmarks {
             }
             let children = item.children ?? []
             let named = name(item)
-            let match = asWritten
-                ? closest(item, among: (folders[named] ?? []).filter { !paired.contains($0) }, in: existing)
+            let match = item.id == fileBar && spaceBar != nil ? spaceBar
+                : asWritten ? closest(item, among: (folders[named] ?? []).filter { !paired.contains($0) }, in: existing)
                 : folders[named]?.first
             if let index = match {
                 paired.insert(index)
                 var inside = existing[index].children ?? []
-                added += merge(children, into: &inside, asWritten: asWritten)
+                added += merge(children, into: &inside, asWritten: asWritten, top: false)
                 existing[index].children = inside
             } else {
                 var inside: [Bookmark] = []
-                added += merge(children, into: &inside, asWritten: asWritten)
+                added += merge(children, into: &inside, asWritten: asWritten, top: false)
                 if !inside.isEmpty || asWritten {
                     existing.append(Bookmark(folder: item.title, children: inside))
                     // Another browser's folders of one name come in as one,

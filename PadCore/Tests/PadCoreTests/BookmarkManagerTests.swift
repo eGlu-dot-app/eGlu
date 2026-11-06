@@ -247,6 +247,21 @@ final class BookmarkManagerTests: XCTestCase {
         XCTAssertEqual(Self.shape(w.spaces[0].bookmarks), Self.shape(there))
     }
 
+    func testTheFilesBarGoesIntoTheSpacesBarEvenWithATwinWithMoreInCommon() throws {
+        let a = URL(string: "https://a.example/")!
+        let b = URL(string: "https://b.example/")!
+        var w = Workspace.onFigma()
+        let space = w.spaces[0].id
+        let realBar = Bookmark(folder: Bookmarks.barName, children: [Bookmark(title: "A", url: a)])
+        w.spaces[0].bookmarks = [realBar, Bookmark(folder: Bookmarks.barName, children: [Bookmark(title: "B", url: b)])]
+        let file = BookmarkImport(items: [Bookmark(folder: Bookmarks.barName, children: [Bookmark(title: "B", url: b)])],
+                                  icons: [:], asWritten: true)
+        XCTAssertTrue(w.importBookmarks(file, into: space).isComplete)
+        XCTAssertEqual(w.spaces[0].bar?.id, realBar.id)
+        XCTAssertEqual(w.spaces[0].bar?.children?.map(\.title), ["A", "B"])
+        XCTAssertEqual(w.importBookmarks(file, into: space), .duplicates(total: 1, space: w.spaces[0].name))
+    }
+
     func testAnotherBrowsersRepeatsStillComeInOnce() {
         var w = Workspace.onFigma()
         let space = w.spaces[0].id
