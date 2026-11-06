@@ -75,6 +75,24 @@ final class BookmarkManagerTests: XCTestCase {
         XCTAssertTrue(Bookmarks.matching("   ", in: items).isEmpty)
     }
 
+    func testAFolderChosenWithWhatIsInItCountsOnceInTheOrderTheyStand() throws {
+        var (w, space, bar, docs) = space()
+        let notionID = try XCTUnwrap(Bookmarks.find(notion, in: w.spaces[0].bookmarks)?.id)
+        let figmaID = try XCTUnwrap(Bookmarks.find(figma, in: w.spaces[0].bookmarks)?.id)
+        let items = w.spaces[0].bookmarks
+        // Chosen in any order, Notion inside Docs: Docs carries it, and the bar's folder comes before Figma.
+        XCTAssertEqual(Bookmarks.outermost([figmaID, notionID, docs, UUID()], in: items), [docs, figmaID])
+        XCTAssertEqual(Bookmarks.outermost([notionID, figmaID], in: items), [notionID, figmaID])
+        XCTAssertEqual(Bookmarks.outermost([bar, docs], in: items), [bar])
+
+        // Moved together into Other Bookmarks, Notion stays in Docs.
+        for id in Bookmarks.outermost([notionID, docs], in: items) {
+            w.moveBookmark(id, into: nil, in: space)
+        }
+        XCTAssertEqual(Bookmarks.find(docs, in: w.spaces[0].bookmarks)?.children?.map(\.id), [notionID])
+        XCTAssertEqual(Bookmarks.parent(of: docs, in: w.spaces[0].bookmarks), nil)
+    }
+
     func testABookmarksAddressIsAWebAddressAndNeverASearch() {
         XCTAssertEqual(Destination.webAddress(from: " figma.com/files "), URL(string: "https://figma.com/files"))
         XCTAssertEqual(Destination.webAddress(from: "localhost:3000"), URL(string: "http://localhost:3000"))

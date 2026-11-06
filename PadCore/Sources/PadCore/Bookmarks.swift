@@ -237,6 +237,18 @@ public enum Bookmarks {
         return walk(items, path: [], top: true)
     }
 
+    /// Of `ids`, those not inside another of them, in the order the
+    /// bookmarks stand: a folder chosen with what is in it moves, opens and
+    /// goes as one, its own keeping their places in it. Ids that are nowhere
+    /// are left out.
+    public static func outermost(_ ids: some Collection<UUID>, in items: [Bookmark]) -> [UUID] {
+        let chosen = Set(ids)
+        func walk(_ level: [Bookmark]) -> [UUID] {
+            level.flatMap { item in chosen.contains(item.id) ? [item.id] : walk(item.children ?? []) }
+        }
+        return walk(items)
+    }
+
     /// `imported` added to `existing`: a link already at its level is left
     /// out, and a folder whose name is already there is merged into that
     /// one, so importing the same file twice adds nothing. A new folder that

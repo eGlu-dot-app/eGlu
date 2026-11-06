@@ -308,7 +308,8 @@ struct BookmarkManagerView: View {
     /// What a row's menu, or the list's away from any row, offers for `ids`.
     @ViewBuilder
     private func menu(for ids: Set<UUID>, in shown: Place) -> some View {
-        let chosen = ids.compactMap { Bookmarks.find($0, in: bookmarks) }
+        // A folder chosen with what is in it is one: Open All opens each page once.
+        let chosen = Bookmarks.outermost(ids, in: bookmarks).compactMap { Bookmarks.find($0, in: bookmarks) }
         let links = chosen.flatMap(\.links).compactMap(\.url)
         if chosen.isEmpty {
             Button("Add Bookmark…", systemImage: "plus") { editor = .newBookmark(in: shown) }
@@ -532,7 +533,8 @@ struct BookmarkManagerView: View {
     /// none of them could go.
     @discardableResult
     private func move(_ ids: [UUID], into place: Place, before: UUID?) -> Bool {
-        let moving = ids.filter { $0 != before && Bookmarks.find($0, in: bookmarks) != nil }
+        // A folder moved with what is in it takes that with it, and several go in the order they stand.
+        let moving = Bookmarks.outermost(ids, in: bookmarks).filter { $0 != before }
         guard !moving.isEmpty else { return false }
         session.change { w in
             guard let folder = Self.folder(of: place, in: &w, space: spaceID) else { return }
@@ -565,7 +567,8 @@ struct BookmarkManagerView: View {
     /// more than one; the bookmarks bar is never among what goes.
     private func askToRemove(_ ids: [UUID]) {
         let barID = Bookmarks.bar(in: bookmarks)?.id
-        let going = ids.filter { $0 != barID }.compactMap { Bookmarks.find($0, in: bookmarks) }
+        // What goes with a folder that goes is not asked about again, nor counted twice.
+        let going = Bookmarks.outermost(ids, in: bookmarks).filter { $0 != barID }.compactMap { Bookmarks.find($0, in: bookmarks) }
         guard !going.isEmpty else { return }
         if going.count > 1 || going.contains(where: { !($0.children ?? []).isEmpty }) {
             deleting = going.map(\.id)
