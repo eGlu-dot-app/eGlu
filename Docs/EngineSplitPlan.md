@@ -1,0 +1,1078 @@
+# Engine split: implementation plan (eGlu for Mac)
+
+Status: planned on 4 November 2026 at commit 75fcca2, narrowed to the Mac app and validated the same day. Claude wrote the draft. Codex (gpt-6.1-sol) read the repository over two rounds, corrected the draft and sketched the contracts, then validated the Mac plan in two independent runs. Gemini researched what a Chromium engine would face and then checked that research against primary sources. Section 11 records the validation and what it changed. Steps 0 and 1 were built and committed on 4 November 2026 (cf0049e6, 7.3); steps 2 and 3 the same day (6f21a0fc, 7.4); step 4a the same day (8fca31ff, 7.5); step 4b the same day (0ad0afee, 7.6); step 4c the same day (2c3e5680, 7.7); step 4d the same day (52081355, 7.8); step 5 the same day (7.9); step 6 the same day (55ee7e38, 7.10); step 7a the same day (7b9d7e64, 7.11); step 7b the same day (ea485362, 7.12); step 8 the same day (467c9b6e, 7.13); step 9 the same day (d63b9b88, 7.14); step 10 the same day (84c4227f, 7.15); step 11 the same day (5b964439, 7.16); step 12a on 5 November (128ffc8b, 7.17); step 12b the same day (8a4a6a0a, 7.18); step 12c the same day (4a6fc2bd, 7.19); step 12d the same day (a39d7436, 7.20); step 12e the same day (8ea381fc, 7.21); step 12f the same day (13642ab9, 7.22); step 12g the same day (d6ab3a3c, 7.23); step 12h the same day (4e33bec1, 7.24); step 12i the same day (4854c754, 7.25); step 12j the same day (7d6cb5d9, 7.26); step 12k the same day (316b52f3, 7.27); step 12l the same day (9829203a, 7.28); step 12m the same day (bd4886e5, 7.29); step 12n, the end of step 12, the same day (c1a5c4e0, 7.30); step 13's first part the same day (7.31); the fake-engine build specified, not built, the same day (`Docs/FakeEngineBuild.md`, 7.31). The decisions left open are in section 9.
+
+**Scope:** eGlu for Mac only (`Mac/`, and the `Shared/` and PadCore code it compiles). The iPad and iPhone app is out of scope. It still compiles `Shared/` and PadCore, so it must keep building and behaving the same; it adopts nothing new (section 4).
+
+## 1. Goal
+
+eGlu for Mac talks to its engines only through contracts. Each engine is a plugin:
+
+| Plugin | Engine | Where |
+|---|---|---|
+| WebKit plugin | WebKit (`WKWebView`), with eGlu's WebKit-specific tweaks | This repository, the default |
+| Harper plugin | Harper grammar, through the `Engines` package | This repository |
+| Documents plugin | anydoc and pdf-inspector, through the `Engines` package | This repository |
+| Chromium plugin | Chromium, through CEF | Someone else's, later (section 8) |
+
+Someone who wants a Chromium eGlu for Mac writes a Chromium plugin against the contracts and builds the Mac app with it instead of the WebKit plugin.
+
+**Done means:**
+- No file the Mac app compiles (`Mac/`, `Shared/`) imports WebKit or `Engines`. A check fails the build if one does.
+- eGlu Mac and eGlu Mac Direct build and behave as before with the WebKit, Harper and Documents plugins.
+- A build configuration of the Mac app that links a fake engine instead of the WebKit plugin builds and runs the interface's tests. This shows the contracts are complete without WebKit.
+- `Docs/WebEngine.md` explains the contracts well enough that someone can write a plugin without reading the interface's code.
+- The iPad and iPhone app still builds and passes its tests at every step.
+
+**Not goals:**
+- Anything for the iPad and iPhone app beyond keeping it building.
+- Loading plugins while the app runs. The plugin is chosen when the app is built.
+- Building a Chromium plugin. That is a separate project (section 8).
+- Carrying sign-ins, history state or saved sessions from one engine to another.
+- Making every engine do everything. Each plugin says what it supports, and the interface hides what is missing.
+
+## 2. Words
+
+Three names in the code already sound like "engine" or "adapter". New names must not clash with them.
+
+| Word in this plan | Means | Not to confuse with |
+|---|---|---|
+| Web engine | What draws pages: WebKit today | PadCore's `Engine`, the search engines (`PadCore/Sources/PadCore/Engine.swift`) |
+| `Engines` package | Harper and the document readers, in Rust (`Engines/`) | |
+| Plugin | An implementation of the contracts | PadCore's `Adapters`, a site's own settings (`PadCore/Sources/PadCore/Adapters.swift`) |
+| Contracts | The protocols and value types plugins implement, in new packages | |
+| Interface | `Mac/` and the `Shared/` code the Mac compiles: windows, tabs, sidebar, settings, and the Mac's `Page` | |
+| Engine state | What the engine itself reports (WebKit's `canGoBack`) | Product state, which `Page` adds rules to (going back past a replaced page) |
+
+## 3. What the code has today
+
+Counts are at commit 75fcca2, for the Mac app. Section 11 says how each was checked.
+
+**Size and spread**
+
+| Fact | Evidence |
+|---|---|
+| 36 files in `Mac/` and 9 in `Shared/` import WebKit. Both apps compile `Shared/` | `grep '^import WebKit'`; `project.yml:46`, `:49` |
+| The Mac's extension files come to 9,348 lines, UI included. They are the largest WebKit-only part | `Mac/Sources/Extension*.swift` |
+| The Mac's `Page` is 1,798 lines. `Shared/PageShared.swift` adds an `extension Page` that both apps' `Page` classes share | `Mac/Sources/Page.swift:139`, `Shared/PageShared.swift:158` |
+| 86 lines in 18 files outside `Mac/Sources/Page.swift` name `page.view` (a `WKWebView`): `ApplePasswords.swift` 13, `WindowModel.swift` 11, `Popup.swift` 10, `Pages.swift` 8, `LittleWindow.swift` 8, `Peek.swift` 6, `PageShared.swift` 5, and 11 more. Local aliases (`let view = page.view`) add more that this count misses | `grep -E '\bpage\??\.view\b'` over `Mac/Sources` and `Shared` |
+| `Engines` is imported by seven Mac files and three shared ones. `WritingChecker` builds Harper's `Grammar` itself and checks stale results by its identity; `HandoffDocumentSource` reads documents through it; About lists its licences | `Mac/Sources/{About,EgluApp,SettingsView,WindowModel}.swift`, `Mac/Sources/Writing/{WritingHandler,Panel/PopupPanel,Elsewhere/ElsewhereChecker}.swift`, `Shared/Writing/{WritingChecker,WritingLists}.swift`, `Shared/HandoffDocumentSource.swift`; `Shared/Writing/WritingChecker.swift:83`, `:102` |
+
+**Seams that leak WebKit**
+
+| Fact | Evidence |
+|---|---|
+| `PageHost`, the seam between a page and its window, passes `WKWebViewConfiguration`, `WKNavigationAction`, `WKWindowFeatures`, and a `WKWebView` back | `Mac/Sources/Page.swift:22` |
+| Hosts put the web view itself into their windows and focus it | `Mac/Sources/Popup.swift:111`, `Mac/Sources/LittleWindow.swift:135` |
+| "Go back past a replaced page" is decided in three callers, each reading WebKit's `canGoBack` and `Session.shared`. One more caller reads WebKit's `canGoBack` on purpose, for a different question | `WindowModel.swift:309`, `:579`; `ExtensionTabs.swift:287`; `PageSwipe.swift:211`, `:215`; `WindowModel.swift:445` |
+| `Page.load(_ URL)` and `reload(byHand:)` do more than WebKit's calls: they reset navigation state, grant file access (`loadFileURL`), retry failures and reset crash counting. Three callers reload from origin on WebKit directly | `Mac/Sources/Page.swift:454`, `:624`, `:627`, `:634`; `Mac/Sources/DeveloperBar.swift:226`, `Mac/Sources/Menus.swift:365`, `Mac/Sources/WindowModel.swift:1148` |
+| The navigation decision reads the mouse button and modifier keys (⌘-click to a new tab), the redirect's kind (a server's or an extension rule's, with the original address), the HTTP method and headers. It answers synchronously | `Mac/Sources/Page.swift:844`, `:569`, `:1472`, `:1545` |
+| `Page` acts on WebKit's lifecycle: commit, finish, provisional and committed failures, the web process ending, and a script closing the window | `Mac/Sources/Page.swift:1618`, `:1645`, `:1666`, `:1688`, `:1733` |
+| `Page` offers find, printing, writable zoom, device sizes with their user agent, JavaScript dialogs (one held for a background tab), file panels, and camera and microphone state (which keeps a page from freezing) | `Mac/Sources/Page.swift:854`, `:886`, `:892`, `:1122`, `:1737`, `:1770`, `:1783`, `:688`, `:1388` |
+| WebKit's public `WKFrameInfo` has no frame or document identifier: only main frame or not, the request, the security origin and the web view | macOS 27.2 SDK, `WebKit.framework/Headers/WKFrameInfo.h:46` to `:58` |
+| Private WebKit calls: `_pinnedState` and `_setRubberBandingEnabled:` for the swipe; `_isRedirect`, `_originalURL`, `_isContentExtensionRedirect`; picture in picture; developer extras; the inspector; display capture; the context menu's element and unused wheel events | `Mac/Sources/PageSwipe.swift`, `Mac/Sources/Page.swift:1448`, `:1468`, `Mac/Sources/ExtensionCapture.swift`, `Mac/Sources/ExtensionOffscreen.swift`, `Mac/Sources/WebInspector.swift` |
+
+**Scripts and messages**
+
+| Fact | Evidence |
+|---|---|
+| PadCore's sources import no WebKit (one test does), but its content-blocking rules use WebKit's rule format | `PadCore/Sources/PadCore/ContentBlocking.swift:3`; `PadCore/Tests/PadCoreTests/ContentBlockingTests.swift:4` |
+| Page scripts reach WebKit directly: four of PadCore's (`bridge.js` is iPad only) and two written inline in Swift | `extension-store.js:22`, `measure.js:30`, `extension-shim.js:2807` (as `root.webkit`), `writing.js:272` in `PadCore/Sources/PadCore/Scripts/`; `Mac/Sources/PasswordWatch.swift:28`, `Mac/Sources/ApplePasswords.swift:171`; `Mac/Sources/Page.swift:133` |
+| Each message handler checks more than where a message came from: the store button checks the store address and the extension clicked; Measure its run; Writing HandsOff and the writing setting; extension capture the extension's controller, space and context | `Mac/Sources/StoreButton.swift:27`, `Shared/Measure/MeasureHandler.swift:20`, `Mac/Sources/Writing/WritingHandler.swift:27`, `Mac/Sources/ExtensionCapture.swift:169` |
+| `extension-shim.js` runs in several worlds: extension pages (where its capture call lives), content scripts and workers | `Mac/Sources/Extensions.swift:455`; `PadCore/Sources/PadCore/ExtensionPreparation.swift:458`, `:467`, `:533` |
+| The iPad loads the same `writing.js` and `measure.js` | `App/Sources/Page.swift:525`, `:1108` |
+
+**Code around the page**
+
+| Fact | Evidence |
+|---|---|
+| History keeps WebKit's own back-forward items as identities | `Shared/HistoryRecorder.swift:505` |
+| Each space has a persistent website data store, erased and cleaned up at start | `Shared/Stores.swift:20`, `:31`, `:50` |
+| The Mac makes hidden web views of its own: transcript reading, SVG drawing (which site icons depend on), download retries, extension popups, offscreen documents, sign-in windows, trial checks, picture in picture; the recording indicator moves web views between windows | `Shared/PageShared.swift:38`, `Shared/SVGRaster.swift:85`, `Shared/SiteIcons.swift:269`, `Shared/DownloadActivity.swift:144`, `Mac/Sources/ExtensionPopup.swift:26`, `Mac/Sources/ExtensionOffscreen.swift`, `Mac/Sources/ExtensionAuth.swift:203`, `Mac/Sources/ExtensionTrial.swift`, `Mac/Sources/PictureWindow.swift:44`, `Mac/Sources/RecordingIndicator.swift:37` |
+| Handoff downloads files through the page's own web view, so they carry its sign-in | `Shared/HandoffFetch.swift:15`, `Shared/HandoffDocumentSource.swift:32` |
+| Apple Passwords checks the frame and world of each message and converts page coordinates to the screen using zoom and magnification | `Mac/Sources/ApplePasswords.swift:233`, `:551` |
+| `ContentBlocker` reads the app's folders and preferences and tells live pages when lists change; `Session` starts it | `Shared/ContentBlocker.swift:110`, `:138`, `:378`; `Mac/Sources/Session.swift:163` |
+| `Pages` makes concrete `Page`s and asks extensions for their configuration; `Unseen` and `PageBlocking` in `PageShared.swift` take the app's `Page` or read `Session.shared` | `Mac/Sources/Pages.swift:35`; `Shared/PageShared.swift:38`, `:230` |
+
+**Rules, build and tests**
+
+| Fact | Evidence |
+|---|---|
+| HandsOff guards scripts, reading a page and changing it. It does not guard navigation, find, printing or snapshots. Its tests check the source text, not every call | `Mac/Sources/Page.swift:854`, `:892`, `:928`, `PadCore/Tests/PadCoreTests/ScriptAndPolicyTests.swift:246` |
+| A test bans four cookie API spellings in `App`, `Mac`, `Shared` and `PadCore/Sources`. New package folders would escape it | `ScriptAndPolicyTests.swift:223` |
+| `Shared/` is compiled into each app, not built as a module. A plugin outside the repository cannot import anything declared there | `project.yml:49` |
+| WebKit code reaches `Session.shared` directly | `Mac/Sources/ExtensionTabs.swift:57`, `Mac/Sources/Page.swift:408` |
+| The app builds in Swift 5 language mode; the iOS app targets iOS 17 | `project.yml:18`, `:8` |
+| The Mac has one test target, Site Icons Tests, which compiles `Shared/SiteIcons.swift` and `Shared/SVGRaster.swift`. The crash tests are iOS only. Nothing tests the Mac's `Page` against a real `WKWebView` | `project.yml:137`, `:142`; `Tests/Crashes/project.yml:11` |
+| The Mac app ships only as a Developer ID DMG, outside the sandbox with the hardened runtime. Default signing has no team and asks for iCloud | `README.md:449`; `Config/Signing.xcconfig:17`, `Config/Mac.xcconfig:12` |
+
+## 4. Layers and rules
+
+| Layer | Holds | May import |
+|---|---|---|
+| Interface (`Mac/`, `Shared/`) | Windows, tab UI, sidebar, settings, the hosts, the Mac's `Page` | The contracts, PadCore, AppKit and SwiftUI. Not WebKit, not `Engines` |
+| Core (PadCore) | Logic, HandsOff and other policies, filter lists, page scripts | Foundation |
+| Contracts (new packages) | Foundation-only value types and protocols, plus an AppKit target for the page's view | Foundation, AppKit |
+| Plugins | WebKit, Harper and Documents plugins in this repository; a Chromium plugin elsewhere | The contracts and their own engine |
+
+**Rules:**
+- The interface never imports WebKit or `Engines`. A check reports this from phase 0 and fails the build at the end.
+- Plugins never reach `Session.shared` or other app globals. The interface hands them what they need. A package can never import from `Shared/` or either app.
+- HandsOff is decided in PadCore and the interface, before a plugin is called, for every operation it covers today. The contracts' documentation lists which operations those are.
+- Two contracts, not one. Hosts talk to the product `Page`. `Page` talks to the smaller engine page. The engine page reports engine state; `Page` adds product rules (going back past a replaced page, retries, crash counting). Product features (Peek, Handoff, Writing, Measure) are built from engine operations, not added to the contract.
+- A rule that several callers repeat moves into `Page` once, so a plugin never has to know it.
+- Each contract is written together with its WebKit implementation, its fake and its tests, one feature at a time. No contract is declared ahead of the code that uses it.
+- Every step changes no behaviour, keeps both Mac schemes building, and passes the tests.
+
+**The iPad and iPhone app while this happens:**
+- It keeps calling WebKit itself. It does not adopt the contracts.
+- Shared WebKit helpers move into a WebKit package target that builds for both macOS 26 and iOS 17 (`WebKitSupport`). The Mac's AppKit and extension code goes into a Mac-only target (`WebKitMacPlugin`). The iOS app depends only on `WebKitSupport`, and calls its types directly, as it calls WebKit now. Nothing is copied.
+- What in `Shared/` needs the app itself (`Page`, `Session.shared`) cannot move into a package. `PageShared.swift`'s `extension Page`, `Unseen` and `PageBlocking` stay in each app; only helpers that take a view, a store or a policy value move out.
+- When a shared script changes its transport (`writing.js`, `measure.js`), the iOS `Page` installs a small `egluBridge` that maps to its existing handlers, so the iPad behaves as before.
+- When a shared contract replaces something both apps use (Harper through `WritingChecker`, documents through `HandoffDocumentSource`, rasterizing through `SiteIcons`), the iOS callers get the smallest change that keeps them building: `App/Sources/{AppDelegate,LicencesView,SettingsView,WritingHandler}.swift`.
+
+## 5. The contracts
+
+Sketches, signatures only. Exported declarations would be `public`, with explicit `public init`s, since Swift does not export synthesized initializers. The packages build in Swift 6 language mode whatever the app's mode. All four sketches type-check with Swift 6.4.2, and a throwaway WebKit-backed page implements the page and view contracts, all five services included, with no errors or warnings (section 11). Each piece is finished in the step that uses it (section 7), so these signatures will change as they meet the code.
+
+### 5.1 Packages
+
+Packages appear only when their phase begins.
+
+| Package | Targets | Holds |
+|---|---|---|
+| `WebEngineKit` | `WebEngineCore` (Foundation), `WebEngineAppKit` (AppKit) | The page contract (5.2) and the view contract (5.3) |
+| `WebKitEngine` | `WebKitSupport` (macOS 26 and iOS 17), `WebKitMacPlugin` (macOS) | Shared WebKit helpers; the Mac's WebKit page, `PageView`, private calls, rule compiling, the extension runtime |
+| `WritingServiceKit` | one | The grammar contract (5.6) |
+| `DocumentServiceKit` | one | The documents contract (5.7) |
+| `HarperPlugin`, `DocumentsPlugin` | one each | The `Engines` implementations, owning `Engines`' types and thread |
+
+### 5.2 The page contract
+
+```swift
+import Foundation
+
+/// What the engine reports. Product rules (going back past a replaced
+/// page) are Page's, not the engine's.
+struct PageState: Sendable, Equatable {
+    let url: URL?
+    let title: String?
+    let isLoading: Bool
+    let estimatedProgress: Double
+    let canGoBack: Bool
+    let canGoForward: Bool
+    let hasOnlySecureContent: Bool
+}
+enum WebReload: Sendable { case normal, origin }
+@MainActor protocol WebNavigationCommands: AnyObject {
+    var state: PageState { get }
+    func load(_ request: URLRequest)
+    func loadFile(_ url: URL, readAccess: URL)
+    func reload(_ mode: WebReload)
+    func stop()
+    func back()
+    func forward()
+}
+
+indirect enum WebJSON: Sendable, Equatable {
+    case null, bool(Bool), number(Double), string(String)
+    case array([WebJSON]), object([String: WebJSON])
+}
+enum WebWorld: Sendable { case app, page }
+enum WebOrigin: Sendable, Equatable {
+    case tuple(scheme: String, host: String, port: Int)
+    case opaque
+}
+/// Made by the plugin. WebKit has no frame or document identifiers, so the
+/// WebKit plugin numbers main-frame documents by commits and keeps the
+/// WKFrameInfo behind each handle. Until a plugin can tell when a
+/// subframe's document changes, evaluate accepts main-frame handles only.
+struct WebFrameHandle: Sendable, Hashable { let raw: UInt64 }
+struct WebDocumentID: Sendable, Hashable { let raw: UInt64 }
+struct WebFrame: Sendable {
+    let handle: WebFrameHandle
+    let document: WebDocumentID
+    let isMainFrame: Bool
+    let origin: WebOrigin
+}
+
+enum WebInjection: Sendable { case documentStart, documentEnd }
+struct WebScript: Sendable {
+    let id: String
+    let source: String
+    let world: WebWorld
+    let injection: WebInjection
+    let mainFrameOnly: Bool
+}
+struct WebMessage: Sendable {
+    let channel: String
+    let frame: WebFrame
+    let world: WebWorld
+    let body: WebJSON
+}
+typealias WebMessageHandler =
+    @MainActor @Sendable (WebMessage) async throws -> WebJSON
+
+struct WebNavigationID: Sendable, Hashable { let raw: UInt64 }
+enum WebNavigationKind: Sendable {
+    case link, form, formResubmission, history, reload, other
+}
+struct WebModifiers: OptionSet, Sendable {
+    let rawValue: Int
+    static let command = WebModifiers(rawValue: 1)
+    static let shift = WebModifiers(rawValue: 2)
+    static let option = WebModifiers(rawValue: 4)
+    static let control = WebModifiers(rawValue: 8)
+}
+enum WebMouseButton: Sendable { case primary, middle, secondary }
+enum WebRedirect: Sendable {
+    case server
+    case contentRule(original: URL?)
+}
+struct WebNavigation: Sendable {
+    let id: WebNavigationID
+    let request: URLRequest
+    let source: WebFrame?
+    let targetIsMainFrame: Bool
+    let kind: WebNavigationKind
+    let modifiers: WebModifiers
+    let button: WebMouseButton?
+    let redirect: WebRedirect?
+    let requestsDownload: Bool
+}
+struct WebResponse: Sendable {
+    let navigation: WebNavigationID?
+    let url: URL
+    let status: Int?
+    let mimeType: String?
+    let headers: [String: String]
+    let isMainFrame: Bool
+    let canDisplay: Bool
+}
+struct WebLoadError: Error, Sendable {
+    enum Kind: Sendable { case cancelled, network, security, blocked, interrupted, other }
+    let kind: Kind
+    let domain: String
+    let code: Int
+    let url: URL?
+    let message: String
+}
+enum WebNavigationDecision: Sendable {
+    case allow, cancel, download, openExternal(URL)
+}
+enum WebResponseDecision: Sendable { case allow, cancel, download }
+
+@MainActor protocol WebPageEvents: AnyObject {
+    func stateChanged(_ state: PageState)
+    /// Answered at once; it cannot wait for the person.
+    func decideNavigation(_ navigation: WebNavigation) -> WebNavigationDecision
+    func decideResponse(_ response: WebResponse) -> WebResponseDecision
+    /// Where a load started from, and each server redirect: Page keeps
+    /// the address it was loading from (`loadingFrom`, Page.swift:1610).
+    func started(_ navigation: WebNavigationID?, from url: URL?)
+    func redirected(_ navigation: WebNavigationID?, from url: URL?)
+    func committed(_ navigation: WebNavigationID?, document: WebDocumentID)
+    func finished(_ navigation: WebNavigationID?)
+    func failed(_ navigation: WebNavigationID?, error: WebLoadError, provisional: Bool)
+    func processEnded()
+    func closeRequested()
+    /// The host accepts or rejects before this returns: WebKit needs the
+    /// child's view back from the same call.
+    func requestedChild(_ request: any WebChildRequest)
+    /// A navigation became a download. The host takes it over and it
+    /// outlives the page (Downloads.shared.adopt, Page.swift:1605).
+    func downloadStarted(_ download: any WebDownload)
+}
+@MainActor protocol WebDownload: AnyObject {
+    var originalURL: URL? { get }
+    func cancel() async -> Data?
+}
+@MainActor protocol WebChildRequest: AnyObject {
+    var navigation: WebNavigation { get }
+    var requestedWidth: Double? { get }
+    var requestedHeight: Double? { get }
+    func accept() throws -> any WebEnginePage
+    func reject()
+}
+
+/// Traits a plugin has or lacks. Things the host calls are services below.
+enum WebTrait: Sendable, Hashable {
+    case isolatedScripts, correlatedUnusedWheelEvents, rubberBandControl
+    case documentPictureInPicture, videoPictureInPicture
+}
+@MainActor protocol WebFind: AnyObject {
+    func find(_ text: String, backwards: Bool, caseSensitive: Bool) async -> Bool
+}
+@MainActor protocol WebZoom: AnyObject {
+    var pageZoom: Double { get set }
+    var magnification: Double { get }
+}
+@MainActor protocol WebDialogs: AnyObject {
+    var presenter: (any WebDialogPresenter)? { get set }
+}
+@MainActor protocol WebDialogPresenter: AnyObject {
+    func alert(_ message: String, from frame: WebFrame) async
+    func confirm(_ message: String, from frame: WebFrame) async -> Bool
+    func prompt(_ message: String, default text: String?, from frame: WebFrame) async -> String?
+    func openFiles(multiple: Bool, directories: Bool) async -> [URL]?
+}
+@MainActor protocol WebMediaCapture: AnyObject {
+    var isCapturing: Bool { get }
+}
+@MainActor protocol WebUserAgent: AnyObject {
+    var custom: String? { get set }
+}
+
+@MainActor protocol WebEnginePage: WebNavigationCommands {
+    var traits: Set<WebTrait> { get }
+    var events: (any WebPageEvents)? { get set }
+    func replaceScripts(_ scripts: [WebScript]) throws
+    func evaluate(_ body: String, arguments: [String: WebJSON],
+                  world: WebWorld, frame: WebFrame?) async throws -> WebJSON
+    func register(channel: String, world: WebWorld,
+                  handler: @escaping WebMessageHandler) throws -> UUID
+    func unregister(_ registration: UUID)
+    func download(_ url: URL, into folder: URL) async throws -> URL
+    var find: (any WebFind)? { get }
+    var zoom: (any WebZoom)? { get }
+    var dialogs: (any WebDialogs)? { get }
+    var mediaCapture: (any WebMediaCapture)? { get }
+    var userAgent: (any WebUserAgent)? { get }
+    func tearDown()
+}
+```
+
+How it behaves:
+- `replaceScripts` applies to the next documents. `evaluate` runs in the main-frame document the handle belongs to, or fails if that document has gone. Handlers keep their own origin checks (`Mac/Sources/ApplePasswords.swift:237`).
+- `decideNavigation` and `decideResponse` answer synchronously, as WebKit's delegate already does in eGlu (`Mac/Sources/Page.swift:1472`, `:1563`) and as CEF's navigation callback does. A decision that needs the person (another app's link) cancels first and asks afterwards, as today.
+- A child request is accepted or rejected inside `requestedChild`. The WebKit plugin keeps the accepted child and returns its view from `createWebViewWith` (`Mac/Sources/Page.swift:1692`), which keeps the opener tie. A request not answered by then is rejected.
+- `download` fetches with the page's own session (Handoff, download retries).
+- Public WebKit does not say whether a navigation is a redirect, or an extension rule's. The WebKit plugin fills `redirect` with the private calls `Mac/Sources/Page.swift:569` makes today.
+- `tearDown` can be called more than once. It cancels what the page still owns: pending replies, `download` fetches, and an open dialog, which gets its cancel answer. A download already handed over through `downloadStarted` is the host's and keeps going. A dialog held for a background tab (`Mac/Sources/Page.swift:1770`) stays the host's to hold.
+- A plugin that cannot keep the app's scripts in their own world leaves out `.isolatedScripts` and refuses `.app` scripts. It never runs them in the page's world instead.
+- Still to design in their phases: printing, the context menu's element, developer tools, picture in picture, history entry identities, restoration data, snapshots.
+
+### 5.3 The page's view
+
+Hosts place, size, move and focus the engine's own `NSView` through `Page.surface`; no caller needs `acceptsFirstMouse` yet.
+
+```swift
+import AppKit
+
+@MainActor protocol WebEngineSurface: AnyObject {
+    /// The engine's own view, which the host places, sizes and moves
+    /// between windows. Key events, the responder chain, appearance and
+    /// data detectors stay the view's.
+    var view: NSView { get }
+    func focus()
+}
+
+/// What the Mac's plugin hands the host: a page and its view together.
+/// A child accepted through WebChildRequest is one too.
+@MainActor protocol WebEngineMacPage: WebEnginePage, WebEngineSurface {}
+```
+
+### 5.4 Page scripts and messages
+
+The scripts that reach WebKit directly move to one shim, `globalThis.egluBridge`, which each plugin installs before the feature scripts, in each world and frame it is allowed in:
+- PadCore's `extension-store.js:22`, `measure.js:30`, `writing.js:272`.
+- The two inline scripts, `PasswordWatch.swift:28` and `ApplePasswords.swift:171`.
+- In `extension-shim.js`, only its capture branch (`:2807`). The rest of the shim is the WebKit extension runtime, which a Chromium build leaves out (5.8).
+- `bridge.js` (iPad only) keeps calling WebKit.
+
+```typescript
+interface EgluBridge {
+  readonly version: 1;
+  post(channel: string, body: JsonValue): void;
+  request(channel: string, body: JsonValue): Promise<JsonValue>;
+}
+```
+
+- The WebKit plugin maps each channel to a script message handler. A Chromium plugin wraps `cefQuery`'s callbacks in promises.
+- Frame, document, world and origin come from the plugin's own record of where the script runs, never from the message's JSON. In CEF that needs renderer-process code or the DevTools Protocol: its message router alone does not prove which world a message came from.
+- Each Swift handler keeps the checks it makes today (section 3): the bridge only adds where the message came from.
+- Extension capture's authority (the extension's controller, space and context) stays inside the WebKit plugin. The generic message carries none of it.
+- Navigation, a world going away, unregistering and teardown cancel pending replies.
+
+### 5.5 Content blocking
+
+First, split rule compiling from the app's own work: `ContentBlocker` today also reads the app's folders and preferences and updates live pages. Then the plugin gets the filter-list sources (fixed revisions) and the policy: which lists are on, which sites are excluded, and HandsOff.
+
+| Code today | Goes to |
+|---|---|
+| `FilterLists.swift`: the catalogue, attributions, defaults | PadCore |
+| `ScriptedFilters.swift`: procedural filters and domain matching | PadCore, for any plugin to use |
+| `BlockingRule`, `ContentBlocking.json` (`ContentBlocking.swift:260`), `RulePlanner` | WebKit plugin (`WebKitSupport`) |
+| `FilterConverter` (`ContentBlocking.swift:550`, not a file of its own) | WebKit plugin first; its parsing can be pulled out for other plugins later |
+| `Shared/ContentBlocker.swift`'s compiling | `WebKitSupport`; its folders, preferences and page updates stay in the app |
+
+### 5.6 The grammar contract
+
+```swift
+struct WritingConfiguration: Sendable {
+    let dialectID: String?
+    let rules: [String: Bool]
+    let words: [String]
+}
+struct WritingRule: Sendable {
+    let id: String
+    let label: String
+    let description: String
+    let group: String
+    let isOnByDefault: Bool
+}
+enum WritingSuggestion: Sendable {
+    case replace(String), insert(String), remove
+}
+struct WritingIssue: Sendable {
+    var start: Int
+    var end: Int
+    let rule: String
+    let kind: String
+    let message: String
+    let priority: Int
+    let suggestions: [WritingSuggestion]
+    let ignoreToken: String
+}
+/// A class or an actor, so WritingChecker can still drop answers from a
+/// service it has since replaced (`WritingChecker.swift:83`).
+protocol GrammarService: AnyObject, Sendable {
+    nonisolated var providerID: String { get }
+    func isAvailable() async -> Bool
+    func rules() async throws -> [WritingRule]
+    func configure(_ configuration: WritingConfiguration) async throws
+    func warmUp() async throws
+    func lint(_ text: String) async throws -> [WritingIssue]
+    func ignore(token: String) async throws
+    func shutDown() async
+}
+```
+
+- Ranges stay in UTF-16, and Harper's rule keys stay as they are (`Engines/Sources/Engines/Grammar.swift:28`). Changes are applied in the order they were made, as today.
+- Language filtering and the check for stale results stay in `WritingChecker` and its callers (`ElsewhereChecker.swift:285`).
+- Mac files that change: `Shared/Writing/WritingChecker.swift`, `Shared/Writing/WritingLists.swift`, `Mac/Sources/Writing/WritingHandler.swift`, `Mac/Sources/Writing/Elsewhere/ElsewhereChecker.swift`, `Mac/Sources/Writing/Panel/PopupPanel.swift`, `Mac/Sources/SettingsView.swift`, `Mac/Sources/EgluApp.swift`, `Mac/Sources/WindowModel.swift`. About's licence list comes from the plugins (`Mac/Sources/About.swift`).
+
+### 5.7 The documents contract
+
+Converting works on bytes only; fetching a file with the page's sign-in is the page's `download` (5.2).
+
+```swift
+import Foundation
+
+/// The same kinds as Engines' DocumentFormat (Documents.swift:6).
+enum DocumentKind: String, Sendable {
+    case doc, docx, odt, pdf, ppt, pptx, rtf, epub, excel, ods, odp, csv
+}
+struct DocumentPage: Sendable {
+    /// 0-based, as Engines' pages are.
+    let page: Int
+    let markdown: String
+    let needsOCR: Bool
+    let reason: String?
+}
+/// What Handoff shows of a PDF besides its pages
+/// (HandoffDocumentSource.swift:376 to :380).
+struct DocumentPages: Sendable {
+    let pageCount: Int
+    let title: String?
+    let author: String?
+    let created: String?
+    let pages: [DocumentPage]
+    let withTables: [Int]
+    let withColumns: [Int]
+}
+protocol DocumentReader: Sendable {
+    func detect(_ bytes: Data) async throws -> DocumentKind?
+    func markdown(_ bytes: Data, kind: DocumentKind?) async throws -> String
+    func pdfPages(_ bytes: Data, pages: [Int]?) async throws -> DocumentPages
+}
+```
+
+It follows `Engines/Sources/Engines/Documents.swift:5` to `:27`, `:35`, `:48` and `:66`.
+
+### 5.8 Extensions
+
+Two contracts, one in each direction:
+- `WebExtensionRuntime`, owned by the plugin: installing, running, and the runtime's state.
+- `ExtensionBrowserHost`, owned by the app: what an extension does to spaces, windows and tabs, and the permission prompts. CEF knows nothing of eGlu's "one extension window per space" (`Mac/Sources/ExtensionTabs.swift:6`), so the plugin asks the host.
+
+A Chromium build leaves out `extension-shim.js` and `ExtensionAnswers.swift`, which exist to make WebKit behave like Chrome, and adds back only what eGlu itself needs.
+
+## 6. The hard parts, ranked
+
+| # | Part | Why it is hard | Approach |
+|---|---|---|---|
+| 1 | Extensions | 9,348 lines that depend on per-space controllers, tab and window mapping, permission grants, worker shims, custom schemes, capture and hidden views. Chromium runs Chrome extensions itself | Split into a plugin-owned runtime and an app-owned browser host (5.8), last |
+| 2 | Everything a page does besides navigating | Find, printing, zoom and magnification, dialogs, file panels, capture state, user agents, the context menu, developer tools, picture in picture. Capability flags cannot be called | Optional services on the engine page (5.2), each one when its feature moves |
+| 3 | Opener tie and document picture in picture | WebKit needs a child page made with the configuration it hands over, inside the same call | Synchronous acceptance (5.2) |
+| 4 | Script isolation and trust | Scripts run at document start, in a world the page cannot see; handlers check frame, world and more. WebKit has no frame or document identifiers; CEF has no app-side isolated-world call | Plugin-made handles and document numbers (5.2); each handler keeps its checks (5.4) |
+| 5 | Storage, history and restoration | Per-space stores, deferred deletion, WebKit's back-forward items as history identities, WebKit's own restoration data | Restoration data tagged with the engine and a format version; history identities through the plugin. Switching engines does not promise to keep sessions |
+| 6 | Content blocking | PadCore's rules are WebKit's format; `ContentBlocker` mixes compiling with the app's work. CEF blocks per request | Split compiling from the app (5.5), then hand plugins sources and policy |
+| 7 | Swipe | The swipe needs unused-wheel acknowledgements and rubber-band control, which only private WebKit calls give | A trait a plugin may lack; a Chromium build can use Chromium's own swipe |
+
+## 7. Phases
+
+Each step is one or more pull requests, and none changes behaviour. Each feature's contract is written with its WebKit implementation, its fake and its tests together. Only one change at a time touches `Mac/Sources/Page.swift`, `Shared/PageShared.swift` and `project.yml`.
+
+| Step | What | Needs | Ends with |
+|---|---|---|---|
+| 0. Inventory | A script that lists, for the Mac app's sources, tests and scripts (Swift string scripts included): WebKit and `Engines` imports, `page.view` reach-ins and their aliases, WebKit types in signatures, private selectors, hidden web views, and `webkit.messageHandlers`. The import check, reporting only. The cookie test widened to the new package folders | | The inventory checked in; the checks running |
+| 1. Page state and navigation | The first pull request (7.1) | 0 | Mac hosts read state and navigate through `Page` |
+| 2. Pages made through a factory | Every one of the eight places that makes a page asks one factory, `MacPageEngine`, which `Session` owns and `Pages` is given; the factory also sweeps the stores and starts content blocking and extensions at launch, in the same order as today. `PageState` moves into `WebEngineKit` (`WebEngineCore`); building the WebKit configuration moves into `WebKitEngine` (`WebKitMacPlugin`). The factory stays in the app for now: it makes the app's `Page` | 1 | Tests with a spy factory show `Pages` makes every tab's page through it. The hosts that make pages of their own (little windows, Peek, pop-ups, extension pop-ups, extension sign-in) ask `Session.shared.engine`, which the tests check is the app's factory. The factory still returns real WebKit pages: a fake engine cannot make a `Page` until step 4 moves WebKit out of it. (The whole app built with the fake comes at step 13) |
+| 3. The view | 5.3 in `WebEngineKit` (`WebEngineAppKit`); `Page.surface`, an adapter around its own `PageView`, so hosts place, size, move and focus `surface.view` instead of `page.view`. Apple Passwords' coordinates, the recording indicator, the inspector and child-page returns stay on WebKit until their steps | 2 | No host reaches into `page.view` to show or focus it |
+| 4. Navigation lifecycle and policy | In four slices, each its own pull request: 4a, the decision on a navigation (`WebNavigation`, `WebNavigationPolicy` with a synchronous reply, `WebKitNavigationAdapter` in `WebKitMacPlugin` as the web view's navigation delegate, passing every callback it does not handle on to `Page`); 4b, the decision on a response; 4c, start, redirect, commit, finish, failures and the process ending; 4d, file loads and removing what the adapter still passes on. `PageHost` already has WebKit types only in child creation | 2 | Navigation policy and lifecycle in `WebKitMacPlugin`; child creation, dialogs and the context menu stay for steps 5 and 7 |
+| 5. Child pages | Synchronous acceptance; Peek, little windows, pop-ups, document PiP | 3, 4 | `PageHost.page(_:open:for:features:)` gone, and with it `PageHost`'s last WebKit types |
+| 6. Scripts and messages | `egluBridge` (5.4), with the iOS adapter; Writing, Measure, Store, Passwords handlers on channels | 4 | No Mac script calls `webkit.messageHandlers` but the extension runtime's |
+| 7. Page services | Find, zoom, dialogs and file panels, capture state, user agent, then printing, context menu, developer tools | 3, 4 | The developer bar and menus use services |
+| 8. Storage, history, restoration | Per-space stores; history identities; restoration data | 4 | `HistoryRecorder` and `Stores` free of WebKit types |
+| 9. Hidden pages and downloads | Transcript reader, SVG rasterizing (with `SiteIcons` and Site Icons Tests moved to an injected rasterizer), download retries, Handoff fetches, the recording indicator | 3, 4, 8 | No hidden `WKWebView` made outside the plugin, except the extension runtime's (offscreen documents, sign-in windows, trials), which move in step 12 |
+| 10. Content blocking | 5.5 | 4 | `ContentBlocker`'s compiling in `WebKitSupport` |
+| 11. Writing and documents | 5.6 and 5.7 | 6 | The Mac interface no longer imports `Engines` |
+| 12. Extensions and private calls | 5.8; the swipe, inspector and PiP calls behind traits; `Session.shared` handed in | 3 to 10 | No WebKit left in the Mac interface |
+| 13. Enforce and document | The import check fails the build; the Mac app built with the fake engine runs the interface's tests; `Docs/WebEngine.md` | 11, 12 | Section 1's "done" |
+
+Steps 10 and 11 can run beside steps 5 to 9, since they touch other files.
+
+**A gate outside the plan:** before anyone promises a Chromium plugin, a CEF spike must show what Alloy style's extension support covers, and whether an Alloy-style CEF view behaves inside eGlu's windows (section 8). It can happen at any time after step 3.
+
+**Every step runs:** PadCore's tests (`swift test` in `PadCore/`), the page-script tests (`Tests/*.mjs`), the Site Icons tests, the Mac page tests (7.1), and builds of eGlu Mac and eGlu Mac Direct. The iOS app (scheme eGlu) is also built and its crash tests run, because it compiles the same `Shared/` and PadCore. A step that changes how pages behave is also tried on apple.com, naver.com, channel.io, news.ycombinator.com and DuckDuckGo. The fake shows the contracts can be used; it does not show that opener ties or isolation work, which only the WebKit plugin's tests can.
+
+### 7.1 The first pull request
+
+The first pull request touches no `Shared/` file and no iOS file (`project.yml:79`: the iOS app compiles `App/` and `Shared/` only).
+
+**Adds:**
+- In `Mac/Sources/Page.swift`, without a new package yet: a `state` snapshot of WebKit's own values, and commands that pass straight to WebKit (`back`, `forward`, `stop`, `reload(.normal)` and `reload(.origin)`).
+- On `Page`, product state on top: `canGoBack` that includes going back past a replaced page, and `goBack()` that does what `Mac/Sources/WindowModel.swift:579` does today: only when WebKit cannot go back does it try the replacement, and otherwise it goes back in WebKit. (`Session.wentBackPastReplacement` does not check that itself, `Mac/Sources/Session.swift:389`.) The callers' copies of that rule go.
+- A Mac test target hosted in eGlu Mac (7.2).
+
+**Changes:**
+- `Mac/Sources/WindowModel.swift:302` (`refresh`): title, loading, progress, history and secure content come from `state` and `Page`. Zoom stays as it is until step 7. The display-address fallback, failure and status stay.
+- `Mac/Sources/WindowModel.swift:578` to `:596`: back, forward and stop call `Page`.
+- `Mac/Sources/LittleWindow.swift:120` to `:271`, `Mac/Sources/Peek.swift:73` to `:99`, `Mac/Sources/Popup.swift:134` to `:173`: state reads and navigation call `Page`.
+- `Mac/Sources/DeveloperBar.swift:226`, `Mac/Sources/Menus.swift:365`, `Mac/Sources/WindowModel.swift:1148`: reload from origin calls `Page`'s raw `reload(.origin)`, not the product's `reload(byHand:)`, which does more.
+- `project.yml` and the generated `eGlu.xcodeproj`: the test target and its scheme.
+
+**Proves no change:**
+- `state` against WebKit's own properties, field by field.
+- Product `canGoBack` and `goBack()` against the old callers' rule, including a restored replacement being used up, and a replaced tab that later has WebKit history of its own (it must go back in WebKit, not use the replacement). The transient hosts (little windows, Peek, pop-ups) get fresh tab identities that are never replaced (`Mac/Sources/LittleWindow.swift:59`, `Mac/Sources/Peek.swift:44`, `Mac/Sources/Popup.swift:33`), so for them the rule answers no and changes nothing; a test keeps it so.
+- The windows still hear of changes from the same KVO observations (`Mac/Sources/Page.swift:372` to `:385`) and the zoom notice (`:889`); a computed `state` adds no timing of its own.
+
+**Leaves alone:** `Page.load(_ URL)` and `reload(byHand:)`; URL reads elsewhere (`BrowserView`, `Pages`, `ApplePasswords`, `StoreButton`, the extension files), which move with their steps; `WindowModel.swift:445`, which asks WebKit's own question on purpose; the swipe and the extension tabs.
+
+### 7.2 Mac page tests
+
+- A macOS test target depending on eGlu Mac, with `TEST_HOST = $(BUILT_PRODUCTS_DIR)/eGlu.app/Contents/MacOS/eGlu`, `BUNDLE_LOADER = $(TEST_HOST)` and `@testable import eGluMac` (`project.yml:62`). Debug builds are testable.
+- A local test configuration: ad-hoc signing, the local entitlements (no iCloud), and the hardened runtime off for the test host, applied to the embedded Dock tile too.
+- `EGLU_DATA_ROOT` set before launch, so the app's workspace, sync and migration stay out of the way (`Mac/Sources/Session.swift:58`, `:65`, `Mac/Sources/LeavingTheSandbox.swift:18`).
+- That is not enough on its own: start-up still reads the standard preferences, sweeps the persistent website stores and prunes snapshots (`Mac/Sources/Session.swift:88`, `:159`, `:161`; `Shared/Stores.swift:35`). The test host therefore gets a bundle identifier of its own (so its preferences, website data and caches are its own) and a launch argument that skips start-up services.
+- `Session.shared` keeps state between tests (the replaced tabs, `Mac/Sources/Session.swift:379`). Tests reset it through a test-only hook and wait for start-up to finish before they begin.
+- Tests make a `Page` with a non-persistent configuration (`Mac/Sources/Page.swift:301`) and wait for navigations asynchronously.
+
+### 7.3 What was built (4 November 2026)
+
+Steps 0 and 1, committed as cf0049e6. Built by subagents and checked by Claude: Gemini wrote step 0, Codex wrote step 1's code, a Claude subagent wrote the test target; Codex (`/codex review`, twice) and Gemini reviewed the whole diff.
+
+| Step | Files | Result |
+|---|---|---|
+| 0 | `Tests/engine-inventory.py` (`--check` reports, `--strict` fails on WebKit or `Engines` in `Mac/` or `Shared/`, `--write` writes `Docs/EngineInventory.md`), `Tests/test_engine_inventory.py` (12 tests), the cookie test widened to the new package folders | All pass. Reach-ins into `page.view` in app code, by the final script: 107 lines in 18 files at 75fcca2, 69 in 17 after step 1 |
+| 1, code | `Mac/Sources/Page.swift`: `PageState`, `state`, `canGoBack`, `goBack()`, `goForward()`, `stopLoading()`, `reloadFromOrigin()`. Callers moved in `WindowModel.swift`, `LittleWindow.swift`, `Peek.swift`, `Popup.swift`, `DeveloperBar.swift`, `Menus.swift` | eGlu Mac, eGlu Mac Direct and eGlu (iOS) build; no new warnings |
+| 1, tests | Target and scheme "eGlu Mac Page Tests" (`Tests/MacPage/`), a "Test" build configuration in `project.yml`, DEBUG-only start-up changes in `Mac/Sources/EgluApp.swift` and `Mac/Sources/Session.swift` | 19 tests pass against a real `WKWebView`. The real data folder's 1,113 entries were identical before and after each run |
+
+Where the build differs from 7.1 and 7.2:
+- The raw commands are named after WebKit's (`goForward()`, `stopLoading()`, `reloadFromOrigin()`), not `forward()`, `stop()` and `reload(.origin)`, so they never read as the product's `reload(byHand:)`.
+- `Page.canGoBack` exists but nothing calls it yet: `WindowModel.refresh()` keeps its record-based expression, word for word, and the swipe and extension tabs keep theirs until their steps.
+- The test host's own bundle identifier needs a build configuration ("Test"), since a scheme cannot set one. Every target gets that configuration; Debug and Release are unchanged. XcodeGen drops the IDE-only `ProvisioningStyle` attribute for eGlu Mac and the Dock tile, whose `CODE_SIGN_STYLE` settings are unchanged.
+- Tests are detected by XCTest's own `XCTestConfigurationFilePath`, not a launch argument; `StartUpTests` fails if XCTest stops setting it. Under tests the app skips its start-up services and its first window, and refuses to run unless `EGLU_DATA_ROOT` is set and its identifier ends in `.pagetests`.
+- The replacement tests use `Session.replacePage`, which makes a page with the space's lasting store under the test identifier's `~/Library/WebKit` folder. Each run's leftovers there are removed after it.
+
+Known gaps: the inventory misses WebKit types on the continuation lines of multi-line signatures, and its comment and string stripping has edge cases (raw strings, `//` inside JavaScript strings). Separately, and older than this work: an `EGLU_DATA_ROOT` exported in the shell that runs `xcodebuild` is written into any build's `Info.plist` (`Mac/Info.plist:5`), so a normal build made that way would use that folder.
+
+### 7.4 Steps 2 and 3 (4 November 2026)
+
+Built on top of cf0049e6, not yet committed. Codex wrote both steps' code, each in a worktree of its own (`codex exec`, allowed to write only there); a Claude subagent wrote step 2's hosted tests; Claude wrote step 3's, merged the work, ran every check and read every diff; `/codex review` and Gemini reviewed the whole of it.
+
+| Step | What | Result |
+|---|---|---|
+| 2 | `Mac/Sources/MacPageEngine.swift` (`MacPageSource`, `MacPageEngine`, `AppWebKitEngine`), owned by `Session` and given to `Pages`; the eight places that made a `Page`, and `ExtensionAuth`'s configuration, ask it; `Page.init` takes its configuration; `Session.startWorkspaceServices` calls it for the stores, content blocking and extensions, in the same order. New packages: `WebEngineKit` (`WebEngineCore`: `PageState`) and `WebKitEngine` (`WebKitMacPlugin`: `WebKitConfiguration.make`, with the private-call guards) | 7 hosted tests (`PageEngineTests`); 3 package tests |
+| 3 | `WebEngineKit` gains `WebEngineAppKit` (`WebEngineSurface`: `view`, `focus()`); `Page.surface` (`PageWebKitSurface`) is the page's own `PageView`; the window, pop-ups, little windows, Peek (through `PageSurface`), Apple Passwords and the window's split-view clicks place, constrain, check and focus `surface.view`, with the same windows and timing | 5 hosted tests (`PageSurfaceTests`); 1 package test |
+
+All three schemes build with no new warnings; the 31 hosted tests and the package tests pass; the real data folder was identical before and after each run. Reach-ins into `page.view` in app code: 69 after step 1, 57 after step 3.
+
+Where the build differs from the plan:
+- `WebEngineSurface` has no `acceptsFirstMouse`: nothing needs it (the only first-mouse overrides are PictureWindow's own views).
+- `Shared/PageShared.swift` is untouched: the hidden transcript reader moves with the other hidden pages in step 9.
+- The factory stays in the app (it makes the app's `Page`); `Session`'s initializer stays private, so tests give a spy factory to a `Pages` of their own.
+- Still on WebKit's view, by design until their steps: Apple Passwords' coordinates, the recording indicator, the inspector, child-page returns, the extension pop-up's own web view, restoration and URL reads.
+
+Reviews: `/codex review` found no defects. Gemini (gemini-3.8-flash-high, which saw the diff cut off past 120 KB) reported eight findings; Claude checked each at its line and none held.
+
+### 7.5 Step 4a (4 November 2026)
+
+Built on top of 6f21a0fc and committed as 8fca31ff. Codex designed the slice (read-only), then wrote it in a worktree of its own; a Claude subagent wrote the hosted tests; Claude merged, fixed, built and tested; `/codex` and Gemini (gemini-4-argon-high) reviewed it.
+
+- `WebEngineCore` gains the navigation contract: `WebNavigation` (the request kept whole, the source origin, `targetIsMainFrame: Bool?`, `WebNavigationKind` with `.unknown`, modifiers, the raw button number, the download flag, a server redirect and an extension rule's redirect as separate facts), `WebNavigationDecision` and `WebNavigationPolicy`, whose reply is synchronous and exactly once.
+- `WebKitMacPlugin` gains `WebKitNavigationAdapter`, the web view's navigation delegate. It translates each `WKNavigationAction` (the private redirect calls moved here from `Page`, comment and all), asks `Page`, and passes every other callback on to `Page` unchanged (responses, downloads, the lifecycle). The swipe's and context menu's private callbacks are the UI delegate's and keep their route.
+- `Page` implements `WebNavigationPolicy`: the old decision, branch for branch, over the contract; cancelling still comes before opening another app, a Peek or the colour-hint retry. `PageHistory` takes a plain navigation kind; the iOS app keeps its WebKit-typed entry point.
+- Changes on review: the adapter cannot answer WebKit twice after a late reply; it reads `sourceFrame` as optional (WebKit can leave it nil for loads the app starts, and the adapter now reads it on every navigation); its forwarding checks it is on the main thread; it never passes any form of the decision on a navigation to the legacy delegate (WebKit asks the `preferences:` form first); and two rules are written down: the adapter must not outlive `Page`, and a port of 0 in `WebOrigin` is the scheme's default.
+- Reviews: `/codex` found nothing. Gemini found every branch, side effect, redirect rule, history mapping and teardown matching the old code, and five adapter-level hazards; two were already fixed, three are fixed or written down as above.
+
+Result: all three schemes build with no new warnings; 14 package tests, stable over repeated runs once a flaky back-and-forward test was rewritten; 41 hosted tests, twice in a row (10 new: `PageNavigationPolicyTests`, among them 1,344 combinations checked against `NewTabClick`). The test host never had a file of the real data folder open (13 `lsof` samples). Not covered: links to other apps, extension sign-ins and rule redirects, extension pages, the colour-hint retry on real websites, Peek from pinned tabs, and real ⌘- and middle-clicks from WebKit.
+
+Found on the way, older than this work and not fixed (4a keeps behaviour as it was): `Page` takes `buttonNumber == 2` as the middle button, but WebKit's `buttonNumber` appears to report the middle button as 4 and the right as 2 (read from WebKit's code on this Mac, not tried with a mouse). If so, a middle-click on a link opens it in place instead of in a new tab.
+
+### 7.6 Step 4b (4 November 2026)
+
+Built on top of 8fca31ff and committed as 0ad0afee. Codex wrote the slice in a worktree of its own from a design Claude gave it, with a line-by-line map of the old callback to the new code; a Claude subagent wrote the hosted tests; Claude merged, fixed, built and tested; `/codex` and Gemini reviewed it.
+
+- `WebEngineCore` gains the response contract: `WebResponse` (Foundation's `URLResponse` kept whole, so header lookups and the status read as before; whether it is for the main frame; whether the engine can show its type), `WebResponseDecision` (`allow`, `cancel`, `download`), and `decideResponse` on `WebNavigationPolicy`, with the same synchronous, exactly-once reply as the decision on a navigation.
+- `WebKitNavigationAdapter` decides responses the way it decides navigations: it describes each `WKNavigationResponse`, asks `Page`, answers WebKit once, cancels when there is no policy or no reply, and ignores a late reply. It never passes the response decision on to `Page`. The download callbacks and the lifecycle still go to `Page` unchanged.
+- `Page.decideResponse` is the old callback, branch for branch: the colour-hint retry still cancels before it loads again, now through the adapter's `load` (the same view and request); the page's kind, its status and the download rule are unchanged.
+- Changes on review and testing: a local name that shadowed the response is now `http`; `forwardingTarget(for:)` now also refuses both decision selectors, as `responds(to:)` already did. WebKit hands a custom scheme's response to the navigation delegate as a plain `URLResponse`, without the status or headers the test handler gave it, so the package tests check those only when the response is HTTP.
+- Reviews: `/codex` (codex exec, gpt-6.1-sol, read-only) found nothing. Gemini (gemini-3.8-flash-high; Argon's quota had run out) passed it with two changes, both made as above, and a third concern the new tests cover.
+
+Result: all three schemes build with no new warnings; 21 package tests (8 and 13), three runs each; 52 hosted tests, twice in a row (11 new: `PageResponsePolicyTests`). The test host never had a file of the real data folder open (18 and 16 `lsof` samples, which saw its own scratch files). Not covered: the colour-hint retry on a real website, hosts eGlu leaves alone (`HandsOff`), a real download to disk, a real HTTP status through WebKit, and a `Content-Disposition` with leading spaces (the old check did not trim them either, and still does not).
+
+### 7.7 Step 4c (4 November 2026)
+
+Built on top of 0ad0afee and committed as 2c3e5680. Codex wrote the slice in a worktree of its own from a design Claude gave it, and compared every moved line with the old code; a Claude subagent wrote the hosted tests; Claude merged, built and tested; `/codex` and Gemini reviewed it.
+
+- `WebEngineCore` gains `WebNavigationEvents`, what happens to the main frame's load, reported in order: started and redirected (with the address the engine shows), committed (with the new address), finished, failed (with `provisional` for a load that never committed) and the content process ending. It also gains `WebLoadError`: the engine sorts a failure as `cancelled`, `interrupted` or `other` and keeps its domain, code and failing address. Navigation and document identifiers wait until a slice needs them; nothing in `Page` used WebKit's `WKNavigation`.
+- `WebKitNavigationAdapter` now implements WebKit's seven lifecycle callbacks and reports each at once to `Page`, which it holds weakly, like the policy. `loadError` sorts WebKit's errors as `Page` did: `NSURLErrorCancelled` is `cancelled`; WebKit's 102 (a policy change interrupted the load) and 204 (a plug-in handles it) are `interrupted`. Only the download callbacks still go to `Page` as WebKit's own.
+- `Page` implements `WebNavigationEvents` with the old bodies, line for line. The commit takes the event's address where it read the web view's (nothing before those reads can change it); the title and the back-forward item are still read from its own view. A failure is quiet unless its kind is `other`, where the old code tested WebKit's domains and codes. The seven WebKit callbacks and `failed(_:)` are gone from `Page`.
+- Reviews: `/codex` (codex exec, gpt-6.1-sol, read-only) found nothing. Gemini (gemini-3.8-flash-high) passed it with no findings.
+
+Result: all three schemes build with no new warnings; 27 package tests (9 and 18), three runs each, the offline WebKit loads among them; 68 hosted tests, twice in a row (16 new: `PageLifecycleTests`). Among the new tests, a page's content process is killed for real, three times: the page reloads in a new process twice and then waits with its message. The test kills only the process WebKit names for the test's own page, after checking that the program is WebKit's content process; WebKit's own testing call for this is refused from the test host. The test host never had a file of the real data folder open (22 and 14 `lsof` samples). Not covered: a server redirect and a real cancelled or interrupted load through WebKit, what a commit closes (picture in picture, a pending dialog), what a finish learns of a website, and the extension check that reads the address being loaded from.
+
+Found on the way, older than this work and not changed: a commit does not clear `exhausted` (only loading and reloading do); a form's failed sending shows the reason without the host, because the load state forgets the failed address before the message is made.
+
+### 7.8 Step 4d (4 November 2026)
+
+Built on top of 2c3e5680. Codex wrote the slice in a worktree of its own from a design Claude gave it; a Claude subagent wrote the hosted tests; Claude merged, fixed, built and tested; `/codex` and Gemini reviewed it. Step 4 is done with it.
+
+- `WebEngineCore`: `WebRequestLoading` gains `loadFile(_:allowingReadAccessTo:)`; `WebDownload` (only its address so far; section 5.2's `cancel()` waits for its slice) and `WebNavigationEvents.navigationBecameDownload(_:)`, reported before the engine's callback returns, since the host must take the download over in that call.
+- `WebKitMacPlugin`: `WebKitDownload` keeps WebKit's own `WKDownload` for the app's Downloads until step 9. The adapter implements both "became a download" callbacks and the file load, and with nothing left for `Page` its forwarding is gone (`legacy`, `responds(to:)`, `forwardingTarget(for:)`): it is the web view's whole navigation delegate. Codex listed every method `Page` implements that WebKit could call on a navigation delegate first: only the two download callbacks were left; the context menu's and unused wheel events' private callbacks are the UI delegate's.
+- `Page` loads a site or a file through the adapter, hands a download to Downloads in `navigationBecameDownload`, and is now only WebKit's UI delegate.
+- Changes on review and testing: the Mac app did not build, as `ExtensionPageDelegate` (an extension page's UI delegate, which passes the rest on to `Page`) still asked for a navigation delegate too; it now asks for a UI delegate only (`/codex` found the same). WebKit cannot turn a custom scheme's response into a download (it stops the load with its error 102), so the package test for a response download uses a `data:` address. Gemini found a package test writing its file into the source tree; it now writes into a folder of its own in the temporary folder, which it also gives as the read access, so that address differs from the file's.
+- Reviews: `/codex` found the build error above and nothing else. Gemini (gemini-3.8-flash-high) passed it with three changes to the tests, all made as above.
+
+Result: all three schemes build with no new warnings; 32 package tests (11 and 21), three runs each; 73 hosted tests, twice in a row (5 new: `PageDownloadAndFileTests`). The download tests never let a file be written: each download gets a delegate that answers "nowhere" before WebKit asks, the tests require the test data root, and nothing in `~/Downloads` changed. The test host never had a file of the real data folder open (26 and 23 `lsof` samples). Not covered: a link's download through WebKit (a custom scheme's link is another app's here, and a website's would need a server), a download that saves a file, file bookmarks.
+
+Found on the way, older than this work: WebKit lets a file opened with read access to itself read the other files in its folder and below it, not the one file only, as `Page.request(_:)`'s comment says; only the folder above is refused. The test checks that limit. One change in 4d: a load after `tearDown()` now does nothing, since the adapter lets go of the view; before, it loaded into the torn-down view.
+
+### 7.9 Step 5 (4 November 2026)
+
+Built on top of 52081355. Codex wrote the step in a worktree of its own from a design Claude gave it, while 4d was being tested; a Claude subagent wrote the hosted tests; Claude merged, built and tested; `/codex` and Gemini reviewed it.
+
+- `WebEngineCore` gains `WebChildRequest` (the `WebNavigation` that asked and `WebWindowFeatures`, the width and height asked for) and `WebNavigation.sourceIsMainFrame`. The host accepts a request by making the child from it, through its engine, before the call returns, and rejects it by making none. Section 5.2's `accept()` and `reject()` wait until the app's page is the engine's own.
+- `WebKitMacPlugin` gains `WebKitChildRequest`, which keeps the configuration WebKit handed over: the child must be made with it, in the same call, to keep `window.opener`.
+- `PageHost.page(_:open:for:features:) -> WKWebView?` is now `page(_:openChild:) -> Page?`, and `PageHost` has no WebKit types left. `MacPageSource.child(_:)` makes the child from the request's configuration, as `.supplied` did; `.supplied` stays for the extension runtime's tabs. `Page`'s `createWebViewWith` makes one request and reads the extension-page rule, another app's link, document picture in picture and Open Link in Peek from it; the WebKit-typed `site(sending:)` is gone. Peek, little windows, pop-ups, tabs and the picture window take the request where they took WebKit's configuration and features, and the hosts return the child page where they returned its view.
+- One intended change: the picture-in-picture check read WebKit's `sourceFrame` as never nil, which would crash where WebKit gives none; it now reads it as optional and treats a missing frame as not the main frame.
+- Reviews: `/codex` found nothing. Gemini (gemini-3.8-flash-high) passed it, asking for a test that `Pages.adopt(tab:space:child:)` hands the factory the request it was given; it is in `PageEngineTests`, with a test request the spy factory now accepts.
+
+Result: all three schemes build with no new warnings (one old warning moved down a line by an import); 37 package tests (13 and 24), three runs each; 81 hosted tests, twice in a row (8 new: 7 in `PageChildTests`, 1 in `PageEngineTests`). The test host never had a file of the real data folder open (25 and 18 `lsof` samples). The new hosted tests open real windows from a page's script: the host is asked once, with the address and size; the child it makes is the window WebKit shows and keeps `window.opener`; a host that makes none rejects it (`window.open` returns null); another app's link never reaches the host. Not covered: a website opening an extension's page (needs an installed extension), Open Link in Peek, document picture in picture, and the real hosts' choices between a tab, a Peek, a pop-up and a little window, which make real windows (a little window brings the app forward).
+
+Found on the way, older than this work: WebKit refuses a top-level `data:` load in a window a site opens, so a site opening a `data:` window leaves an empty tab.
+
+### 7.10 Step 6 (4 November 2026)
+
+Built on top of 86d8c880 (step 5, merged with main). Codex wrote the step in a worktree of its own from a design Claude gave it; a Claude subagent wrote the hosted tests; Claude merged, fixed, built and tested; Codex and Gemini reviewed it.
+
+- `WebEngineCore` gains the channel contract (5.4): `WebJSON`, with Foundation's form both ways so the handlers parse a body word for word; `WebWorld` (`app`, `page`); `WebMessage` (the channel, the world, whether it came from the main frame, the frame's origin and the body, each as the engine recorded it, never as the body says); and `WebMessageChannels` (`bridgeScript`, and `open` for a channel a script posts to or one it asks, in a world).
+- `WebKitEngine` gains a target, `WebKitSupport`, built for macOS 26 and iOS 17, with WebKit's `egluBridge` (`Scripts/eglu-bridge.js`: `version`, `post` and `request`, each exactly WebKit's own `postMessage` to the handler of that name, which throws the same `TypeError` for a channel not open). `WebKitMacPlugin` gains `WebKitMessageChannels`: one script message handler per channel, which hands each message over at once, as WebKit called the app's handlers.
+- The Mac's five handlers (Writing, Measure as `MeasureChannel`, the Web Store's button, the password watch, Apple Passwords' sign-in box) take `WebMessage`s with every check they made, rewritten one for one; none is a WebKit type now. `Page` opens their channels in the app's world, in the same order and under the same conditions, and puts the bridge in front of each script that uses it (the password watch, writing.js, Apple Passwords' sign-in box, the store's button, measure.js), where and when each runs.
+- `writing.js`, `measure.js` and `extension-store.js` call `egluBridge`, each keeping its own error handling. The iOS app links `WebKitSupport` and puts the same bridge in front of writing.js and measure.js; its handlers stay WebKit's. `Shared/Measure/MeasureHandler.swift`, now the iOS app's alone, moved to `App/Sources/`, unchanged.
+- Where the build differs from the plan: handlers are called synchronously with a reply callback, not `async throws` (5.2), so every message, and every reply Writing gives at once, keeps its order and timing; there is no unregistering, no frame handle and no document number yet, since nothing uses them; the bridge goes in front of each script instead of being installed alone, since three of the scripts are also run into the document already up (turning writing or Apple Passwords on, the measuring tool), which a script of its own at document start might not have reached; and `extension-shim.js`'s capture branch stays on WebKit's handler, as the extension runtime's, since `ExtensionCapture` reads the extension's controller, space and context from WebKit's own message (step 12).
+- One difference that cannot be seen: measure.js swallowed nothing when the handler was there and `postMessage` threw; it now catches a throw. The audit of its seven messages found only plain JSON, which never throws.
+- Changes on review and testing: the bridge took a page element with the id `egluBridge`, which is a named property of the window in every world, the app's included, for itself already defined; it then stayed undefined, and the password watch's first post threw before it began to watch (Codex). It now looks only for its own property; a package test with such an element fails without the change and passes with it. Handing the channels method references gave five new warnings in the app's Swift 5 mode; they are closures now. The inventory lists the tests' deliberate reads of WebKit's handlers apart, as it does for reach-ins.
+- Reviews: Codex (gpt-6.1-sol, read-only, the diff inlined) found the named-element problem above and nothing else. Gemini (gemini-3.8-flash-high) passed it with no findings.
+
+Result: all three schemes build with no new warnings; 51 package tests (19 and 32), three runs each; 95 hosted tests, twice in a row (14 new: `PageChannelTests`); PadCore's 741 tests; the page-script tests as before the step (writing.mjs 69 of 70, the one failure older than this work and the same; measure.mjs 39 of 39; the rest unchanged). The test host never had a file of the real data folder open (37 and 28 `lsof` samples). The inventory's app scripts reach WebKit's handlers in 2 lines, the iPad's `bridge.js` and the extension runtime's capture, where there were 7; its total is 549 where it was 568. Not covered: the store's button on the Chrome Web Store and Apple Passwords' messages (each needs its site, and Apple Passwords Apple's helper: only that their channels are open is checked), a hands-off page, an extension's page, Writing's actions that write (a dictionary word, a rule turned off), the iOS app run (it is built, and carries the bridge's script), and the iOS crash tests.
+
+Found on the way, older than this work: measure.js says nothing when it starts; its first word comes with a key (G, R or X) or a click. The plan's 5.4 says navigation and teardown cancel pending replies; `WebKitMessageChannels` leaves that to WebKit, as the app's handlers did.
+
+### 7.11 Step 7a (4 November 2026)
+
+Built on top of 55ee7e38. Step 7 is two slices: 7a, the page's services, with developer tools (planned as a slice of their own, 7c, and built in the same run); 7b, the UI delegate (7.12). Codex wrote 7a in a worktree of its own from a design Claude gave it; a Claude subagent wrote the hosted tests; Claude merged, fixed, built and tested; Codex and Gemini reviewed it.
+
+- `WebEngineCore` gains services (5.2): `WebFind` (backwards, case, wrapping, an answer whether there is a match), `WebZoom` (`pageZoom`, read and written; `magnification`, read), `WebMediaCapture` (`isCapturing`: the camera or the microphone, live or muted), `WebUserAgent` (`customUserAgent`), and `WebDeveloperTools` (`show` the inspector, the console or element selection, false where the engine cannot). `WebEngineAppKit` gains `WebPrinting` (`printOperation(with:)`, ready to run).
+- `WebKitMacPlugin` gains `WebKitPageServices`, which does each of these with the page's view as `Page` and `WebInspector` did, line for line: WebKit's `printOperation` with its view's frame set to the view's bounds, and the private Web Inspector calls, each asked first.
+- `Page` keeps one services object, and its find, zoom, capture checks (`mustStay`, `appWentBehind`), device sizes, printing, the measuring tool's window size and `showDeveloperTool` go through it. `WindowModel.refresh` reads `page.pageZoom`; Apple Passwords places its card from the page's surface and `pageZoom` times `magnification`; the developer bar reads `page.state.url` and, with the menus and `WindowModel`, opens developer tools through `Page.showDeveloperTool`. The developer bar, the menus and `WebInspector.swift` (now only the toast's words) import no WebKit.
+- Where the build differs from the plan: the services are not optional on the page yet; the WebKit plugin has them all, and a plugin without one comes with step 13's fake. `Page.find`'s answer is now `@MainActor @Sendable`, as the service hands it on; WebKit already answered on the main thread.
+- Changes on review and testing: WebKit reads an empty string back, not nil, once its own user agent is back; the service reads that as nil, as its contract says (nothing in the app reads it back). The package test for developer tools opened WebKit's real inspector, which would put a window on screen; it now uses a stand-in inspector, and a second test checks that this WebKit has the three verbs, without performing them. The find tests passed even with the direction dropped (Codex); a test with two matches now fails without it.
+- Reviews: Codex (gpt-6.1-sol, read-only, the diff inlined) found two minor points: the find tests' gap above, and that the user agent read back as nil for an empty string, which is the change above, kept on purpose. Gemini (gemini-3.8-flash-high) passed it with no findings.
+
+Result: all three schemes build with no new warnings; 61 package tests (19 and 42), three runs each; 102 hosted tests, twice in a row (7 new: `PageServicesTests`); PadCore's 741 tests. The test host never had a file of the real data folder open (32 and 26 `lsof` samples). Reach-ins into `page.view` in app code: 55 before the slice, 43 after; the inventory's total is 530. Not covered: printing and developer tools through a real page (each opens a panel or a window; the package tests cover them, the inspector through a stand-in), the window's zoom readout (a real window), a page with the camera or the microphone, and a typed zoom in the window's field.
+
+### 7.12 Step 7b (4 November 2026)
+
+Built on top of 7b9d7e64. Codex wrote the slice in a worktree of its own from a design Claude gave it, while 7a was being tested; the Claude subagent that wrote 7a's hosted tests wrote 7b's too; Claude merged, built and tested; Codex and Gemini reviewed it. Step 7 is done with it.
+
+- `WebEngineCore` gains `WebDialogPresenter`: a script's alert, confirm and prompt, and a file field's panel, each with the asking frame's host and an answer the host gives once, now or later. `WebEngineAppKit` gains `WebPageUIEvents`: a child window asked for (answered with the child's surface, or nil), `window.close()`, the context menu's element link, and a scroll the page left unused. `WebEngineAppKit` now depends on `WebEngineCore`.
+- `WebKitMacPlugin` gains `WebKitUIAdapter`, the web view's whole UI delegate, as `WebKitNavigationAdapter` is its navigation delegate. It answers exactly the eight questions `Page` answered (two of them WebKit's private ones: the context menu's element and unused wheel events) and no others, since WebKit notes which a delegate answers when it is set. The context menu's link is read with the same private steps, moved from `Page`. With no presenter it answers each dialog at once as WebKit's defaults would, so no completion handler is left uncalled.
+- `Page` is no longer a WebKit delegate of any kind. It is the adapter's presenter and events, with the old bodies: the same alerts through the same `present`, which holds one dialog for a background tab; the same file panel; the same branches, in the same order, for a child window, which return the child's surface (the picture window's view wrapped in one). An extension's page's `ExtensionPageDelegate` passes the rest on to the adapter where it passed it to `Page`.
+- Where the build differs from the plan: the dialogs carry the frame's host as text, not a `WebFrame`, since the alert's title is built from the host alone and an origin with an empty scheme would be opaque.
+- Changes on review and testing: `Page`'s dialog methods named the frame's host `host`, which hid the page's own `host` (its window) inside them; it is `frameHost` there now. The hosted test that the navigation adapter is the whole navigation delegate still checked that `Page` was the UI delegate and answered its questions; it now checks the UI adapter (Codex found it failing too).
+- Reviews: Codex (gpt-6.1-sol, read-only, the diff inlined) found the old test above and nothing else. Gemini (gemini-3.8-flash-high) passed it with no findings.
+
+Result: all three schemes build with no new warnings; 69 package tests (19 and 50), three runs each; 108 hosted tests, twice in a row (6 new: `PageUIDelegateTests`); PadCore's 741 tests. The test host never had a file of the real data folder open (33 and 26 `lsof` samples). The hosted tests hold an alert, a confirm and a prompt for a page no window shows and see each answered as cancelled when the page goes elsewhere or is torn down, with no sheet shown; see `window.close()` reach the host of a window a script opened; and give the context menu's private question a stand-in element. Not covered: a dialog or a file panel shown for real (it would put a sheet or a panel on screen; the package tests answer them through a stand-in presenter), an extension page's delegate chain (it needs an installed extension), and what the swipe does with an unused scroll.
+
+### 7.13 Step 8 (4 November 2026)
+
+Built on top of ea485362, in one commit of three parts. Codex wrote it in a worktree of its own from a design Claude gave it, while step 7 was being tested; a Claude subagent wrote the hosted tests; Claude merged, fixed, built and tested; Codex and Gemini reviewed it.
+
+- History entry identities. `PageHistory` (`Shared/HistoryRecorder.swift`) and `PageStatus` (`Shared/PageShared.swift`) keep the engine's own back-forward entries as plain objects, the same objects as before, compared the same way (`===`, and `NSMapTable`'s object keys, which for WebKit's items are their pointers). `WebEngineCore` gains `WebBackForward` (`currentEntry`), which `WebKitPageServices` answers with WebKit's current item; the Mac's `Page` reads it in its four places. `PageHistory`'s entry point that takes WebKit's navigation type, the iOS app's alone, moved to `App/Sources/PageHistoryWebKit.swift`. `HistoryRecorder.swift` imports no WebKit.
+- Per-space stores. The WebKit store objects moved from `Shared/Stores.swift` to `WebKitSupport`'s `WebKitStores` (built for both apps): the store made once per space, whether it was made this run, letting it go and emptying it, readying WebKit for removals, and removing one from disk, each body moved word for word. `Stores` keeps the app's part, the list of stores to remove under the `stores.erasing` preference, in the same order, with the same two-second delay and the same hop to the main actor. Callers that need a store object (the Mac's page engine, the extension runtime, download retries and the iOS app's pages) ask `WebKitStores`. On the Mac, `Session` erases a removed space's store through the page engine, `engine.eraseStore(space:)`, as it sweeps them. `Stores.swift` imports no WebKit.
+- Restoration data. `WebEngineCore` gains `WebRestoration` (`restorationData`), which `WebKitPageServices` passes straight to WebKit's `interactionState`; the Mac's `Pages` (a tab frozen and thawed) and `Session` (going back past a replaced page) read and write `Page.restorationData`, whose setter, like the old code, never gives nil. The iOS app keeps WebKit's own property.
+- Where the build differs from the plan: restoration data stays `Any`, not `Data`, since WebKit's header promises only an object, and a cast could drop one it gives; the snapshot files keep their format, with no engine tag or version (section 6 wanted one), since only one engine exists and a tag on disk would need a reader for the files already there. History identities are the engine's own objects rather than numbers the plugin makes: identity by object is what the code compares.
+- Changes on review and testing: the hosted test of the page engine compared a page's store with `Stores.store(for:)`, which is gone; it compares with `WebKitStores.store(for:)`. Codex's package tests for `WebKitStores` made stores on disk, in the test runner's own `~/Library/WebKit` folder, and failed: WebKit hands back the same live store object for an identifier after the app lets go of it, and refuses to remove a store from disk while any object of it is alive, so each run left three stores behind. The nine they left were removed, and the package keeps only a test that makes no store; making stores is tested in the app's test host, whose folder is its own and is removed after each run.
+- Reviews: Codex (gpt-6.1-sol, read-only, the diff inlined) found nothing. Gemini (gemini-3.8-flash-high) reported three, none of which held at its line: that `WebKitStores.remove` calls a main-actor closure from WebKit's completion handler off the main actor (WebKit's header marks that handler as the main actor's, and the package builds in Swift 6 mode), that `PageHistoryWebKit.swift` lacks an import for `NavigationKind` (it is `PageHistory`'s own nested type; the iOS app builds), and that the project was not regenerated (it was; the diff it was given left the generated file out).
+
+Result: all three schemes build with no new warnings; 72 package tests (19 and 53), three runs each; 114 hosted tests, twice in a row (6 new: `PageStorageTests`); PadCore's 741 tests. The test host never had a file of the real data folder open (39 and 33 `lsof` samples). `HistoryRecorder.swift` and `Stores.swift` name no WebKit type; `Shared/` imports WebKit in 9 lines where it did in 11; the inventory's total is 510. The hosted tests see history and statuses keep WebKit's own entries, a web app's pushed pages each made a visit, restoration data bring a new page back with its back list (and a nil leave it), a tab freed by `enforce(pressure:)` come back with its back list, a tab's page use its space's one store, and a fresh space's store let go, written down and removed by the sweep. Not covered: a step back within a web app that adds no visit (WebKit gives a page loaded from a string no back-forward entries, and the allowed test pages make no visits), a space removed end to end (it would remove one of the workspace's spaces; going back past a replaced page, which reads restoration data, is in `PageBackTests`), and the iOS app run (it is built).
+
+### 7.14 Step 9 (4 November 2026)
+
+Built on top of 467c9b6e, in one commit of four parts. Codex wrote it in a worktree of its own from a design Claude gave it; a Claude subagent updated the hosted download tests for the new types and wrote the step's hosted tests; Claude merged, fixed, built and tested; Codex and Gemini reviewed it.
+
+- SVG rasterizing. `WebEngineCore` gains `WebSVGRasterizer` (`png(of:side:dark:)`). `Shared/SVGRaster.swift` moved, word for word, into `WebKitSupport` as `WebKitSVGRaster`, which gives the PNG's bytes where it gave a picture. `SiteIcons` is handed its rasterizer and makes the picture from the bytes on the main actor, as before; whether a drawing has a dark look is its own question now. The Mac's `SiteIcons.shared` takes the page engine's (`MacPageEngine.svgRasterizer`); the iOS app's and the Site Icons Tests' take `WebKitSVGRaster.shared` directly. `Session`'s initializer touches no `SiteIcons`, so the two static objects never wait on each other.
+- Downloads and Handoff's fetches. `WebEngineCore`'s `WebDownload` grows into the whole download (its request, its progress, a weak delegate, cancelling with what it can resume from), with `WebDownloadDelegate` and `WebDownloadStarting` (a page's own session or a space's). `WebKitSupport` gains `WebKitDownload` (moved from `WebKitMacPlugin`), which is WebKit's download's delegate from the moment it is made and passes each callback on unchanged, and `WebKitDownloadStarter`, in a page's session (its view held weakly) or a space's (the retry's hidden view, made as `Downloads.retry` made it). `Downloads` (both apps) keeps wrapped downloads and is their delegate; a retry's session is `Downloads.retryStarter(space:)`, which each app declares (the Mac's asks the page engine) and which `retryViews` keeps until the download ends, as it kept the view. `HandoffFetch`, `DocumentSource(link:downloads:)` and the picture reader in `HandingOff.swift` fetch through `page.downloadStarter` (the Mac's is its services). `DownloadActivity.swift`, `HandoffFetch.swift` and `HandoffDocumentSource.swift` import no WebKit.
+- The transcript reader's hidden page. `WebEngineCore` gains `WebHiddenPage` (`begin` within a limit, `callInAppWorld`, `stop`). `Unseen`'s WebKit work moved into `WebKitSupport` as `WebKitHiddenPage`: the configuration, the view beside and below the page's, the media suspended, the decision on each step, every callback, each line as it was. `Unseen` keeps what is the app's: HandsOff, the site it may not leave (the rule it gives the hidden page), its patience and the reader's call. Each app's `Page` makes the hidden page (`hiddenPage(allowing:)`), with the content blocker's lists where the page blocks content.
+- The recording indicator holds `NSView`s where it held `WKWebView`s.
+- Where the build differs from the plan: `WebEngineKit` builds for iOS 17 too, and the iOS app links `WebEngineCore`, since `Shared/` code it compiles now names contract types (section 4 foresaw it for shared contracts). `WebDownloadStarting.keepingSessionAlive()` was added: today's code held the tab's view strongly for the length of a fetch, where the page's session holds it weakly, so a fetch holds it through this for its length. The iPad's hidden page is given its user agent (`Identity.macUserAgent`) by the app, so the plugin needs no PadCore.
+- Changes on review and testing: the Mac app did not build, as the picture reader in `HandingOff.swift` still passed the page's view to `HandoffFetch` (Codex's review missed it; the build found it); `Page` lacked `import WebKitSupport`; passing the hidden page's rule gave one new warning in the Mac's Swift 5 mode until it was marked `@Sendable`; PadCore's policy test looked for `SVGRaster.swift` in `Shared/` and now checks the plugin's two files that call into pages (the rasterizer's page is the app's own; the hidden page calls only in the app's world and loads only what its owner allows) and that `Unseen` asks HandsOff before its page loads; a package test compared WebKit's copy of a request with the one given, and compares their addresses now.
+- Reviews: Codex (gpt-6.1-sol, read-only, the diff inlined) found only the hosted download tests that still named the old types, which the subagent had in hand. Gemini (gemini-3.8-flash-high) reported four: a package test compared a download's progress with itself (real: it now compares it with WebKit's own download's); `HandoffFetch` would wait its 30 seconds for a session whose page had gone (it cannot happen, since a page holds its view as long as it lives, but it now fails at once); the support tests lacked an explicit dependency on `WebEngineCore` (they built without it; added); and the review's diff left out the spy engine's change (left out on purpose with the tests' folder).
+
+Result: all three schemes build with no new warnings; 85 package tests (19 and 66), three runs each; 122 hosted tests, twice in a row (8 new in `PageHiddenTests`, and `PageDownloadAndFileTests` moved to the wrapper); PadCore's 741 tests; the Site Icons tests (11), which left nothing in `~/Library`; the page-script tests as before (writing.mjs 69 of 70, the older failure). The test host never had a file of the real data folder open (44 and 36 `lsof` samples). The inventory finds hidden web views outside the plugin only in the extension runtime's files and the tests; `Shared/` imports WebKit in 2 files where it did in 6; the total is 446 where it was 510. The hosted tests see the engine's rasterizer be `SiteIcons`' and draw a picture at the size asked; a page's download session be its services, a kept one outlive its page and one not kept not; a link from a page that has gone not fetched; a retry's session be in its space's store, with a download through it asked where to save, told nowhere and failing; and the hidden page sit below the page with its store and name, call in the app's world only, refuse a step its rule refuses and answer false when its time passes first. Not covered: a download that saves a file, a real transcript (it needs a site), the hidden page's content-blocking lists (the test host's blocker has none, and WebKit cannot say which lists a controller has), the recording pill (it would put a panel on screen), and the iOS app run.
+
+Found on the way, older than this work: `WebKitHiddenPage.begin`, like `Unseen.begin` before it, would leave a first caller waiting for ever if called twice while loading; `Unseen` calls it once.
+
+### 7.15 Step 10 (4 November 2026)
+
+Built on top of d63b9b88. Codex wrote it in a worktree of its own from a design Claude gave it, while step 9 was being tested; a Claude subagent wrote the hosted tests; Claude merged, built and tested; Codex and Gemini reviewed it.
+
+- `WebEngineCore` gains `WebRuleList` (a compiled list, the engine's own, with its identifier), `WebRuleListStore` (look one up, compile one from the engine's encoded rules, remove the old ones with a prefix but those kept) and `WebRuleListTarget` (replace a page's lists: remove them all, then add each in order). `WebKitSupport` gains `WebKitRuleList`, `WebKitRuleListStore` (WebKit's default store for the app, a store at a folder for tests) and `WebKitRuleListTarget` (a page's controller), each with the bodies moved from `ContentBlocker` and `PageBlocking` word for word; WebKit's completion handlers run where they ran, with no hop added.
+- `ContentBlocker` (both apps) keeps the lists as `[any WebRuleList]` and its store from `ContentBlocker.makeRuleStore()`, which each app declares (the Mac's asks the page engine); it plans, saves, publishes and tells pages as before. `PageBlocking` takes each page's target where it took its controller; `WebKitHiddenPage` takes the lists as they are. `ContentBlocker.swift` imports no WebKit; `Session`'s initializer never touches `ContentBlocker`, so the two never wait on each other.
+- Where the build differs from 5.5: PadCore's `BlockingRule`, `ContentBlocking.json`, `RulePlanner` and `FilterConverter` stay in PadCore, which imports no WebKit and whose tests cover them; moving them into the plugin would change what the app hands it (the lists' texts instead of WebKit's encoded rules), which a plugin that is not WebKit's would need. That move would have to part `FilterSink`'s rules from its scripted filters, keep `ScriptedFilters`' parsing and tables for the app, and give the plugin the lists and the policy.
+- Reviews: Codex (gpt-6.1-sol, read-only, the diff inlined) found nothing. Gemini (gemini-3.8-flash-high) reported one, that the spy engine's new member was missing; it was in the worktree, left out of the review's diff with the tests' folder.
+
+Result: all three schemes build with no new warnings; 89 package tests (19 and 70), three runs each; 126 hosted tests, twice in a row (4 new: `PageContentRulesTests`); PadCore's 741 tests; the Site Icons tests (11); the page-script tests as before (writing.mjs 69 of 70). The test host never had a file of the real data folder open (43 and 38 `lsof` samples). `Shared/` imports WebKit in 1 file (`PageShared.swift`); the inventory's total is 442. The hosted tests see the engine, the blocker and a page use WebKit's store and the page's own controller; a list given to a page hide an element from its next load and none show it again; a page get no lists from a blocker with none; and the hidden page hide with the lists it is given. Not covered: the blocker's own compiling, looking up and removing on the default store (its services do not start in the test host; the package tests cover a store at a folder of their own), the filter lists and the planning (PadCore's tests), and the iOS app run.
+
+Found on the way, older than this work: WebKit applies no content rule list to a `data:` document, so a page loaded from a `data:` address is never blocked.
+
+### 7.16 Step 11 (4 November 2026)
+
+Built on top of 84c4227f. Codex wrote it in a worktree of its own from a design Claude gave it, from 467c9b6e, at the same time as step 9; Claude merged it onto steps 9 and 10 (one conflict, in `HandoffDocumentSource.swift`'s `open`, where step 9 had changed its view to a download session), built and tested; a Claude subagent wrote the hosted tests; Codex and Gemini reviewed it.
+
+- New packages (5.1): `WritingServiceKit`, the grammar contract (`GrammarService`, a class or an actor so answers from one let go can be dropped by identity; `GrammarEngine`, which makes services, lists rules and says whether it can check; `WritingDialect`, `WritingConfiguration`, `WritingRule`, `WritingSuggestion`, `WritingIssue`, whose Codable forms are `Engines`' own, byte for byte); `DocumentServiceKit`, the documents contract (`DocumentReader`, synchronous as `Documents` is, with `DocumentKind`, `DocumentPages` and `DocumentReadError`); and `EnginePlugins`, with `HarperPlugin` (`HarperGrammarEngine`, around Harper's `Grammar` actor, each call the same with the same arguments) and `DocumentsPlugin` (`EnginesDocumentReader`, which gives `EngineError` as `DocumentReadError` with the same kind and message). All three build for macOS 26 and iOS 17.
+- `WritingChecker`, `WritingLists` and `HandoffDocumentSource` (both apps) and the Mac's writing files, Settings, About and the launch log use the contracts, line for line: the same branches, tasks and chain of changes, the same check for stale answers, the same words. Each app names its plugins in one file, `Mac/Sources/Plugins.swift` and `App/Sources/Plugins.swift` (`WritingChecker.engine`, `DocumentSource.reader`, and on the Mac the licences About shows). No file in `Mac/` or `Shared/` imports `Engines`, and the Mac app no longer links it but through the plugins; the iOS app keeps it for its own licences page.
+- Changes on review and testing: the plugins' test targets and the two files that log Harper's rule count now name the contract modules they use (they built without, through the plugins).
+- Reviews: Codex (gpt-6.1-sol, read-only, the diff inlined) found nothing, and found the merged Handoff file kept step 9's download sessions. Gemini (gemini-3.8-flash-high) reported two, neither of which broke the build: the plugins' test targets lacked explicit contract dependencies, and the launch log called the engine without importing its module; both made explicit as above. Its suggestion to log `WritingChecker.rules().count` instead would have logged 0 where it logged -1 when Harper fails, so the call stays.
+
+Result: all three schemes build with no new warnings; 106 package tests (19, 70, 3, 2 and 12), three runs each; 133 hosted tests, twice in a row (7 new: `PageWritingTests`); PadCore's 741 tests; the Site Icons tests (11); the page-script tests as before (writing.mjs 69 of 70). The test host never had a file of the real data folder open (48 and 38 `lsof` samples). The inventory's imports: `Mac/` 27 files, `Shared/` 1 (`PageShared.swift`'s WebKit), none of them `Engines`; its total is 432. The hosted tests see the app's composition give Harper and the document reader; its licences be the engines' text; its rules be Harper's, field for field; the checker lint two English paragraphs as Harper does with the offsets added, pass a Korean one by, ignore a lint and drop its linter when turned off; a page's lint message answered as before; a lint's JSON be `Engines`' own; a CSV and a one-page PDF read as the engines read them; and unreadable or locked files fail with the same words. Not covered: Writing in a real page's fields beyond its channel (`PageChannelTests`), the Elsewhere checker and its panel (other apps' fields), Settings' screens, Office files read whole, and the iOS app run.
+
+### 7.17 Step 12a (5 November 2026)
+
+Built on top of 5b964439, the first slice of step 12. Step 12 is far larger than the steps before it: Codex's survey (read-only, the same day) counted about 23 slices, among them the Mac `Page`'s own web view (about 7), the swipe and picture in picture (about 3) and the extension runtime (about 13, some 11,000 to 13,000 lines changed). This slice takes the parts that are small and can be shown. Codex wrote it in a worktree of its own from a design Claude gave it; Claude added the stores' part, merged, built and tested; a Claude subagent wrote the hosted tests; Codex and Gemini reviewed it.
+
+- `Shared/PageShared.swift` imports no WebKit: its two calls into a page in the app's world go through `Page.callInAppWorld(_:arguments:)`, and its reads of the address and title through `Page.pageURL` and `pageTitle`, which each app defines on its own view; a site's filter scripts are added by `WebKitSupport`'s `addFilterScripts(blocker:scriptlets:appWorld:)`, each app's `Page` giving it the two scripts PadCore makes and its world; the iOS app's own `NewTabClick.choice(for:)` over WebKit's navigation action moved to `App/Sources/NewTabClickWebKit.swift`.
+- `Shared/Stores.swift` imports no `WebKitSupport`: `Stores.erase(_:in:)` and `sweep(in:)` take a `WebSpaceStores` (`WebEngineCore`), which `WebKitSupport`'s `WebKitSpaceStores.shared` answers from `WebKitStores`; the page engine, the extension runtime and the iOS app pass it.
+- WebKit's own spell checking: `Mac/Sources/Writing/WritingSpelling.swift` moved word for word into `WebKitMacPlugin` as `WebKitSpelling`, which the page engine calls (`spellingFollows(writing:pages:)`) with the pages' views, in the same order. `Mac/Sources/Window.swift` lost an import of WebKit it did not use.
+- PadCore's policy test lets the new filter-scripts file add scripts only if it is, word for word, the two given scripts at document start in the main frame, the blocker in the world given and the scriptlets in the page's.
+- Reviews: Codex (gpt-6.1-sol, read-only, the diff inlined) found nothing. Gemini (gemini-3.8-flash-high) found nothing.
+
+Result: all three schemes build with no new warnings; 91 package tests (19 and 72), three runs each; 141 hosted tests, twice in a row (8 new: `PageSharedTests`); PadCore's 741 tests; the Site Icons tests (11); the page-script tests as before (writing.mjs 69 of 70). The test host never had a file of the real data folder open (56 and 52 `lsof` samples). No file in `Shared/` imports WebKit, `WebKitSupport` or `Engines`; 25 files in `Mac/` import WebKit, 18 of them the extension runtime's; the inventory's total is 430. The hosted tests see a page's address and title read when asked; its calls in the app's world kept from the page's and its arguments, results and errors passed on; Handoff read an article as markdown.js does; the filter scripts in their worlds in the main frame only; the stores' contract answer as WebKit's stores and `Stores` ask the one it is given at each step; and the spelling preference turned off and back. Not covered: a real transcript (it needs a site), a site with scripted filters through `Page.prepare` (the test host's blocker has none), and the iOS app run.
+
+Found on the way, older than this work and moved unchanged: on macOS 27.0.1 a `WKWebView` answers `toggleContinuousSpellChecking:` but not `isContinuousSpellCheckingEnabled`, so `WebKitSpelling.follow` never finds a view to ask and only writes WebKit's defaults key; open pages then keep WebKit's own spell checking while Harper checks, until the next launch (the subagent's reading; not tried in the app).
+
+### 7.18 Step 12b (5 November 2026)
+
+Built on top of 128ffc8b. Codex wrote it in a worktree of its own from a design Claude gave it, while 12a was being tested; Claude merged, fixed the tests it left, built and tested; Codex and Gemini reviewed it.
+
+- `Mac/Sources/Page.swift` imports no WebKit. `WebKitMacPlugin` gains `WebKitMacPage`, which the page engine makes from the configuration it already chose and which owns what `Page.init` made: the controller, the rule-list target, the channels, the web view (`PageView` moved and renamed `WebKitPageView`), the services, the navigation and UI adapters and their wiring (an extension page's `ExtensionPageDelegate`, which the engine supplies, in front of the UI adapter), the view's settings and the seven observations, in the same order; and `WebKitPageScripts`, the page's scripts and calls into it. `Page` holds it as `WebMacPage` (`WebEngineAppKit`) and reaches it through contracts: `WebPageStateEvents` (the seven observations as the five kinds `Page` tells apart, each heard within WebKit's own notification), `WebPageScripting` (the app's user scripts, the filter scripts, `evaluateJavaScript` and `callAsyncJavaScript` in a world, in the main frame, in each call's own form), `WebPageViewEvents` (scrolls and swipes offered to the swipe first, moving to a window, installing the swipe), `WebPageMenus` and `WebContextMenu` (the menu changes stay the app's, as `PageMenus`, made on WebKit's own menu with WebKit's identifiers and its private check for an extension's item), `WebSnapshotOptions` and the state, navigation and teardown calls. Setup and teardown keep their order line for line.
+- `Mac/Sources/PageWebKit.swift` is the bridge for the app files still on WebKit until their slices (the extension runtime, the swipe, the picture window, Apple Passwords, `Pages`, the page engine): `Page.view`, `Page.world`, the swipe's and the picture window's construction, and the two extension-recording calls, moved word for word. The hosted tests reach the web view through it, unchanged.
+- PadCore's policy test lets `WebKitPageScripts.swift` call into pages only with what it is given (no string literal, no load, the main frame only) and `PageWebKit.swift` only into an extension's own page, in its two helpers.
+- Changes on review and testing: two hosted tests still made pages with the old initializer, and two read the page's controller from `Page`, where it is now the engine page's. Codex found that a package test would pass with the app's and the page's worlds swapped, and that the observation test could not tell synchronous delivery from delivery held back; the first now checks each script's world, and a new test tells each of the seven changes by hand and sees each heard before the next line.
+- Reviews: Codex (gpt-6.1-sol, read-only, the diff and the implementer's report inlined) found the two test gaps above (real) and a hosted test that still used the old initializer (already fixed). Gemini (gemini-3.8-flash-high) reported two, neither real: that the policy test was changed outside the brief (Claude changed it on purpose, after the report it was compared with) and that a package test needs a live WebKit (it passes outside a sandbox).
+
+Result: all three schemes build with no new warnings; 100 package tests (19 and 81), three runs each; 141 hosted tests, twice in a row; PadCore's 741 tests; the Site Icons tests (11); the page-script tests as before (writing.mjs 69 of 70). The test host never had a file of the real data folder open (57 and 51 `lsof` samples). 25 files in `Mac/` import WebKit, 18 of them the extension runtime's, with `PageWebKit.swift` in place of `Page.swift`; the inventory's total is 424. Not covered: a real snapshot on screen, real gestures, localized menus and an installed extension's recording.
+
+### 7.19 Step 12c (5 November 2026)
+
+Built on top of 8a4a6a0a. Codex wrote it in a worktree of its own from a design Claude gave it; Claude merged, built and tested; Codex and Gemini reviewed it.
+
+- `WebEngineCore` gains `WebTrait` (5.2's traits, and the context menu's element): what this engine page can do, which the WebKit plugin reports from WebKit's private selectors where the app asked them before. `WebEngineAppKit` gains `WebSwipe` (the edges the page is pinned at, full screen, rubber banding by edge) and `WebPageCoordinates` (a rectangle of the page on the screen), which `WebKitMacPlugin`'s `WebKitPageInteraction` answers with the same private calls, keys and `_WKRectEdge` bits, and `WebKitPicturePage`, the document picture-in-picture window's page: made in the same call from WebKit's child configuration (so `window.opener` holds), with the same settings, delegates and close.
+- `Mac/Sources/PageSwipe.swift`, `PictureWindow.swift`, `PictureTest.swift` (Debug) and `ApplePasswords.swift` import no WebKit. The swipe asks `Page` for Back and Forward (the same expressions as before, going back past a replaced page included), compares the engine's own history entries as in step 8, and works only where the page has both traits it needs, else WebKit's own gestures as before. The picture window keeps its frame and controls; Apple Passwords its card, helper and fills. `PageWebKit.swift` lost the swipe's and the picture window's helpers.
+- Where the new code differs, unseen: a picture request that is not WebKit's now gives no window where it stopped the app (WebKit's adapter only ever gives WebKit's); the configuration is set after the window's size is measured, in the same synchronous call before the child exists.
+- Changes on review: the two picture-window package tests now fail where their parent page does not load, where they returned quietly; `ApplePasswords.swift` names `WebEngineAppKit`, whose contract it calls (it built without, through `Page`).
+- Reviews: Codex (gpt-6.1-sol, read-only, the diff and the implementer's report inlined) found nothing. Gemini (gemini-3.8-flash-high) reported four: the quiet tests (real, fixed); the missing import (not a build break; added); that the trait for unused wheel events is always true (real as a statement, not as behaviour: it says the plugin answers WebKit's private callback, and whether this WebKit asks it cannot be asked; the swipe's other trait is the same check as before, so where it works is unchanged; a comment now says so); and that the picture page passes WebKit's decision handler straight to the app (as the old window did; not a change).
+
+Result: all three schemes build with no new warnings; 108 package tests (19 and 89), three runs each; 141 hosted tests, twice in a row; PadCore's 741 tests; the Site Icons tests (11); the page-script tests as before (writing.mjs 69 of 70). The test host never had a file of the real data folder open (55 and 50 `lsof` samples). 21 files in `Mac/` import WebKit: the extension runtime's 18, `Pages.swift`, the page engine and `PageWebKit.swift`; the inventory's total is 400. Not covered: real trackpad swipes and rubber banding, a picture-in-picture window on screen, and Apple Passwords with Apple's helper.
+
+### 7.20 Step 12d (5 November 2026)
+
+Built on top of 4a6fc2bd, the first slice of the extension runtime (5.8). Codex wrote it in a worktree of its own from a design Claude gave it; Claude merged, fixed, built and tested; Codex and Gemini reviewed it.
+
+- `WebKitEngine` gains a Mac-only target, `WebKitExtensions`, which depends on PadCore (whose `Extension*` files already hold the runtime's Foundation-only logic). Into it, moved word for word but for what they reached the app for: `ExtensionNative.swift` (native messaging: the same folders in the same order, the same origin check, framing and processes), `ExtensionSocket.swift` (workers' sockets), `ExtensionTable.swift` (the probe of WebKit's extension API), `ExtensionBlankPage.swift`, `ExtensionTrial.swift` (the first-seconds checks), and the WebKit half of `ExtensionKeys.swift` (its settings and SwiftUI stay the app's). Each is handed what it asked `Extensions` for: the extensions' scheme, the shim's name, and the trial's rules and site checks as callbacks called at the same moments.
+- PadCore's policy test checks the moved blank and trial pages' text where they now are.
+- Where the build differs from the plan: the new target builds in the Mac app's own Swift (version 5, with none of the newer concurrency defaults the iOS app uses), since code moved from the Mac app must keep its semantics until it is written for Swift 6; the package's other targets build in Swift 6.
+- Changes on review and testing: Codex had built the target with five newer concurrency features, among them `NonisolatedNonsendingByDefault`, which the Mac app does not use and which would move every async function with no actor of its own onto its caller's; and had put an enum-wide `@MainActor` on `ExtensionNative`, whose original marks only three of its functions. Claude took both out; the six files' actor annotations now match the originals one for one.
+- Reviews: Codex (gpt-6.1-sol, read-only, the diff and the implementer's report inlined, told of both changes) found nothing. Gemini (gemini-3.8-flash-high) found nothing.
+
+Result: all three schemes build with no new warnings; 120 package tests (19 and 101, 12 of them new in `WebKitExtensionsTests`), three runs each; 141 hosted tests, twice in a row; PadCore's 741 tests; the Site Icons tests (11); the page-script tests as before (writing.mjs 69 of 70). The test host never had a file of the real data folder open (53 and 49 `lsof` samples). 16 files in `Mac/` import WebKit; the inventory's hidden web views outside the plugin are down to the extension runtime's sign-in window, offscreen documents and popups. Not covered: a real native messaging host, a worker's socket over the network, a blank page clearing a removed extension's data, and the trial checks on an installed extension.
+
+### 7.21 Step 12e (5 November 2026)
+
+Built on top of a39d7436. Codex wrote it in a worktree of its own from a design Claude gave it; Claude merged, built and tested; Codex and Gemini reviewed it.
+
+- `WebEngineAppKit` gains `ExtensionBrowserHost`, section 5.8's app-owned contract: the spaces, windows and tabs an extension may know of, as values (identities, order, selection, pinned, loading, address, title, frames, focus, and the engine page where a tab is live, never the app's `Page`), the operations on them (open, select, move, pin, close, load, raw reload, Back as the app goes back, window frames, focus and opening) and the workspace's events.
+- `WebKitExtensions` gains WebKit's tab and window adapters, moved from `Mac/Sources/ExtensionTabs.swift` and `ExtensionPopupWindow.swift` with their bodies (`ExtensionTabs`, `ExtensionTab`, `SpaceWindow`, `ExtensionPopupWindow`, `ExtensionPopupTab`), asking the host where they asked the app, in the same order; the workspace's events come on the same main-queue turn through the same Combine subscription, now the host's; and a configuration handle that carries WebKit's own configuration object through the app unopened. The app's `Mac/Sources/ExtensionHost.swift` answers from `Session`, `Pages`, `WindowModel` and the workspace, and keeps the product rules (one space as one window, frozen tabs, Back past a replaced page, the refusals of closing a space and of private windows, the popup windows themselves). The two files import no WebKit; the five classes keep their `@MainActor` and nothing gained one.
+- Where the new code differs, unseen: the host makes value snapshots and so reads some getters an answer did not need; a popup adapter gets an internal handle of its own, never given to WebKit or the shim as an identity; the tab and space adapters hold the runtime unowned (the app's `Extensions.shared` lives as long as the process).
+- Reviews: Codex (gpt-6.1-sol, read-only, the diff and the implementer's report inlined) found nothing. Gemini (gemini-3.8-flash-high) found nothing.
+
+Result: all three schemes build with no new warnings; 128 package tests (19 and 109, 8 new in `ExtensionBrowserTests`), three runs each; 141 hosted tests, twice in a row; PadCore's 741 tests; the Site Icons tests (11); the page-script tests as before (writing.mjs 69 of 70). The test host never had a file of the real data folder open (56 and 49 `lsof` samples). 14 files in `Mac/` import WebKit. Not covered: an installed extension's `tabs` and `windows` calls (the package tests drive the adapters with a fake host and a non-persistent controller, loading no extension), real window focus and frames.
+
+### 7.22 Step 12f (5 November 2026)
+
+Built on top of 8ea381fc. Codex wrote it in a worktree of its own from a design Claude gave it; Claude merged, built and tested; Codex and Gemini reviewed it.
+
+- `WebEngineAppKit` gains `WebExtensionSurface` (an extension's popup or side panel page as the app sees it: a view, its extension and space, its address, focus, its own measure of itself, close and a close request), `ExtensionPanePage` (that surface with the name and icon its pane shows), `ExtensionPageMedia`, and `ExtensionAuxiliaryPageHost`, the app's answers for these pages: the camera and microphone question, the screen-capture decision, watching a page that records and giving its view back.
+- `WebKitExtensions` gains `ExtensionSurface` and `ExtensionOffscreen`, moved from `Mac/Sources/ExtensionPopup.swift` and `ExtensionOffscreen.swift` with their bodies, and the side panel's manifest and address lookups from `ExtensionSidePanel.swift`. The surface's refusal of every page but its extension's own, the tabs it opens instead, its measuring script (byte for byte), close-once and its order are as before; offscreen documents keep their registry, reasons, private focus preference, 30-second deadline and teardown order. Each takes the extension scheme, the tab adapters and the host where it reached `Extensions.shared`, `ExtensionCapture.shared` and `Session.shared`. The app keeps the popover and panel, their sizing timers and animation, focus and Escape, `WindowModel`'s ties, the camera and microphone alert on the window in front, and the bridge to `ExtensionCapture` (`Mac/Sources/ExtensionOffscreen.swift` now holds only those answers, with three casts to WebKit's view until capture's slice). `ExtensionPopup.swift` and `ExtensionSidePanel.swift` import no WebKit; both moved classes keep their `@MainActor` and nothing gained one.
+- Where the new code differs, unseen: the navigation decision is a synchronous helper the delegate calls; the window-in-front check for the camera question runs after the plugin's own checks and the extension's name are read, both without side effects; the plugin has its own copy of the private-preference setter until capture's slice; test-only factories let package tests watch loads without making them.
+- Reviews: Codex (gpt-6.1-sol, read-only, the diff and the implementer's report inlined) found nothing. Gemini (gemini-3.8-flash-high) reported three. Real: an offscreen test made its fixture folder in the package's `.build` folder instead of the temporary folder (moved there), and no test showed that a site in the main frame opens a tab in the surface's space (added, over the browser tests' fake host). Not real: that the measuring test times out loading HTML in a sandbox; it passes in every run here, and only Codex's own sandbox refuses WebKit's processes.
+
+Result: all three schemes build with no new warnings; 136 package tests (19 and 117, 8 new in `ExtensionSurfaceTests` and `ExtensionOffscreenTests`), three runs each; 141 hosted tests, twice in a row; PadCore's 741 tests; the Site Icons tests (11); the page-script tests as before (writing.mjs 69 of 70). The test host never had a file of the real data folder open (55 and 49 `lsof` samples). 12 files in `Mac/` import WebKit. Not covered: an installed extension's popup, side panel and offscreen document, on-screen sizing and focus, and a real recording (the package tests use a non-persistent configuration, a view in no window and a fixture extension that is never loaded).
+
+### 7.23 Step 12g (5 November 2026)
+
+Built on top of 13642ab9, written by Codex beside two other slices (capture and sign-in, 7.24 and 7.25) from the same commit; Claude merged, built and tested; Codex and Gemini reviewed it.
+
+- `WebEngineAppKit` gains `WebExtensionAction` (an action as the toolbar reads it for one render: its icon at the size asked, its label, its badge and whether it is enabled) and `WebExtensionCommand` (a menu line: its id, its title, and an identity tied to the extension context it came from).
+- `WebKitExtensions` gains the translations from WebKit's `WKWebExtension.Action` and `WKWebExtension.Command`, and performs a command by its identity on its own context only, as WebKit does: WebKit ignores a command performed on a context it does not belong to (`WebExtensionContext::performCommand`), so a menu kept across a reload still runs nothing. The identities live in a map whose keys are weak, so they keep no context alive.
+- `Extensions.swift` answers the interface in those values (`action(for:in:iconSize:)`, `commands(in:)`, `commands(of:)`, `perform`), read when SwiftUI asks as WebKit's objects were, so an update shows on the same render; it applies the person's shortcuts to its contexts through the plugin's `WebKitExtensionKeys`, and `ExtensionKeys` keeps the keys, the suggestions and `UserDefaults`. `ExtensionBar.swift`, `Menus.swift` and `ExtensionKeys.swift` name no WebKit type, imported or not; `ExtensionKeys` has its own copy of the four-modifier mapping (the plugin's copy stays for the plugin).
+- Where the new code differs, unseen: the toolbar tile's icon is read a moment earlier in the same render; command values are made afresh for each menu render.
+- Reviews: Codex (gpt-6.1-sol, read-only, the diff and the implementer's report inlined) found one, real, and Claude's: Claude had replaced the implementer's context identity with the command's id alone, so a menu kept across a reload would have run the new context's command where WebKit runs none; the implementer's version is back, with its tests. Gemini (gemini-3.8-flash-high) found nothing.
+
+Result: all three schemes build with no new warnings; 140 package tests (19 and 121, 4 new in `ExtensionActionTests`), three runs each; 141 hosted tests, twice in a row; PadCore's 741 tests; the Site Icons tests (11); the page-script tests as before (writing.mjs 69 of 70). The test host never had a file of the real data folder open (52 and 50 `lsof` samples). 10 files in `Mac/` import WebKit. Not covered: an installed extension's actions, badges and commands as its scripts change them (the package tests use a fixture extension that is never loaded).
+
+### 7.24 Step 12h (5 November 2026)
+
+Built on top of d6ab3a3c, written by Codex from 13642ab9 beside 12g and 12i; Claude merged, built and tested; Codex and Gemini reviewed it.
+
+- `WebEngineAppKit` gains `ExtensionCaptureHost`, the app's part of extensions' recording: the consent question (with its deferred reads of when the extension was last used and its name, so they happen in the same order), whether it was allowed before, bringing a page's tab and window forward, lending a view to the recording pill and giving it back, the extension's name, the pill's lines (`ExtensionCaptureState`, values; the app chooses the words and their order) and Stop.
+- `WebKitExtensions` gains `ExtensionCaptureRuntime` and `ExtensionPageDelegate`, moved from `Mac/Sources/ExtensionCapture.swift` with their bodies: the replying script-message handler and its sender check, the grants and tokens, each operation's answer, the event monitor for touches in extensions' own pages, the KVO on watched views, stop, end and purge, the private preferences (one setter now, the plugin's), the display-capture decision, and the two calls into an extension's own page that were in `Mac/Sources/PageWebKit.swift` (PadCore's policy test checks them in their new place). `ExtensionCapture.swift` keeps the consent, its remembered answer and the pill; it and `ExtensionOffscreen.swift` import no WebKit, and the latter's casts are gone (the capture runtime takes `NSView`s).
+- One fix while merging: the hosted tests' build failed. The Test configuration (the hosted tests' build) defines DEBUG for the app but not for its packages, so the mock-devices helper the app calls under `#if DEBUG` was missing from the plugin there. The plugin now always has it, and the app's own condition decides when it is called, as before. Later slices' designs say so.
+- Where the new code differs, unseen: the runtime is made when `ExtensionCapture.shared` is, and installs the touch monitor and the pill's Stop at that moment, as the class did; lookups of the extension's space and context are calls into `Extensions` made at the same points.
+- Reviews: Codex (gpt-6.1-sol, read-only) found nothing. Gemini (gemini-3.8-flash-high) found nothing.
+
+Result: all three schemes build with no new warnings; 149 package tests (19 and 130, 9 new in `ExtensionCaptureTests`), three runs each; 141 hosted tests, twice in a row (after the fix above); PadCore's 741 tests; the Site Icons tests (11); the page-script tests as before (writing.mjs 69 of 70). The test host never had a file of the real data folder open (57 and 49 `lsof` samples). 8 files in `Mac/` import WebKit. Not covered: a real recording, WebKit's picker, the pill on screen and an installed extension's capture calls (the package tests use fakes, a non-persistent configuration and views in no window).
+
+### 7.25 Step 12i (5 November 2026)
+
+Built on top of 4e33bec1, written by Codex from 13642ab9 beside 12g and 12h; Claude merged, built and tested; Codex and Gemini reviewed it.
+
+- `WebKitExtensions` gains `WebKitExtensionAuth`, moved from `Mac/Sources/ExtensionAuth.swift` with its bodies: the sign-in that runs out of sight (`quietly` and `Quiet`: its hidden web view, its changes to the space's configuration, its navigation and UI delegates and the private selectors they answer, its timer and its end, once), and the address checks both flows share (`owner(of:)`, `chromiumapp`, `secure`). The space's configuration still comes from the app's page engine, asked at the same moment, after the earlier flow is superseded and before the plugin changes it; errors are made by the app's own `Unanswered`, with the same words.
+- The app keeps the sign-in in a tab (`run`, `loadFailed`, `intercept`, `handOver`): `run` is handed a call that opens the provider's tab with the context the hub already has, at the same point. `ExtensionAuth.swift` imports no WebKit.
+- Where the new code differs, unseen: the flow out of sight's view is readable (not writable) from inside the plugin's module, for its test.
+- Reviews: Codex (gpt-6.1-sol, read-only) found one, real: the timeout test said the flow lets go of its view but did not check it; it does now. Gemini (gemini-3.8-flash-high) found nothing.
+
+Result: all three schemes build with no new warnings; 160 package tests (19 and 141, 11 new in `ExtensionAuthTests`), three runs each; 141 hosted tests, twice in a row; PadCore's 741 tests; the Site Icons tests (11); the page-script tests as before (writing.mjs 69 of 70). The test host never had a file of the real data folder open (56 and 49 `lsof` samples). 7 files in `Mac/` import WebKit. Not covered: a provider's real sign-in and its redirects over the network (the package tests record loads and load nothing).
+
+### 7.26 Step 12j (5 November 2026)
+
+The first two of the extension hub's slices, built on top of 4854c754. A read-only design survey by Codex split what is left of step 12 (`Mac/Sources/Extensions.swift`, about 2,500 lines, with `ExtensionAnswers.swift` and `ExtensionUpdates.swift`) into the app's catalog and product coordinator, which `Extensions` stays, and a plugin-owned runtime, in about fourteen slices. Each slice declares its part of the runtime as a small protocol of its own in `WebEngineAppKit`, implemented in a file of its own in `WebKitExtensions`, with the app's answers in a host protocol of its own; the last composes them into section 5.8's `WebExtensionRuntime`. Codex wrote the two slices at the same time, each in a worktree of its own; Claude merged, built and tested them together; Codex and Gemini reviewed each.
+
+- Package metadata (`WebExtensionMetadata`, `ExtensionMetadataHost`): an extension's name and icon (the shared cache, its first successful size, its fallback to the archive's manifest when the extension is on in no space), the facts the hub notes from a manifest (cookies, native messaging required or optional), its options, new tab and side panel addresses, and the package reads behind the installed list's names. The app keeps the catalog, the person's choices, the version and name checks and every notification, at the same moments.
+- Storage and preparation (`WebExtensionStorage`, `ExtensionStorageHost`): the package, prepared-copy and records paths beneath the extension folder the app hands in, the preparation lock and stamp, and the prepared folder's atomic replacement, with the same names, layout and order. The app keeps the catalog's own file.
+- One fix while merging, as in 7.24: a DEBUG-only switch (`-extensionsWithoutShim`) the app honoured in its DEBUG builds had moved under the package's own `#if DEBUG`, which the app's Test configuration does not define for packages. The app now hands the storage whether its DEBUG switches count (`Extensions.debugSwitches`), and a test shows the switch is ignored when the app says no.
+- Where the new code differs, unseen: the metadata caches live in the plugin's object rather than the hub's; the storage roots are asked for on each use, as the computed paths were; `firstLook` notes the manifest facts it has just read rather than reading them again.
+- Reviews: Codex (gpt-6.1-sol, read-only) and Gemini (gemini-3.8-flash-high) each reported that the generated project lacked the new host files; not real here, as the project is generated at build time and committed with the slice. Gemini's other points (the facts read twice, which the merge now avoids; a host protocol wider than storage needs) change no behaviour.
+
+Result: all three schemes build with no new warnings; 180 package tests (19 and 161, 20 new), three runs each; 141 hosted tests, twice in a row; PadCore's 741 tests; the Site Icons tests (11); the page-script tests as before (writing.mjs 69 of 70). The test host never had a file of the real data folder open (55 and 51 `lsof` samples). 7 files in `Mac/` import WebKit. Not covered: installed extensions' real packages and their localized names (the package tests use fixture archives and folders in temporary roots).
+
+### 7.27 Step 12k (5 November 2026)
+
+The hub's slices 3 to 6, built on top of 7d6cb5d9, written by Codex in parallel (3, 4 and 5 at once, then 6), merged, built and tested together by Claude; Codex and Gemini reviewed each.
+
+- Compatibility checks (`WebExtensionCompatibility`, `ExtensionCompatibilityHost`): the source scans and first-seconds trials with their caches and their version and attempt checks, the API table's measuring, both probes, the stamps and their invalidation. The runtime hands the app evidence values; the app keeps the verdicts, the warnings, Settings' words and the saved incompatibility decisions. A late result for an older version or attempt is dropped where it was.
+- Error records and evidence (`WebExtensionEvidence`, `ExtensionEvidenceHost`): watching contexts' errors, records without the page's own words (with the 500-entry limit), their file, and the runtime's evidence per extension and space, told to the app inline at the same moments; verdicts, the warning override and the unread dot stay the app's.
+- Workers (`WebExtensionWorkers`, `ExtensionWorkerHost`): the worker stamps and clearing stale workers' data with the same keys, starting and recovering a background with its five-second timeout, one-minute cooldown and retry, `revive` and `restart`, with every check that drops an obsolete callback where it was. `WebKitExtensions` now also depends on `WebKitSupport`, for the space's website store.
+- Controllers, contexts, loading and grants (`WebExtensionControllers`, `ExtensionControllerHost`): the per-space controllers and their configuration, the context registry, `load` and `unload` in the same order, what is loaded, the classification of extension addresses, and WebKit's permission enforcement (sites, withheld patterns, cookies, rule redirects, other extensions' pages, the fence). The app keeps the catalog, the person's choices and saving them, and hands load inputs in as values; the runtime asks it for the current installation after every wait where the code checked before.
+- Debug-only switches (the mock devices, `-extensionsWithoutShim`, the command-line steps file, the worker notes) are decided by the app's own `#if DEBUG` and handed to the plugin as values and calls (the fourth slice's way, which replaces the stopgaps of 7.24 and 7.26); the packages have no `#if DEBUG`.
+- Where the new code differs, unseen: the runtime's objects are made on first use where the hub's stored properties were made with it, storing only their dependencies; evidence and installations cross as value copies; a problem from a trial is noted against the catalog's record found by the same id and version in the same turn; the three compiler warnings older than this work (main actor-isolated names read in `withheld` and `othersPage`) moved with them from `Extensions.swift` to `WebKitExtensionControllers.swift`.
+- Reviews: Codex (gpt-6.1-sol, read-only) found, besides the generated project (not real; see 7.26), two real test gaps: no test showed that only the current one of two unanswered worker starts times out, or that a replaced context's start does not (both added), and a test's name claimed it showed the runtime keeps no hub alive while it shows nothing keeps the runtime alive (renamed). Gemini (gemini-3.8-flash-high) reported a new `@MainActor` where there was none (not real: `Extensions` is `@MainActor`), a build break from a missing conformance (not real: the conformance has been in `ExtensionOffscreen.swift` since 12f), a second catalog lookup (not real: it reads only the id and version, in the same turn), values computed twice (no behaviour), and host protocols wider than they need (design, for the slice that composes `WebExtensionRuntime`).
+
+Result: all three schemes build with no new warnings; 223 package tests (19 and 204, 43 new), three runs each; 141 hosted tests, twice in a row; PadCore's 741 tests; the Site Icons tests (11); the page-script tests as before (writing.mjs 69 of 70). The test host never had a file of the real data folder open (56 and 55 `lsof` samples). 7 files in `Mac/` import WebKit. Not covered: installed extensions' real workers, errors and permission grants (the package tests use unloaded fixture contexts, non-persistent controllers and fakes).
+
+### 7.28 Step 12l (5 November 2026)
+
+The hub's slices 7, 8, 9 and 11, built on top of 316b52f3, written by Codex in parallel (8 beside 6, then 7, 9 and 11 at once), merged, built and tested together by Claude; Codex and Gemini reviewed each.
+
+- Permission prompts (`WebExtensionPermissions`, `ExtensionPermissionHost`): the controller delegate's questions and the shim's one-use permission after a click (ten seconds), as typed requests of values (the extension, its space and tab, its name and image, the capabilities and sites asked for, the kind of question) answered with values. The app chooses the window as `permissionWindow` did and shows the same sheets; the runtime turns WebKit's permission and pattern objects into those values, applies the answer, replies and fences in the same order. `ExtensionAsk.askForMore` takes values; a small bridge, `Mac/Sources/ExtensionPermissionBridge.swift`, still turns a WebKit context into them for the callers not yet moved.
+- The generated scripts' answers (`WebExtensionScriptAnswers`, `ExtensionScriptHost`): the scripting and user-script files eGlu writes for an extension, their lists, worlds and pruning, the containment checks, and the `management.*` answers, with every script's bytes unchanged.
+- The runtime-only answers and messaging (`WebExtensionRuntimeAnswers`, `ExtensionRuntimeAnswerHost`): `report`, `background.*`, `offscreen.*`, `idle.*` and `power.*` with the keep-awake assertions' lifetime, `permissions.native` (the app keeps the consent and its sheet), `i18n.detectLanguage` and `eyeDropper.open` over services the app answers, and the delegate's `sendMessage` and `connectUsing` with the shim's messages, the socket and native-host transports and their identity checks.
+- Cleanup (`WebExtensionCleanup`, `ExtensionCleanupHost`): the durable clearing of an extension's data with the same pending markers and retry, the runtime's half of removing an extension and a space (the app keeps the catalog, confirmation and the delayed store sweep it schedules), and `closePages` split as it was (the app closes tabs by live address, then recorded address, and its panes; the runtime closes the offscreen document).
+- Where the new code differs, unseen: requests, installations and snapshots cross as value copies; the delegate's sheet titles are made before their tasks start rather than inside them, from the same values; enabled ids cross as an ordered array, read with no wait between enumerating and deleting.
+- Reviews: Codex (gpt-6.1-sol, read-only) reported only the generated project (not real; see 7.26). Gemini (gemini-3.8-flash-high) reported the same, and that `ExtensionAsk.swift`, without importing WebKit, could not compile its DEBUG command-line prompt, which hands a WebKit context to the bridge (not real: both DEBUG builds compile it; Swift 5 lets a call pass a value whose type the file does not import).
+
+Result: all three schemes build with no new warnings (the three older ones of 7.27 stay where they moved); 259 package tests (19 and 240, 36 new), three runs each; 141 hosted tests, twice in a row; PadCore's 741 tests; the Site Icons tests (11); the page-script tests as before (writing.mjs 69 of 70). The test host never had a file of the real data folder open (53 and 48 `lsof` samples). 7 files in `Mac/` import WebKit (the bridge in, `ExtensionAsk.swift` out). Not covered: installed extensions' real prompts, scripts, workers' messages, native hosts and data deletion (the package tests use unloaded fixture contexts, temporary folders and fakes, and never a real native host).
+
+### 7.29 Step 12m (5 November 2026)
+
+The hub's slices 10, 12 and 13, built on top of 9829203a, written by Codex at the same time, merged, built and tested together by Claude; Codex and Gemini reviewed each.
+
+- The browser and pane answers (`WebExtensionBrowserAnswers`, `ExtensionBrowserAnswerHost`): `tabs.describe` with its access filtering and the held sign-in address shown only to its owner, the site icon and its cache, `tab(at:)`, the extension's own pages and contexts (the app hands snapshots of its live pages, windows and shown panes; the runtime adds the worker, offscreen and popup-window records), `surface.kind`, `action.popup` and the side panel's answers (the app keeps the panel's options, the opening deferred for a tab off screen and the presentation).
+- Installing and updating (`WebExtensionInstallExecution`, `ExtensionInstallHost`): the package's download with its host checks and timeout, checking and describing an archive, keeping it (the runtime writes the files, forgets its caches and loads; the app keeps the catalog's replacement, rollback, the consent kept, sync's adoption and the just-installed state), the update's verification and trial, an unpacked folder's snapshot with the same limits, identity and `ditto` options. The app keeps the update checks, consent, the sheets and their words and the file panel; `replace` still returns without waiting for `keep`. `ExtensionUpdates.swift` imports no WebKit.
+- Diagnostics, adapters and Apple Passwords (`WebExtensionDiagnostics`, `ExtensionDiagnosticHost`, `WebExtensionAdapters`, `WebNativeConnection`): the command-line report's runtime lines and its steps file (the app's DEBUG builds decide, as in 7.27), the page notifications `Page` sends the tab adapters, a popup's membership, and Apple Passwords' helper connection, which is the same `HostPipe` behind a neutral contract. `ExtensionTabs.swift` and `ExtensionPopupWindow.swift` name no plugin type.
+- Where the new code differs, unseen: snapshots and archives cross as values; refusals cross as values and the app makes its own `Refused` from them, with the same words; three more compiler warnings older than this work (in an unpacked folder's snapshot) moved with it from `ExtensionUpdates.swift` to `WebKitExtensionInstallExecution.swift`, so the build's warnings are the same twelve as before step 9.
+- Reviews: Codex (gpt-6.1-sol, read-only) reported only the generated project for each (not real; see 7.26). Gemini (gemini-3.8-flash-high) found nothing.
+
+Result: all three schemes build with no new warnings; 291 package tests (19 and 272, 32 new), three runs each; 141 hosted tests, twice in a row; PadCore's 741 tests; the Site Icons tests (11); the page-script tests as before (writing.mjs 69 of 70). The test host never had a file of the real data folder open (54 and 50 `lsof` samples). 6 files in `Mac/` import WebKit. Not covered: a real download from the Chrome Web Store, a real update and a real Apple Passwords helper (the package tests use injected results and a fixture process of their own).
+
+### 7.30 Step 12n, the end of step 12 (5 November 2026)
+
+The hub's last slice and the page engine's, written by Codex at the same time from the same commit, then joined by Codex in a third worktree; Claude built and tested the result; Codex and Gemini reviewed each slice and the join.
+
+- The controller delegate and the shim's dispatcher (hub slice 14): the whole `WKWebExtensionControllerDelegate` conformance moves from `Extensions.swift` into the plugin (`WebKitExtensionControllerDelegate`), method by method, over the browser host, the tab adapters and the runtimes of 12k to 12m (`presentActionPopup` closes WebKit's popup and finds the address; the app chooses the window and shows its own pane); the shim's channel and its `answer` switch move with it (`WebKitExtensionDispatcher`), each case calling the runtime part that answers it, or the app through a host call of values. The app works by extension id and space and never sees a context or a controller; `ExtensionPermissionBridge.swift` is gone. `WebExtensionRuntime` and `ExtensionRuntimeHost` compose the parts of 12j to 12n, as section 5.8 asked.
+- The page engine: the app keeps its factory of product `Page`s over a contract factory of `WebMacPage`s (`WebMacPageFactory`); the WebKit configuration's construction, the child and configuration casts, the stores, downloads and spelling move behind it into the plugin (`WebKitMacPageFactory`, in `WebKitExtensions`, so it can hand pages the extension page delegate before `WebKitUIAdapter`, as before). An extension's own page's configuration passes through as the opaque handle of 12e; a child is still made inside WebKit's call. `PageWebKit.swift` is gone; `Pages`, `Page`, `WindowModel`, `BrowserView`, `StoreButton` and the cleanup host read `state`; `Shared/HandoffSource.swift` reads the Mac page's address and title from its state and the iPhone's from its view, as before.
+- One composition point: `Mac/Sources/EngineComposition.swift` makes the page factory and the extension runtime from the app's hosts, and `Session` gets its engine from it in the same launch order. It is the only file in `Mac/` that imports a plugin module, and it imports no WebKit.
+- The Mac page tests test the WebKit plugin's pages, so they may use WebKit: a bridge of their own (`Tests/MacPage/PageWebKitForTests.swift`: `Page.view`, `Page.world`, `PageView`, the old engine's statics as the plugin's factory) keeps every test checking what it checked; `PageEngineTests`' spy uses the factory's shape.
+- Where the new code differs, unseen: the delegate and dispatcher are the plugin's objects, made when the controllers runtime makes its controllers; contexts are found by id and space where the app held them; the composition makes the runtime and the page factory together, at the moment `Session` made its engine.
+- Reviews: Codex (gpt-6.1-sol, read-only) found two real test gaps in the dispatcher's tests: the routing test passed whatever a case answered (it now checks each family's own answer and the default refusal), and the sender test's lookups never resolved (they do now, and a website's page and another extension's are refused while the extension's own is accepted). Its other findings, and Gemini's (gemini-3.8-flash-high), were the slices' calls into each other before the join, which the join made, and the generated project (not real; see 7.26). The first build of the join found `Shared/HandoffSource.swift` still reading the Mac page's view (fixed above), and the first package run found a new test comparing a child's script controller with the configuration WebKit hands over, which the page itself changes; the test now compares it with the opener's, which is what it meant.
+
+Result: all three schemes build with no new warnings (the same twelve as before step 9, six of them moved with their code into the plugin); 305 package tests (19 and 286, 14 new), three runs each; 141 hosted tests, twice in a row; PadCore's 741 tests; the Site Icons tests (11); the page-script tests as before (writing.mjs 69 of 70). The test host never had a file of the real data folder open (54 and 49 `lsof` samples). No file in `Mac/` or `Shared/` imports WebKit or `Engines` (`Tests/engine-inventory.py --strict` exits 0), names a WebKit type or reaches into a page's WebKit view; outside `EngineComposition.swift`, none imports a plugin module. This is step 12's "ends with". Not covered: installed extensions end to end (every package test uses unloaded fixtures, non-persistent stores and fakes) and on-screen behaviour beyond what the hosted tests show.
+
+### 7.31 Step 13, first part (5 November 2026)
+
+Built on top of c1a5c4e0. Two of step 13's three pieces; the third, the fake-engine build, needs a decision (below).
+
+- The import check fails the build. `Tests/engine-inventory.py --strict` now also fails on an import of the WebKit plugin's modules (`WebKitExtensions`, `WebKitMacPlugin`, `WebKitSupport`) anywhere in `Mac/` or `Shared/` but the composition point (`COMPOSITION_FILES`, today `Mac/Sources/EngineComposition.swift`), scans only imports when asked for `--strict` alone (0.8 seconds rather than 5), and prints each offending line as an Xcode error at its file and line. Both Mac targets run it as a build phase before compiling ("Engine boundary", in `project.yml`'s `MacApp` template). A scratch copy with `import WebKit` added to `Mac/Sources/Menus.swift` stopped at that phase with `Menus.swift:1: error: import WebKit (...)` and compiled no Swift file. The inventory's tests gained one for the new check (14 now).
+- `Docs/WebEngine.md`: the contracts as a plugin writer needs them, from the code (packages and the composition point, launch order and the build's rule; pages, their factory and sources, state, navigation and its synchronous replies, children, scripts and channels, views and lifetimes; services, storage, history, downloads, hidden pages, content rules; the writing and document plugins; the extension runtime and the app's hosts, what crosses, what a plugin without extensions answers, and what is WebKit's only; the order to write a plugin in and what the fakes show; where each contract's WebKit implementation is), with a section on where the code and this plan differ. Codex drafted it from the code; Claude checked it and brought it up to the build phase; Gemini (gemini-3.8-flash-high) checked it against the code and found four real slips (`hiddenPage` is the page's, not the factory's; printing is in `WebEngineAppKit`; which plugin modules the composition imports today; the build phase's exact command), all fixed.
+- Not done: the fake-engine build. Section 1 asks for "a build configuration of the Mac app that links a fake engine instead of the WebKit plugin" that "builds and runs the interface's tests". The app's sources now compile against contracts only, so it can be built; but it needs a new build configuration, target or scheme (the Mac template links the three WebKit products, so a compilation flag alone cannot leave them out), a fake plugin package implementing every contract (the package tests' fakes cover parts), a composition file of its own, and a choice of which interface tests run without WebKit (the hosted tests are WebKit's, by design). Which of these, and how, is the product owner's decision, so the work stops here. The owner chose to leave it for now and to have it written down for whoever builds it: `Docs/FakeEngineBuild.md` says which of these to add, where, and what each fake does (5 November).
+
+Result: all three schemes build with no new warnings (the twelve of before step 9); 305 package tests (19 and 286), three runs each; 141 hosted tests, twice in a row; PadCore's 741 tests; the Site Icons tests (11); the page-script tests as before (writing.mjs 69 of 70); the inventory's tests (14). The test host never had a file of the real data folder open (55 and 49 `lsof` samples).
+
+## 8. What a Chromium plugin would face
+
+Gemini researched these on 4 November 2026, then checked each claim against primary sources in a second run. Gemini's own web search failed once during that run, so its verdicts are claims. The column "Claude" says what Claude checked itself.
+
+| # | Claim | Gemini's verdict and sources | Claude |
+|---|---|---|---|
+| 1 | CEF is the only realistic way to put Chromium in a Swift Mac app without maintaining a Chromium fork (as Arc did). Swift needs an Objective-C++ or C++ shim; CEF's C API works from Swift with manual reference counting | Confirmed. [CEF include/](https://github.com/chromiumembedded/cef/tree/master/include), [cef_base_capi.h](https://github.com/chromiumembedded/cef/blob/master/include/capi/cef_base_capi.h), [Swift C++ interop](https://www.swift.org/documentation/cxx-interop/) | Not checked |
+| 2 | The Alloy bootstrap was removed at M128. Under the Chrome bootstrap, each browser is Chrome or Alloy style. Full Chrome extension support is Chrome style only; windowless rendering is Alloy only | Confirmed. [Issue 3685](https://github.com/chromiumembedded/cef/issues/3685), [issue 3681](https://github.com/chromiumembedded/cef/issues/3681), [issue 3859](https://github.com/chromiumembedded/cef/issues/3859) | Confirmed: `cef_types_runtime.h` (master, read 4 November 2026) and a web search |
+| 3 | **On the Mac, a Chrome-style browser cannot be a child of the app's own `NSView`.** Giving a parent view forces Alloy style. Chrome style needs a window CEF makes (its default window or its Views framework), and a Chrome-style CEF window holds at most one Chrome-style browser | "Wrong" as the plan first asked it: it cannot. [cef_types_mac.h](https://github.com/chromiumembedded/cef/blob/master/include/internal/cef_types_mac.h) | Confirmed: `cef_types_mac.h:151` to `:152` says "Alloy style will always be used if windowless_rendering_enabled is true or if parent_view is provided"; `cef_types_runtime.h` gives the rest |
+| 4 | A CEF app needs five helper apps (Helper, GPU, Renderer, Plugin, Alerts) and the framework bundle, signed from the inside out; the hardened runtime needs `allow-jit` and `allow-unsigned-executable-memory`. It adds about 70 to 100 MB to the download | Confirmed. [Issue 2744](https://github.com/chromiumembedded/cef/issues/2744), [Apple: hardened runtime](https://developer.apple.com/documentation/security/hardened_runtime) | Not checked |
+| 5 | Official CEF builds play no H.264 or AAC. Adding them means building from source (`proprietary_codecs`, `ffmpeg_branding="Chrome"`) and taking patent licences from Via LA | Confirmed. [CEF automated build setup](https://bitbucket.org/chromiumembedded/cef/wiki/AutomatedBuildSetup.md), [Via LA AVC](https://www.via-la.com/licensing-programs/avc-h-264/) | Not checked |
+| 6 | Chromium ships security fixes weekly; CEF's builds follow in one to three days, sometimes up to a week | Confirmed. [Chrome releases](https://chromereleases.googleblog.com/), [CEF builds](https://cef-builds.spotifycdn.com/index.html) | Not checked |
+| 7 | No app-side call runs a script in an isolated world; it takes renderer-process code or the DevTools Protocol. The message router can be bound only in the isolated world's context, so `cefQuery` is not visible to the page | Confirmed. [cef_frame.h](https://github.com/chromiumembedded/cef/blob/master/include/cef_frame.h), [cef_message_router.h](https://github.com/chromiumembedded/cef/blob/master/include/wrapper/cef_message_router.h), [issue 3867](https://github.com/chromiumembedded/cef/issues/3867) | Not checked |
+| 8 | Blocking is per request (`OnBeforeResourceLoad`), with element hiding by injected CSS. `declarativeNetRequest` exists only for extensions, not for the app | Confirmed. [cef_resource_request_handler.h](https://github.com/chromiumembedded/cef/blob/master/include/cef_resource_request_handler.h) | Not checked |
+| 9 | No public API for rubber-band state or unused wheel events. Chromium's own swipe can be turned off (`--overscroll-history-navigation=0`), but unused scrolls are not handed back | Confirmed. [Issue 3764](https://github.com/chromiumembedded/cef/issues/3764), [content_switches.cc](https://source.chromium.org/chromium/chromium/src/+/main:content/public/common/content_switches.cc) | Not checked |
+| 10 | Snapshots go through the DevTools Protocol (`Page.captureScreenshot`), since AppKit's own drawing of a GPU-composited view comes back empty. DevTools replaces Web Inspector | Confirmed. [cef_browser.h](https://github.com/chromiumembedded/cef/blob/master/include/cef_browser.h) | Not checked |
+| 11 | Each space can have its own storage: a request context with its own cache folder, made and released while the app runs | Confirmed. [cef_request_context.h](https://github.com/chromiumembedded/cef/blob/master/include/cef_request_context.h) | Not checked |
+| 12 | Sparkle updates a CEF app, but each Chromium update is a large delta (30 to 60 MB), and the helpers must quit before the swap | Confirmed. [Sparkle delta updates](https://sparkle-project.org/documentation/delta-updates/) | Not checked |
+| 13 | Prior art: Firefox's `BrowserKit` (`Engine`, `EngineView`, `EngineSession`, a session delegate); Arc's Swift UI on its own Chromium layer, not CEF; wry (Tauri) leaves out content blocking, extensions and isolated worlds | Confirmed. [firefox-ios WebEngine](https://github.com/mozilla-mobile/firefox-ios/wiki/How-to-work-on-the-WebEngine-project), [wry](https://github.com/tauri-apps/wry) | Not checked |
+
+**What this means for the plan:**
+- In eGlu's own windows, a Chromium plugin is Alloy style. The view contract (5.3), where the plugin hands over an `NSView` and the host places it, fits that.
+- Chrome extensions in a Chromium eGlu would be partial at best in Alloy style, unless that build gives up eGlu's AppKit windows for CEF's. So extensions stay a WebKit plugin feature (decision 2), and the interface must work with no extensions at all.
+- The rest fits the contracts as traits and services: isolation is possible with renderer code (`.isolatedScripts`); storage per space maps to request contexts (step 8); snapshots must be asynchronous; the swipe trait is absent and Chromium's own swipe is used.
+- A Chromium eGlu also takes on about 70 to 100 MB more per download, five helper apps, JIT entitlements, weekly security releases, and codec builds from source with licences.
+- The gate before anyone promises a Chromium plugin is now narrower: a spike must show what Alloy style's extension support covers, and whether an Alloy-style CEF view behaves inside eGlu's windows (moving between windows as the recording indicator and Peek do, full screen, focus).
+
+## 9. Open decisions
+
+| # | Decision | Recommendation |
+|---|---|---|
+| 1 | Where a Chromium plugin lives | Its own repository. eGlu's rule is no dependencies beyond Apple's frameworks, Sparkle and its own `Engines`, and CEF would break that rule. Codex notes this is a policy choice, not something the code forces |
+| 2 | Extensions: put them behind the contracts, or keep them as a WebKit-only capability | Keep them WebKit-only until step 12, then split them into a runtime and a browser host (5.8), with the interface working when there are none. A Chromium plugin inside eGlu's windows is Alloy style, where Chrome extensions are partial at best (section 8, row 3), so full parity there is not a goal |
+| 3 | How the iOS app lives with shared changes | It depends on `WebKitSupport` and calls its types directly; app-specific pieces of `PageShared.swift` stay in each app; shared scripts get an iOS `egluBridge` (section 4). Copying shared files into `App/` would leave every later fix to be made twice |
+| 4 | Names | `WebEngineKit`, `WebKitEngine` (`WebKitSupport`, `WebKitMacPlugin`), `WritingServiceKit`, `DocumentServiceKit`, `HarperPlugin`, `DocumentsPlugin`, `egluBridge`. None clashes with PadCore's `Engine`, its `Adapters` or the `Engines` package |
+| 5 | Start with the first pull request (7.1) | Yes: it is small, adds a Mac test target the app lacks, and changes no behaviour |
+| 6 | When to build the fake-engine app (step 13's last piece) | Left for later by the owner on 5 November. `Docs/FakeEngineBuild.md` specifies it; its section 2 lists the choices it makes, which the owner may change |
+
+## 10. How this plan was made
+
+| Step | Who | Result |
+|---|---|---|
+| Survey and draft | Claude | Counts, the draft layers, phases and first contract |
+| Round 1 | Codex, reading the repository | Corrected counts; Mac is DMG-only; HandsOff does not cover navigation; PadCore's rules and scripts are WebKit's; no cookie access; Harper needs its own contract; `Shared/` is not a module; two contracts |
+| Research | Gemini | First version of section 8 |
+| Round 2 | Codex, with Gemini's research | `egluBridge`; where content blocking goes; extensions as two contracts; the page and grammar contracts; the first pull request |
+| Mac only | Claude, at the product owner's request | iPad and iPhone parts dropped; the iOS app kept building; the documents engine added |
+| Validation | Codex (two independent runs), Gemini, Claude | Section 11 |
+| Steps 0 and 1 | Gemini, Codex, a Claude subagent; reviewed by `/codex review` and Gemini; checked by Claude | 7.3 |
+
+## 11. Validation
+
+Done on 4 November 2026, on the Mac-only plan, at commit 75fcca2. No app was built or run.
+
+### 11.1 How
+
+| Check | By | Method |
+|---|---|---|
+| Every file and line the plan cites | Claude | A script that resolves each cited path and prints the cited line, read by hand (`check_citations.py` in the session's scratchpad) |
+| The facts in section 3 and the first pull request | Codex, run A | Read the plan, then the code, without Claude's conclusions |
+| The contracts, phases and iOS coexistence | Codex, run B | The same, separately |
+| Every P1 finding of both runs | Claude | Read at the cited line before accepting it |
+| The contract sketches | Claude | `swiftc -typecheck -swift-version 6` (Swift 6.4.2, macOS 27.2 SDK, target macOS 26) on the sketches copied out of this file by a script, then with a throwaway `WKWebView`-backed page implementing them: frame handles and document numbers, navigation IDs, modifiers and buttons, lifecycle events, errors, child requests, dialogs and file panels, find, zoom, capture state and user agent. Run on the first sketch and again on the revised one |
+| The Chromium research | Gemini, then Claude | Gemini checked each claim against primary sources; Claude read the CEF headers that decide the plan |
+| The revision | Codex, run B resumed | Re-read the revised plan and the code; rated each earlier P1 resolved, partly or not, and looked for new problems. Claude read every new P1 at its line |
+
+### 11.2 What it found and what changed
+
+| # | Finding | From | Severity | Change |
+|---|---|---|---|---|
+| 1 | The page contract had no view: nothing for hosts to place, size or focus | Codex B | P1 | 5.3; step 3 |
+| 2 | Lifecycle events (commit, finish, failures, process ending, close) were missing; `PageState` cannot replace them | Codex B | P1 | Events in 5.2; step 4 |
+| 3 | Find, printing, zoom, magnification, dialogs, file panels, capture state, user agent and developer tools had no callable contract; capability flags were not enough | Codex B | P1 | Optional services in 5.2; step 7; flags renamed traits |
+| 4 | Navigation lost the mouse button, modifier keys and the kind of redirect | Codex B, Claude | P1 | `WebModifiers`, `WebMouseButton`, `WebRedirect` |
+| 5 | A child page must be accepted inside the same call, or WebKit loses the opener tie | Codex B, Claude (conformance) | P1 | Stated in 5.2 |
+| 6 | WebKit has no public frame or document identifier, so `WebFrame.id` and `documentID` could not be filled | Claude (conformance, SDK header) | P1 | Plugin-made handles and document numbers |
+| 7 | Comparing product `canGoBack` with WebKit's would fail by design for a replaced tab | Codex A | P1 | Engine state and product state split (sections 2, 4, 7.1) |
+| 8 | `load` and `reload(byHand:)` do more than WebKit's calls; replacing them would change behaviour | Codex A | P1 | Left alone in 7.1; raw origin reload kept raw |
+| 9 | Two inline Swift scripts also call WebKit's message handlers | Codex A | P1 | 5.4 and section 3 |
+| 10 | `extension-shim.js` runs in several worlds; extension capture needs more authority than frame, world and origin | Codex B | P1 | Only its capture branch moves; authority stays in the plugin (5.4) |
+| 11 | Shared scripts changing transport would break the iPad | Codex B | P1 | iOS `egluBridge` adapter (section 4) |
+| 12 | One package target cannot hold both AppKit code and what the iOS app needs | Codex B | P1 | `WebKitSupport` and `WebKitMacPlugin` |
+| 13 | Moving `SVGRaster` breaks `SiteIcons` and the Site Icons Tests target | Codex B | P1 | Injected rasterizer, in step 9 |
+| 14 | Contracts declared before the code that uses them would be redone; the fake build needs pages made through a factory | Codex B | P1 | Each contract written with its WebKit implementation and fake (section 4); step 2 |
+| 15 | `Engines` is imported by seven Mac files, not five | Codex A | P2 | Corrected |
+| 16 | History identities, per-space stores, download retries, Handoff fetches, site icons, the recording indicator and Apple Passwords were missing from the inventory | Codex A | P2 | Section 3, steps 8 and 9 |
+| 17 | The first pull request's call sites could not reach "no `WKWebView` in hosts" | Codex A | P2 | Its goal narrowed to state and navigation |
+| 18 | The hosted test target was unspecified (signing, entitlements, data folder) | Codex A | P2 | 7.2 |
+| 19 | `GrammarService` allowed value types, which would break `WritingChecker`'s stale-answer check | Codex B | P2 | `AnyObject` service |
+| 20 | `ContentBlocker` and `DocumentSource` mix engine work with the app's own | Codex B | P2 | Split first (5.5, 5.7) |
+| 21 | The cookie test would not see new package folders | Codex A | P3 | Widened in step 0 |
+| 22 | The four bare file names in the first pull request matched files in both apps | Claude (citation script) | P3 | Full paths |
+| 23 | On the Mac, a Chrome-style CEF browser cannot sit in the app's own view; a parent view forces Alloy style, with partial extension support | Gemini, confirmed by Claude in CEF's headers | P1 for a Chromium plugin | Section 8; decision 2; the gate narrowed |
+| 24 | Gemini's first research gave Japan's iOS version wrongly (since dropped with the iOS parts) and overstated Alloy style's lack of extension support | Claude, Codex | P3 | Corrected |
+| 25 | The page's `zoom` service and `WebZoom`'s own `zoom` collided when one class implements both, as a plugin naturally would | Claude (type-check) | P2 | `WebZoom.pageZoom` |
+| 26 | The documents sketch used `Data` without importing Foundation | Claude (type-check) | P3 | Fixed |
+| 27 | Redirect provenance has no public WebKit API | Claude (conformance) | P3 | Stated in 5.2; the private calls stay in the plugin |
+
+The re-check of the revision rated 10 of the earlier P1s resolved and 4 partly (the view, navigation metadata, page services, the fake build), and found these:
+
+| # | Finding | Severity | Change |
+|---|---|---|---|
+| 28 | "`goBack()` tries the replacement first" reversed today's order: the replacement is used only when WebKit cannot go back | P1 | 7.1 now says so, with a test for a replaced tab that later has its own history |
+| 29 | `EGLU_DATA_ROOT` does not keep the test host away from the standard preferences, the persistent stores and snapshots | P1 | 7.2: its own bundle identifier, a launch argument that skips start-up services, a reset hook |
+| 30 | Step 2 promised the whole app built with the fake before anything was extracted | P1 | Step 2 ends with a factory test; the whole fake build moves to step 13 |
+| 31 | Step 13 could come before step 11 removed `Engines` | P1 | Step 13 needs 11 and 12 |
+| 32 | Teardown cancelling downloads would stop downloads the app has taken over | P1 | `downloadStarted` hands them to the host; teardown cancels only what the page owns |
+| 33 | The documents contract dropped the page count, title, author and date that Handoff shows, and had the wrong kinds | P1 | `DocumentPages`; the kinds of `DocumentFormat`; 0-based pages |
+| 34 | Nothing tied a page to its view | P2 | `WebEngineMacPage` (5.3) |
+| 35 | The address a load came from, kept at its start and at each server redirect, had no event | P2 | `started` and `redirected` events |
+| 36 | Step 4 removed `PageHost`'s WebKit types before step 5 removed the child signature; step 5 also needs the view | P2 | Step 4 keeps child creation; step 5 needs 3 and 4 |
+| 37 | Step 9's end state included the extension runtime's hidden views, which move in step 12 | P2 | Step 9 excludes them |
+| 38 | Numbering only main-frame commits cannot tell when a subframe's document changes | P2 | `evaluate` takes main-frame handles only, for now; handlers keep their origin checks |
+| 39 | A dialog open at teardown had no defined answer | P2 | It gets its cancel answer; a held background dialog stays the host's |
+
+Checked and found right: every line the plan cites; the counts of WebKit imports (36 and 9), extension lines (9,348), `Page` lines (1,798) and `page.view` lines (86 in 18 files); that navigation decisions are synchronous today; that the transient hosts never meet the replaced-page rule; that the first pull request touches no file the iOS app compiles.
+
+### 11.3 Not verified
+
+- No build or test was run of the app; the plan's steps are untested.
+- Not designed yet, by choice: printing, the context menu's element, developer tools, picture in picture, history identities, restoration data and snapshots (5.2). The re-check rated the page services "partly" for this reason; each is designed in its step.
+- The revision after the re-check (findings 28 to 39) was checked by Claude at the cited lines and by the type-check, not by a third Codex run.
+- The type-check covers the sketches' shape under Swift 6, not their behaviour. The conformance page was a throwaway, not a WebKit plugin.
+- The rows of section 8 marked "Not checked": Gemini's verdicts with sources, not read by Claude.
+- What Alloy style's extension support covers, and how an Alloy-style CEF view behaves in eGlu's windows: only a spike can answer them.

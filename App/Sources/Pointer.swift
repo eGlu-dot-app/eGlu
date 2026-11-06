@@ -94,6 +94,9 @@ final class Pointer: NSObject, UIGestureRecognizerDelegate, UIPointerInteraction
         press.allowedTouchTypes = pointer
         press.moved = { [weak self] point in self?.pressMoved(point) }
         keys.began = { [weak self] flags, buttons in
+            // A finger on the glass or a click stops a glide where it is, as
+            // a touch stops a scroll view; the touch itself stays the page's.
+            self?.stopGlide()
             // A secondary click is the trackpad's or the mouse's second button, or a click with Control held.
             let secondary = buttons.contains(.secondary) || (buttons.contains(.primary) && flags.contains(.control))
             self?.lastPress = (CACurrentMediaTime(), flags, buttons.contains(.button(3)), secondary)

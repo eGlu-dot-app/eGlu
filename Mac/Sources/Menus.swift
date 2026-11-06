@@ -106,7 +106,7 @@ struct BrowserCommands: Commands {
                 session.preferences.tabsPlacement = session.preferences.tabsPlacement == .top ? .sidebar : .top
             }
             // The bar is under the tabs along the top; the sidebar has its own Bookmarks section.
-            Button(session.preferences.bookmarksBar ? String(localized: "Hide Bookmarks Bar") : String(localized: "Show Bookmarks Bar")) {
+            Button(session.preferences.bookmarksBar ? String(localized: "Hide Other Bookmarks") : String(localized: "Show Other Bookmarks")) {
                 withAnimation(.bar) { session.preferences.bookmarksBar.toggle() }
             }
             .keyboardShortcut("b", modifiers: [.command, .shift])
@@ -319,7 +319,7 @@ struct BrowserCommands: Commands {
                 ForEach(extensions.commands(in: window.spaceID), id: \.id) { entry in
                     Section(entry.name) {
                         ForEach(entry.commands, id: \.id) { command in
-                            Button(command.title) { extensions.perform(command, of: entry.id, in: window.spaceID) }
+                            Button(command.title) { extensions.perform(command.identity, of: entry.id, in: window.spaceID) }
                                 .keyboardShortcut(extensionKeys.given[ExtensionKeys.name(entry.id, command.id)].flatMap(ExtensionKeys.shortcut))
                         }
                     }
@@ -357,12 +357,11 @@ struct BrowserCommands: Commands {
             window?.perform(command)
             return
         }
-        let view = little.page.view
         switch command {
-        case .inspector: if !WebInspector.show(.inspector, for: view) { NSSound.beep() }
-        case .console: if !WebInspector.show(.console, for: view) { NSSound.beep() }
-        case .selectElement: if !WebInspector.show(.elements, for: view) { NSSound.beep() }
-        case .reloadOrigin: view.reloadFromOrigin()
+        case .inspector: if !little.page.showDeveloperTool(.inspector) { NSSound.beep() }
+        case .console: if !little.page.showDeveloperTool(.console) { NSSound.beep() }
+        case .selectElement: if !little.page.showDeveloperTool(.elementSelection) { NSSound.beep() }
+        case .reloadOrigin: little.page.reloadFromOrigin()
         // On the clipboard, with no toast to offer Save in a little window.
         case .elementPicture: Task { _ = await WindowModel.copyElementPicture(of: little.page) }
         default: break

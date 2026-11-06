@@ -78,7 +78,8 @@
   if (params.get('expect') === 'native') {
     check('navigator.credentials is WebKit\'s own', !marked() && /\[native code\]/.test(String(CredentialsContainer.prototype.get)),
       String(CredentialsContainer.prototype.get).slice(0, 60));
-    check('no eGlu global in the page', !('__egluPasskeys' in window) && !(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.egluPasskeys));
+    check('no eGlu global in the page', !('__egluPasskeys' in window) && !('egluBridge' in window)
+    && !(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.egluPasskeys));
     return report(true);
   }
 
@@ -95,7 +96,8 @@
   const real = await navigator.credentials.get({ publicKey: { challenge: challenge() } }).then((c) => c.id, (e) => e.name);
   removeEventListener('eglu-passkeys-ask', forging);
   check('a page\'s own forged answer is let go', real !== 'RkFLRQ' && real !== 'NotAllowedError', real);
-  check('no eGlu global in the page', !('__egluPasskeys' in window) && !(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.egluPasskeys));
+  check('no eGlu global in the page', !('__egluPasskeys' in window) && !('egluBridge' in window)
+    && !(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.egluPasskeys));
   check('a platform authenticator is offered', await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable());
   check('passkeys under the field are offered', await PublicKeyCredential.isConditionalMediationAvailable());
   // The bridge reads whether a frame was just clicked from here; without it,

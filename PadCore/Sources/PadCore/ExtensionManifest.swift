@@ -406,7 +406,7 @@ public struct ExtensionAPITable: Equatable, Sendable {
     /// answers, though WebKit may have kept its permission (it keeps
     /// `notifications` and gives no `chrome.notifications` on 27.0.1); and
     /// a permission of no namespace WebKit dropped. `cookies` is left to
-    /// the hands-off rules, which deny it to every extension.
+    /// the person, who may allow it for the extension (heldPermissions).
     public func missing(asked: [String], kept: Set<String>) -> Set<String> {
         var out = Set<String>()
         for permission in asked where permission != "cookies" {

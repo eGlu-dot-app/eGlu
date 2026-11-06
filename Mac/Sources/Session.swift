@@ -3,6 +3,7 @@ import Combine
 import PadCore
 import Security
 import UniformTypeIdentifiers
+import WebEngineCore
 
 /// What every window shares: the spaces and their tabs, the settings, the
 /// pages, and the windows themselves. The iPad's Session, for a Mac.
@@ -34,7 +35,8 @@ final class Session: ObservableObject {
     private static let intelligenceKey = "hasIntelligence"
     private var intelligenceWatch: NSObjectProtocol?
 
-    let pages = Pages()
+    let engine: any MacPageEngine
+    let pages: Pages
     private let windows = NSHashTable<WindowModel>.weakObjects()
     /// Opens, retries and restores the workspace's file; its writes are persistence's.
     private let store = WorkspaceStore(folder: Session.folder, snapshots: Snapshots.folder)
@@ -70,6 +72,16 @@ final class Session: ObservableObject {
         return nil
     }
 
+    #if DEBUG
+    /// Whether this launch hosts XCTest's tests (Tests/MacPage). XCTest
+    /// sets this variable itself whenever it loads a test bundle into the
+    /// app, whichever scheme or test plan ran it, and no other launch has
+    /// it; a launch argument would be one more thing each scheme must carry.
+    /// It is XCTest's own name, not a documented one: a page test checks it
+    /// is still seen (StartUpTests).
+    nonisolated static let hostingTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    #endif
+
     nonisolated static var folder: URL {
         if let dataRootOverride { return dataRootOverride }
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
@@ -81,7 +93,13 @@ final class Session: ObservableObject {
         WorkspaceStore.file(in: folder)
     }
 
+    /// The one Session (`shared`). Its engine makes every page (MacPageEngine);
+    /// tests give one of theirs to a `Pages` of their own, never to a second
+    /// Session, which would open and write the same workspace.
     private init() {
+        let engine = EngineComposition.makePageEngine()
+        self.engine = engine
+        pages = Pages(engine: engine)
         let opened = store.open()
         workspace = opened.workspace
         workspaceProblem = opened.problem
@@ -111,7 +129,15 @@ final class Session: ObservableObject {
                 MainActor.assumeIsolated { self?.appCameBack() }
             },
         ]
+        #if DEBUG
+        started = true
+        #endif
     }
+
+    #if DEBUG
+    /// Start-up has run (start), which the page tests wait for before they begin.
+    private(set) var started = false
+    #endif
 
     // MARK: Picture in picture as eGlu goes behind
 
@@ -156,12 +182,19 @@ final class Session: ObservableObject {
 
     private func startWorkspaceServices(afterLaunch: Bool = false) {
         guard canUseWorkspace else { return }
-        Stores.sweep()
+        #if DEBUG
+        // Hosting tests: none of what follows. It removes and prunes what
+        // lasts (website stores, history, snapshots), freezes pages, fetches
+        // filter lists, loads extensions and reads other apps' text fields,
+        // and no page test needs any of it.
+        if Session.hostingTests { return }
+        #endif
+        engine.sweepStores()
         HistoryRecorder.shared.prune()
         Snapshots.prune(keeping: Set(workspace.spaces.flatMap { $0.tabs.map(\.id) }))
         pages.watchMemory()
-        ContentBlocker.shared.start()
-        Extensions.shared.start(afterLaunch: afterLaunch)
+        engine.startContentBlocking()
+        engine.startExtensions(afterLaunch: afterLaunch)
         ElsewhereChecker.shared.start()
         if preferences.iCloudSync, Session.canSync { Sync.shared.start(join: false) }
     }
@@ -360,7 +393,7 @@ final class Session: ObservableObject {
         guard workspace.spaceID(of: tab) == space else { return }
         let old = keepingOld ? pages.live[tab] : nil
         let kept = old.flatMap { page in
-            page.view.url.flatMap { address in page.view.interactionState.map { Replaced(space: space, url: address, state: $0) } }
+            page.state.url.flatMap { address in page.restorationData.map { Replaced(space: space, url: address, state: $0) } }
         }
         // The old site's name goes too: the new page names itself.
         change { $0.record(tab, url: url, title: "") }
@@ -377,6 +410,16 @@ final class Session: ObservableObject {
         let state: Any
     }
     private var replaced: [UUID: Replaced] = [:]
+
+    #if DEBUG
+    /// For the page tests alone (Tests/MacPage): the replaced pages kept for
+    /// Back forgotten, so no test's is left for the next. Nothing else of
+    /// Session's lasts from one test to another: each closes its tabs.
+    func resetForTests() {
+        guard Session.hostingTests else { return }
+        replaced.removeAll()
+    }
+    #endif
 
     /// Whether Back, with nothing left in the page's own history, can take
     /// the tab to the page a rule replaced.
@@ -423,7 +466,7 @@ final class Session: ObservableObject {
         // Its extensions and their data first: WebKit won't remove a store
         // that an extension controller still holds.
         Extensions.shared.removeSpace(id)
-        Stores.erase(id)
+        engine.eraseStore(space: id)
         HistoryRecorder.shared.removeSpace(id)
     }
 
@@ -590,5 +633,18 @@ extension SiteIcons {
     /// folder of its own (EGLU_DATA_ROOT) leaves the Caches folder alone:
     /// out of the sandbox, it is the real app's too.
     static let shared = SiteIcons(data: Session.folder,
-                                  caches: Session.dataRootOverride == nil ? .cachesDirectory : nil)
+                                  caches: Session.dataRootOverride == nil ? .cachesDirectory : nil,
+                                  rasterizer: Session.shared.engine.svgRasterizer)
+}
+
+extension Downloads {
+    static func retryStarter(space: UUID) -> any WebDownloadStarting {
+        Session.shared.engine.downloadStarter(space: space)
+    }
+}
+
+extension ContentBlocker {
+    static func makeRuleStore() -> (any WebRuleListStore)? {
+        Session.shared.engine.ruleListStore()
+    }
 }

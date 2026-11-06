@@ -433,8 +433,9 @@ final class PasskeyTests: XCTestCase {
 
     func testTheScriptsShipAndNameEachOther() {
         XCTAssertTrue(Scripts.passkeys.contains("Symbol.for('eglu.passkeys')"))
-        XCTAssertTrue(Scripts.passkeysBridge.contains("webkit.messageHandlers.egluPasskeys"),
-                      "the bridge posts to the handler Mac/Sources/Passkeys.swift adds")
+        XCTAssertTrue(Scripts.passkeysBridge.contains("globalThis.egluBridge") && Scripts.passkeysBridge.contains("'egluPasskeys'"),
+                      "the bridge asks through egluBridge, on the channel Mac/Sources/Passkeys.swift opens")
+        XCTAssertFalse(Scripts.passkeysBridge.contains("messageHandlers"), "never window.webkit itself")
         for name in ["eglu-passkeys-ask", "eglu-passkeys-answer"] {
             XCTAssertTrue(Scripts.passkeys.contains(name) && Scripts.passkeysBridge.contains(name), name)
         }

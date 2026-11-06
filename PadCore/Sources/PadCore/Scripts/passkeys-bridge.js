@@ -1,4 +1,4 @@
-// The app's side of passkeys.js, in eGlu's own world, where the handler is
+// The app's side of passkeys.js, in eGlu's own world, where its channel is
 // and a page can't look (Mac/Sources/Passkeys.swift). A request the page's
 // script dispatches is handed over as it is (the frame it comes from is
 // WebKit's to say, not the event's), and the answer dispatched back for the
@@ -14,8 +14,13 @@
   // Nothing of eGlu's in a frame of a hands-off host (passkeys.js says why).
   var handsOff = /*HANDS_OFF*/[], host = location.hostname.toLowerCase().replace(/\.+$/, '');
   if (handsOff.some(function (h) { return host === h || host.slice(-h.length - 1) === '.' + h; })) return;
-  var handler = window.webkit && webkit.messageHandlers && webkit.messageHandlers.egluPasskeys;
-  if (!handler || window.__egluPasskeys) return;
+  // The app's channel, through egluBridge, which the app puts in front of
+  // this script (Page.bridged): never window.webkit itself.
+  var bridge = globalThis.egluBridge, channel = 'egluPasskeys';
+  if (!bridge || window.__egluPasskeys) return;
+  function request(body) {
+    try { return Promise.resolve(bridge.request(channel, body)); } catch (e) { return Promise.reject(e); }
+  }
   var asked = 'eglu-passkeys-ask', answered = 'eglu-passkeys-answer';
 
   // The secret every answer carries, told to passkeys.js once, at document
@@ -45,7 +50,7 @@
     function answer(reply) {
       window.dispatchEvent(new CustomEvent(answered, { detail: JSON.stringify({ token: message.token, secret: secret, reply: reply }) }));
     }
-    handler.postMessage(message).then(function (reply) {
+    request(message).then(function (reply) {
       if (message.kind !== 'cancel') answer(reply);
     }, function () {
       if (message.kind !== 'cancel') answer(null);
@@ -79,7 +84,7 @@
   function tell() {
     pending = 0;
     var rect = field && field.isConnected ? place(field) : null;
-    handler.postMessage({ kind: 'field', token: '', rect: rect, clicked: clicked }).catch(function () {});
+    request({ kind: 'field', token: '', rect: rect, clicked: clicked }).catch(function () {});
     clicked = false;
   }
   function soon() {

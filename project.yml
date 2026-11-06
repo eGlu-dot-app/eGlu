@@ -10,6 +10,14 @@ options:
     macOS: "26.0"
   developmentLanguage: en
   createIntermediateGroups: true
+# Test: Debug, as the scheme "eGlu Mac Page Tests" builds eGlu Mac to host its
+# tests: an identifier, a data folder and ad-hoc signing of its own, so a
+# test run never touches the real app's preferences, website data or files
+# (eGlu Mac's settings below). Debug and Release are as they were.
+configs:
+  Debug: debug
+  Release: release
+  Test: debug
 settings:
   base:
     # Swift 5's language mode: what Swift 6's checks would stop is shown as
@@ -17,9 +25,19 @@ settings:
     # time (Docs/iPhoneDuoPlan.md, Phase E).
     SWIFT_VERSION: "5.0"
     SWIFT_EMIT_LOC_STRINGS: YES
-    MARKETING_VERSION: "1.1.0"
-    CURRENT_PROJECT_VERSION: "42"
+    MARKETING_VERSION: "1.1.1"
+    CURRENT_PROJECT_VERSION: "52"
 packages:
+  WritingServiceKit:
+    path: WritingServiceKit
+  DocumentServiceKit:
+    path: DocumentServiceKit
+  EnginePlugins:
+    path: EnginePlugins
+  WebEngineKit:
+    path: WebEngineKit
+  WebKitEngine:
+    path: WebKitEngine
   PadCore:
     path: PadCore
   # The Rust engines (Harper for grammar, anydoc and pdf-inspector for
@@ -40,6 +58,7 @@ targetTemplates:
     configFiles:
       Debug: Config/Mac.xcconfig
       Release: Config/Mac.xcconfig
+      Test: Config/Mac.xcconfig
     # What only the Mac has (Mac/), and what both apps compile (Shared/).
     # Not the Dock tile plug-in's own: it is a target of its own.
     sources:
@@ -49,13 +68,38 @@ targetTemplates:
       - path: Shared
     dependencies:
       - package: PadCore
-      - package: Engines
+      - package: WritingServiceKit
+      - package: DocumentServiceKit
+      - package: EnginePlugins
+        product: HarperPlugin
+      - package: EnginePlugins
+        product: DocumentsPlugin
+      - package: WebEngineKit
+        product: WebEngineCore
+      - package: WebEngineKit
+        product: WebEngineAppKit
+      - package: WebKitEngine
+        product: WebKitMacPlugin
+      - package: WebKitEngine
+        product: WebKitExtensions
+      - package: WebKitEngine
+        product: WebKitSupport
       # In Contents/PlugIns, where the Dock looks for the plug-in Mac/Info.plist names.
       - target: eGlu Dock Tile
         embed: true
         codeSign: true
         copy:
           destination: plugins
+    # The interface talks to its engines only through contracts
+    # (Docs/WebEngine.md): no file of Mac/ or Shared/ imports WebKit or
+    # Engines, and only Mac/Sources/EngineComposition.swift imports the
+    # WebKit plugin's modules. The build stops at the first that does.
+    preBuildScripts:
+      - name: Engine boundary
+        basedOnDependencyAnalysis: false
+        script: |
+          cd "$SRCROOT"
+          /usr/bin/python3 Tests/engine-inventory.py --strict
     settings:
       base:
         PRODUCT_NAME: eGlu
@@ -75,13 +119,24 @@ targets:
     configFiles:
       Debug: Config/Signing.xcconfig
       Release: Config/Signing.xcconfig
+      Test: Config/Signing.xcconfig
     # What only the iPhone and iPad have (App/), and what both apps compile (Shared/).
     sources:
       - path: App
       - path: Shared
     dependencies:
+      - package: WebEngineKit
+        product: WebEngineCore
       - package: PadCore
       - package: Engines
+      - package: WritingServiceKit
+      - package: DocumentServiceKit
+      - package: EnginePlugins
+        product: HarperPlugin
+      - package: EnginePlugins
+        product: DocumentsPlugin
+      - package: WebKitEngine
+        product: WebKitSupport
     settings:
       base:
         INFOPLIST_FILE: App/Info.plist
@@ -121,6 +176,7 @@ targets:
     configFiles:
       Debug: Config/DockTile.xcconfig
       Release: Config/DockTile.xcconfig
+      Test: Config/DockTile.xcconfig
     sources:
       - path: Mac/DockTile
       - path: Mac/Sources/DockIconKeys.swift
@@ -134,14 +190,25 @@ targets:
         ENABLE_HARDENED_RUNTIME: YES
         # In the app, not beside it in an archive.
         SKIP_INSTALL: YES
+      configs:
+        # Signed as the test host it is in is (eGlu Mac's Test settings).
+        Test:
+          PRODUCT_BUNDLE_IDENTIFIER: net.taehee.safience.pagetests.docktile
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_IDENTITY: "-"
+          DEVELOPMENT_TEAM: ""
+          ENABLE_HARDENED_RUNTIME: NO
   Site Icons Tests:
     type: bundle.unit-test
     platform: macOS
     sources:
       - path: Shared/SiteIcons.swift
-      - path: Shared/SVGRaster.swift
       - path: Tests/SiteIconsTests.swift
     dependencies:
+      - package: WebKitEngine
+        product: WebKitSupport
+      - package: WebEngineKit
+        product: WebEngineCore
       - package: PadCore
     settings:
       base:
@@ -150,11 +217,47 @@ targets:
         SWIFT_STRICT_CONCURRENCY: complete
         SWIFT_APPROACHABLE_CONCURRENCY: YES
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+  # The Mac app's Page against a real WKWebView (Tests/MacPage), inside
+  # eGlu Mac as the Test configuration builds it (scheme eGlu Mac Page Tests).
+  eGlu Mac Page Tests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests/MacPage
+    dependencies:
+      - target: eGlu Mac
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: net.taehee.safience.pagetests.tests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/eGlu.app/Contents/MacOS/eGlu
+        BUNDLE_LOADER: $(TEST_HOST)
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        DEVELOPMENT_TEAM: ""
+        ENABLE_HARDENED_RUNTIME: NO
   # eGlu for Mac: the same spaces, pinned tabs and blocking, in a window
   # with Arc's sidebar down its side and the page beside it. Its own sources
   # in Mac/, with the few of the iPad's that are WebKit and Foundation only.
   eGlu Mac:
     templates: [MacApp]
+    settings:
+      configs:
+        # The page tests' host. Its own identifier, so its preferences,
+        # website data and caches are its own; its own data folder, in the
+        # build folder, written into its Info.plist (Session.dataRootOverride)
+        # as well as set by the scheme. Signed only to run here, without
+        # iCloud, and without the hardened runtime, which would refuse to
+        # load an ad-hoc test bundle into it.
+        Test:
+          PRODUCT_BUNDLE_IDENTIFIER: net.taehee.safience.pagetests
+          EGLU_DATA_ROOT: $(OBJROOT)/eGluPageTestsData
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_IDENTITY: "-"
+          DEVELOPMENT_TEAM: ""
+          MAC_ENTITLEMENTS: Config/eGluMacLocal.entitlements
+          MAC_PROFILE: ""
+          ENABLE_HARDENED_RUNTIME: NO
   # eGlu for Mac as a disk image to download (Release/mac.sh): the same
   # app, with Sparkle to update itself (Mac/Sources/Updates.swift, DIRECT).
   eGlu Mac Direct:
@@ -192,6 +295,21 @@ schemes:
     test:
       targets:
         - Site Icons Tests
+  # The Mac page tests, in eGlu Mac built as Test. EGLU_DATA_ROOT here as
+  # in the host's Info.plist: either keeps the run out of the real data
+  # folder, and without one the host refuses to run tests (AppDelegate).
+  eGlu Mac Page Tests:
+    build:
+      targets:
+        eGlu Mac Page Tests: [test]
+    test:
+      config: Test
+      targets:
+        - eGlu Mac Page Tests
+      environmentVariables:
+        EGLU_DATA_ROOT: $(OBJROOT)/eGluPageTestsData
+      commandLineArguments:
+        "-ApplePersistenceIgnoreState YES": true
   eGlu:
     build:
       targets:

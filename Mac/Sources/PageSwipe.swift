@@ -1,7 +1,8 @@
 import AppKit
 import PadCore
 import SwiftUI
-import WebKit
+import WebEngineAppKit
+import WebEngineCore
 
 /// Back and forward by two fingers sideways on the trackpad: eGlu's own,
 /// not WebKit's.
@@ -31,7 +32,9 @@ import WebKit
 /// them keeps WebKit's own swipe (Page.setUp).
 @MainActor
 final class PageSwipe {
-    private weak var view: PageView?
+    private weak var view: NSView?
+    private weak var page: Page?
+    private let service: any WebSwipe
     /// The two fingers on the trackpad now, or last.
     private var gesture: ScrollSwipe?
     /// Its first scroll with a sideways part, the one whose answer is waited for.
@@ -46,21 +49,24 @@ final class PageSwipe {
     /// Where in the page's history the gesture began. A step taken meanwhile
     /// (⌘[, a link, the page's own) calls the swipe off, however WebKit tells
     /// of it: canGoBack and canGoForward change only when one turns true or false.
-    private var from: WKBackForwardListItem?
+    private var from: AnyObject?
     /// The glide after a swipe: the swipe's as the fingers were, and no page's.
     private var gliding = false
-    private var edges: UInt?
+    private var edges: Set<WebPageEdge>?
     private let arrow = SwipeArrow()
     private var showing: HistorySwipe.Way?
     /// How many times the arrow has set out to leave: only the last hides it.
     private var leaving = 0
 
     /// Whether this macOS's WebKit has what the swipe asks of it.
-    static func works(on view: WKWebView) -> Bool {
-        ["_pinnedState", "_setRubberBandingEnabled:"].allSatisfy { view.responds(to: Selector($0)) }
+    static func works(on page: any WebMacPage) -> Bool {
+        page.traits.isSuperset(of: [.rubberBandControl, .correlatedUnusedWheelEvents]) && page.swipe != nil
     }
 
-    init(view: PageView) {
+    init(page: Page, service: any WebSwipe) {
+        self.page = page
+        self.service = service
+        let view = page.surface.view
         self.view = view
         arrow.isHidden = true
         view.addSubview(arrow)
@@ -110,14 +116,14 @@ final class PageSwipe {
         calledOff = false
         leftAt = nil
         asked = nil
-        from = view?.backForwardList.currentItem
+        from = page?.enginePage.services.currentEntry
         var open: Set<HistorySwipe.Way> = []
-        if let view, NSEvent.isSwipeTrackingFromScrollEventsEnabled, event.hasPreciseScrollingDeltas,
+        if let page, NSEvent.isSwipeTrackingFromScrollEventsEnabled, event.hasPreciseScrollingDeltas,
            event.modifierFlags.isDisjoint(with: [.command, .option, .control, .shift]),
-           view.fullscreenState == .notInFullscreen {
-            let pinned = (view.value(forKey: "pinnedState") as? NSNumber)?.uintValue ?? 0
-            if pinned & Self.left != 0, canGoBack(view) { open.insert(.back) }
-            if pinned & Self.right != 0, view.canGoForward { open.insert(.forward) }
+           !service.isInFullscreen {
+            let pinned = service.pinnedEdges
+            if pinned.contains(.left), page.canGoBack { open.insert(.back) }
+            if pinned.contains(.right), page.state.canGoForward { open.insert(.forward) }
         }
         gesture = ScrollSwipe(open: open)
         bounce()
@@ -191,48 +197,32 @@ final class PageSwipe {
     /// Whether the step is taken.
     @discardableResult
     private func settle(at speed: Double) -> Bool {
-        guard let view, let way = gesture?.commits(velocity: speed), canGo(way), stillWhereItBegan else {
+        guard let page, let way = gesture?.commits(velocity: speed), canGo(way), stillWhereItBegan else {
             finish(taken: false)
             return false
         }
         finish(taken: true)
-        if way == .back { goBack(view) } else { view.goForward() }
+        if way == .back { page.goBack() } else { page.goForward() }
         return true
     }
 
     private func canGo(_ way: HistorySwipe.Way) -> Bool {
-        guard let view else { return false }
-        return way == .back ? canGoBack(view) : view.canGoForward
-    }
-
-    /// Back in the page's own history, or past an extension's page a rule
-    /// put in the tab's place, to the page it replaced (Session).
-    private func canGoBack(_ view: PageView) -> Bool {
-        view.canGoBack || view.page.map { Session.shared.canGoBackPastReplacement($0.tab) } ?? false
-    }
-
-    private func goBack(_ view: PageView) {
-        if !view.canGoBack, let page = view.page, Session.shared.wentBackPastReplacement(page.tab) { return }
-        view.goBack()
+        guard let page else { return false }
+        return way == .back ? page.canGoBack : page.state.canGoForward
     }
 
     /// Three fingers, where System Settings has them swipe between pages:
     /// AppKit sends one swipe, a step at once, as WebKit takes it with its own swipe on.
     func swiped(_ event: NSEvent) -> Bool {
-        guard let view, view.fullscreenState == .notInFullscreen, event.deltaX != 0 else { return false }
+        guard let page, !service.isInFullscreen, event.deltaX != 0 else { return false }
         let way: HistorySwipe.Way = event.deltaX > 0 ? .back : .forward
         guard canGo(way) else { return false }
         leftAt = nil
-        if way == .back { goBack(view) } else { view.goForward() }
+        if way == .back { page.goBack() } else { page.goForward() }
         return true
     }
 
     // MARK: The page's edges
-
-    /// `_WKRectEdge`'s left and right.
-    private static let left: UInt = 1
-    private static let right: UInt = 4
-    private static let all: UInt = 15
 
     /// Which of the page's edges bounce: not the left with a page to go
     /// back to, nor the right with one to go forward to, while two fingers
@@ -240,23 +230,22 @@ final class PageSwipe {
     /// end, as WebKit has it (rubberBandableEdgesRespectingHistorySwipe).
     /// Again whenever there is somewhere else to go.
     private func bounce() {
-        guard let view else { return }
-        var edges = Self.all
+        guard let page else { return }
+        var edges = Set(WebPageEdge.allCases)
         if NSEvent.isSwipeTrackingFromScrollEventsEnabled, gesture?.isScroll != true {
-            if canGoBack(view) { edges &= ~Self.left }
-            if view.canGoForward { edges &= ~Self.right }
+            if page.canGoBack { edges.remove(.left) }
+            if page.state.canGoForward { edges.remove(.right) }
         }
         guard edges != self.edges else { return }
         self.edges = edges
-        // `_setRubberBandingEnabled:`, which the key without its underscore finds.
-        view.setValue(NSNumber(value: edges), forKey: "rubberBandingEnabled")
+        service.setRubberBandingEnabled(edges)
     }
 
     // MARK: The arrow
 
     /// The page is on the history entry the gesture began on.
     private var stillWhereItBegan: Bool {
-        view?.backForwardList.currentItem === from
+        page?.enginePage.services.currentEntry === from
     }
 
     private func show() {
@@ -274,7 +263,7 @@ final class PageSwipe {
             showing = way
             arrow.set(way: way)
             // Filled in the space's colour, the chevron in the ink that reads on it (dark on yellow).
-            let colour = view.page.flatMap { Session.shared.workspace.space($0.space) }?.color
+            let colour = page.flatMap { Session.shared.workspace.space($0.space) }?.color
             arrow.colour = colour?.nsColor ?? .controlAccentColor
             arrow.armedInk = colour.map { NSColor($0.ink) } ?? .white
             arrow.set(armed: false, animated: false)
@@ -386,5 +375,12 @@ private final class SwipeArrow: NSView {
         let target = animated ? animator() : self
         target.frame = NSRect(x: centre.x - Self.side / 2, y: centre.y - Self.side / 2, width: Self.side, height: Self.side)
         target.alphaValue = min(1, progress * 3)
+    }
+}
+
+extension Page {
+    func makePageSwipe() -> PageSwipe? {
+        guard PageSwipe.works(on: enginePage), let service = enginePage.swipe else { return nil }
+        return PageSwipe(page: self, service: service)
     }
 }

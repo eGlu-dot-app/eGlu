@@ -1,5 +1,7 @@
 import Combine
 import PadCore
+import WebEngineCore
+import WebKitSupport
 import UIKit
 import os
 
@@ -104,7 +106,7 @@ final class Session: ObservableObject {
 
     private func startWorkspaceServices() {
         guard canUseWorkspace else { return }
-        Stores.sweep()
+        Stores.sweep(in: WebKitSpaceStores.shared)
         HistoryRecorder.shared.prune()
         Snapshots.prune(keeping: Set(workspace.spaces.flatMap { $0.tabs.map(\.id) }))
         pages.watchMemory()
@@ -269,7 +271,7 @@ final class Session: ObservableObject {
         guard workspace.spaces.count > 1, let space = workspace.space(id) else { return }
         for tab in space.tabs { pages.close(tab.id) }
         change { _ = $0.removeSpace(id) }
-        Stores.erase(id)
+        Stores.erase(id, in: WebKitSpaceStores.shared)
         HistoryRecorder.shared.removeSpace(id)
         for window in allBrowsers where window.model.spaceID == id {
             window.showSpace(workspace.firstSpace.id)
@@ -394,5 +396,17 @@ struct WindowState {
 extension SiteIcons {
     /// The app's icons, kept with its other data; the Caches folder they
     /// were kept in before is this app's own.
-    static let shared = SiteIcons(data: Session.folder, caches: .cachesDirectory)
+    static let shared = SiteIcons(data: Session.folder, caches: .cachesDirectory, rasterizer: WebKitSVGRaster.shared)
+}
+
+extension Downloads {
+    static func retryStarter(space: UUID) -> any WebDownloadStarting {
+        WebKitDownloadStarter(store: WebKitStores.store(for: space))
+    }
+}
+
+extension ContentBlocker {
+    static func makeRuleStore() -> (any WebRuleListStore)? {
+        WebKitRuleListStore.makeDefault()
+    }
 }

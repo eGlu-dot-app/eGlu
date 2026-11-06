@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scroll probe</title>
+<!--
+  Whether a touch stops a page that is still scrolling by its own momentum,
+  as it does in Safari. Each frame's scroll position and each touch are
+  kept; the box at the top says, for the last touch, how fast the page was
+  going when the finger came down and how far it went on after. Listeners
+  are passive: they change nothing in how the page scrolls.
+  ?handler=1 adds a touchstart listener that is not passive, as many
+  sites have, so WebKit must ask the page before it scrolls.
+-->
+<style>
+  body { margin: 0; font: 16px/1.6 -apple-system, sans-serif; background: #fff; color: #111; }
+  #readout { position: fixed; top: 0; left: 0; right: 0; z-index: 2; padding: 8px 12px; background: #111; color: #0f0; font: 13px/1.4 ui-monospace, monospace; white-space: pre; }
+  .row { height: 120px; border-bottom: 1px solid #ddd; padding: 12px; box-sizing: border-box; }
+  .row:nth-child(odd) { background: #f4f6fa; }
+</style>
+</head>
+<body>
+<div id="readout">flick, then touch while it still moves</div>
+<main id="rows"></main>
+<script>
+  const rows = document.getElementById('rows');
+  for (let i = 0; i < 400; i++) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.textContent = `Row ${i + 1}: some ordinary text to scroll past.`;
+    rows.append(row);
+  }
+  if (new URLSearchParams(location.search).get('handler')) {
+    addEventListener('touchstart', () => {}, { passive: false });
+  }
+  const frames = [];
+  const touches = [];
+  // Each run of the page moving, from still to still (150 ms), and the clicks it hears.
+  let run = null;
+  let lastRun = null;
+  let clicks = 0;
+  addEventListener('click', () => clicks++, { capture: true, passive: true });
+  const readout = document.getElementById('readout');
+  addEventListener('touchstart', () => touches.push({ t: performance.now(), y: scrollY }), { capture: true, passive: true });
+  const speedAt = (t) => {
+    const before = frames.filter((f) => f.t <= t && f.t > t - 100);
+    if (before.length < 2) return 0;
+    const a = before[0], b = before[before.length - 1];
+    return Math.round(((b.y - a.y) / (b.t - a.t)) * 1000);
+  };
+  function frame(t) {
+    const previous = frames[frames.length - 1];
+    frames.push({ t, y: scrollY });
+    if (previous && Math.abs(scrollY - previous.y) > 0.5) {
+      if (!run) run = { from: previous.t, y: previous.y };
+      run.to = t;
+      run.moved = Math.round(scrollY - run.y);
+    } else if (run && t - run.to > 150) {
+      lastRun = run;
+      run = null;
+    }
+    while (frames.length && frames[0].t < t - 10000) frames.shift();
+    const last = touches[touches.length - 1];
+    const runs = lastRun || run ? `\nlast run: ${(run || lastRun).moved} px in ${Math.round((run || lastRun).to - (run || lastRun).from)} ms · clicks ${clicks}` : `\nclicks ${clicks}`;
+    if (!last) readout.textContent = `no touches${runs}\nnow ${Math.round(scrollY)} · ${speedAt(t)} px/s`;
+    if (last) {
+      const after = frames.filter((f) => f.t >= last.t);
+      const moved = after.length ? Math.round(after[after.length - 1].y - last.y) : 0;
+      // When the page last moved after the touch.
+      let lastMove = last.t;
+      for (let i = 1; i < after.length; i++) if (Math.abs(after[i].y - after[i - 1].y) > 0.5) lastMove = after[i].t;
+      readout.textContent = `touches ${touches.length}\nlast touch: going ${speedAt(last.t)} px/s\nafter it: moved ${moved} px, still moving ${Math.round(lastMove - last.t)} ms on${runs}\nnow ${Math.round(scrollY)} · ${speedAt(t)} px/s`;
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+</script>
+</body>
+</html>

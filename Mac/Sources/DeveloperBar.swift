@@ -1,6 +1,6 @@
 import PadCore
 import SwiftUI
-import WebKit
+import WebEngineCore
 
 /// The developer bar across a page's top, as Arc's own bar: the whole
 /// address with its port, the response's status, and the tools' buttons.
@@ -15,7 +15,7 @@ struct DeveloperBar: View {
 
     /// Where the card's page is, with what it is loading while one goes.
     private var address: URL? {
-        focused ? model.url : (page.displayURL ?? page.view.url)
+        focused ? model.url : (page.displayURL ?? page.state.url)
     }
 
     private var statusCode: Int? {
@@ -26,7 +26,7 @@ struct DeveloperBar: View {
     /// settings have it (a choice on either site repaints both bars).
     static func isOn(_ page: Page?, url: URL?) -> Bool {
         let preferences = Session.shared.preferences
-        return DeveloperMode.isOn(url ?? page?.displayURL ?? page?.view.url,
+        return DeveloperMode.isOn(url ?? page?.displayURL ?? page?.state.url,
                                   choices: preferences.developerSites, local: preferences.developerLocal)
     }
 
@@ -221,17 +221,17 @@ struct DeveloperBar: View {
         switch command {
         case .inspector: inspector(.inspector)
         case .console: inspector(.console)
-        case .selectElement: inspector(.elements)
+        case .selectElement: inspector(.elementSelection)
         case .elementPicture: model.elementPicture(of: page)
-        case .reloadOrigin: page.view.reloadFromOrigin()
+        case .reloadOrigin: page.reloadFromOrigin()
         // On the card's own page, as the rest: the page beside's too.
         case .measure: page.toggleMeasuring()
         default: model.perform(command)
         }
     }
 
-    private func inspector(_ part: WebInspector.Part) {
-        if !WebInspector.show(part, for: page.view) {
+    private func inspector(_ part: WebDeveloperTool) {
+        if !page.showDeveloperTool(part) {
             model.show(ActionToast(symbol: "hammer", text: WebInspector.unavailable))
         }
     }

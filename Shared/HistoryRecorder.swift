@@ -1,7 +1,7 @@
+import Combine
 import Foundation
 import os
 import PadCore
-import WebKit
 
 /// Each space's history on this device, both apps': the store (HistoryStore,
 /// in Application Support), what pages tell it, and what the command bar,
@@ -465,6 +465,12 @@ final class HistoryRecorder: ObservableObject {
 /// forward, and never for a pop-up, which is no tab of the workspace's.
 @MainActor
 struct PageHistory {
+    /// Action kind without an engine dependency; unknown values retain their own semantics.
+    enum NavigationKind: Sendable, Equatable {
+        case link, form, formResubmission, history, reload, other
+        case unknown(Int)
+    }
+
     /// What the main-frame navigation decided and not committed yet is:
     /// nothing yet, no visit (a reload, a step back), or a visit and how it
     /// was come to (HistoryRecorder.expect knows when it was typed or a bookmark).
@@ -502,9 +508,9 @@ struct PageHistory {
     private var restored = false
     /// The tab's back and forward entries visits were made at: a step back
     /// or forward to one, within a web app's own pages, is no new visit.
-    private var entries: [WKBackForwardListItem] = []
+    private var entries: [AnyObject] = []
 
-    private mutating func entered(_ entry: WKBackForwardListItem?) {
+    private mutating func entered(_ entry: AnyObject?) {
         guard let entry, !entries.contains(where: { $0 === entry }) else { return }
         entries.append(entry)
         if entries.count > 100 { entries.removeFirst(entries.count - 100) }
@@ -515,15 +521,12 @@ struct PageHistory {
         restored = true
     }
 
-    /// A main-frame navigation WebKit is about to make. A redirect, or a
-    /// request sent again (with another user agent, or the screen's light
-    /// or dark), comes back here as `.other`, and keeps what the first said.
-    mutating func decided(_ type: WKNavigationType, url: URL?) {
+    mutating func decided(_ type: NavigationKind, url: URL?) {
         // Coming back, through any redirect, until its document is
         // committed; unless this is a page asked for meanwhile: a link, a
         // form, an address typed or a bookmark.
         if restored {
-            let asked = type == .linkActivated || type == .formSubmitted || url.map(HistoryRecorder.shared.isExpected) == true
+            let asked = type == .link || type == .form || url.map(HistoryRecorder.shared.isExpected) == true
             guard asked else {
                 next = .ignored
                 return
@@ -531,7 +534,7 @@ struct PageHistory {
             restored = false
         }
         switch type {
-        case .backForward, .reload, .formResubmitted:
+        case .history, .reload, .formResubmission:
             next = .ignored
         default:
             if let url, let asked = HistoryRecorder.shared.takeExpectation(url) {
@@ -539,7 +542,7 @@ struct PageHistory {
             } else if type == .other, next != .none {
                 return
             } else {
-                next = .visit(type == .linkActivated || type == .formSubmitted ? .link : .other)
+                next = .visit(type == .link || type == .form ? .link : .other)
             }
         }
     }
@@ -550,7 +553,7 @@ struct PageHistory {
     }
 
     /// A document committed: a visit, if it was decided as one.
-    mutating func committed(url: URL?, title: String?, entry: WKBackForwardListItem?, space: UUID, tab: UUID) {
+    mutating func committed(url: URL?, title: String?, entry: AnyObject?, space: UUID, tab: UUID) {
         entered(entry)
         withheld = false
         password = false
@@ -568,7 +571,7 @@ struct PageHistory {
     /// The page became a tab's as it is, with no load (a Mac's Peek or little
     /// window opened in a tab): the document on screen, kept nowhere while
     /// the page was no tab's, is a visit now, unless it is a sign-in's.
-    mutating func adopted(url: URL?, title: String?, entry: WKBackForwardListItem?, space: UUID, tab: UUID) {
+    mutating func adopted(url: URL?, title: String?, entry: AnyObject?, space: UUID, tab: UUID) {
         guard visit == nil, !withheld, !password, let url, Session.shared.workspace.tab(tab) != nil else { return }
         entered(entry)
         key = History.pageKey(url)
@@ -580,7 +583,7 @@ struct PageHistory {
     /// The page's address or name changed: its name for the visit; or, with
     /// no load under way, a page that moved to another of its own pages
     /// without loading (a web app), a visit of its own.
-    mutating func changed(url: URL?, title: String?, entry: WKBackForwardListItem?, loading: Bool, space: UUID, tab: UUID) {
+    mutating func changed(url: URL?, title: String?, entry: AnyObject?, loading: Bool, space: UUID, tab: UUID) {
         guard let url else { return }
         let now = History.pageKey(url)
         if now == key {

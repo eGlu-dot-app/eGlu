@@ -1,8 +1,8 @@
 import AppKit
-import Engines
 import OSLog
 import PadCore
 import SwiftUI
+import WritingServiceKit
 
 /// eGlu for Mac: the iPad's spaces, pinned tabs and blocking in Arc's
 /// shape, a sidebar down the window's side and the page beside it, drawn
@@ -19,7 +19,7 @@ struct EgluApp: App {
         WindowGroup(id: "browser", for: WindowSeed.self) { $seed in
             LaunchWindow(seed: $seed)
         } defaultValue: { WindowSeed() }
-        .defaultLaunchBehavior(.presented)
+        .defaultLaunchBehavior(Self.firstWindow)
         // Links from other apps go to the app delegate alone (LaunchState.open),
         // a little window each. Left to SwiftUI, each made a browser window too.
         .handlesExternalEvents(matching: [])
@@ -45,6 +45,16 @@ struct EgluApp: App {
         }
         .windowResizability(.contentMinSize)
         .defaultSize(width: 780, height: 620)
+    }
+
+    /// A browser window at launch; none while the app hosts tests
+    /// (Session.hostingTests): their pages need no window, and one would
+    /// load the workspace's tab and come up on the screen of whoever runs them.
+    private static var firstWindow: SceneLaunchBehavior {
+        #if DEBUG
+        if Session.hostingTests { return .suppressed }
+        #endif
+        return .presented
     }
 }
 
@@ -84,6 +94,19 @@ private struct WorkspaceWindow: View {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillFinishLaunching(_ notification: Notification) {
         #if DEBUG
+        // Tests are hosted only with a data folder and an identifier of
+        // their own (scheme eGlu Mac Page Tests, configuration Test): the
+        // data folder is ~/Library/Application Support/Safience whatever the
+        // identifier, and the real eGlu may be using it. The identifier must
+        // be the tests' own, not merely not the real app's, so a developer's
+        // own build (Config/Local.xcconfig) is never the host either.
+        // Before anything reads the folder.
+        if Session.hostingTests, Session.dataRootOverride == nil || Bundle.main.bundleIdentifier?.hasSuffix(".pagetests") != true {
+            NSLog("eGlu: not hosting tests without EGLU_DATA_ROOT and an identifier of their own")
+            exit(EXIT_FAILURE)
+        }
+        #endif
+        #if DEBUG
         // Light or dark whatever the system's, from before any page is made (`-look dark`).
         if let look = UserDefaults.standard.string(forKey: "look") {
             NSApp.appearance = NSAppearance(named: look == "dark" ? .darkAqua : .aqua)
@@ -95,7 +118,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // which launch need not wait for.
         Task.detached(priority: .utility) {
             Logger(subsystem: "net.taehee.safience", category: "engines")
-                .log("engines linked: \((try? Grammar.rules().count) ?? -1) grammar rules")
+                .log("engines linked: \((try? WritingChecker.engine.rules().count) ?? -1) grammar rules")
         }
         #endif
         // Before anything reads the workspace or the settings: they were in

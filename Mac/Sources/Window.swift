@@ -1,6 +1,5 @@
 import AppKit
 import SwiftUI
-import WebKit
 
 /// Reaches the window SwiftUI made, to make it the browser's: no title bar
 /// drawn, the content under where it was, no system tabs (the sidebar has
@@ -199,7 +198,7 @@ struct PageSurface: NSViewRepresentable {
     }
 
     func updateNSView(_ holder: PageHolder, context: Context) {
-        holder.show(page?.view)
+        holder.show(page?.surface.view)
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: PageHolder, context: Context) -> CGSize? {

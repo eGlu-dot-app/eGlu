@@ -23,9 +23,10 @@ struct TopTabs: View {
 
     var body: some View {
         let space = session.workspace.space(window.spaceID)
+        let barTabs = space?.barTabs ?? [:]
         // Without the pinned tabs this device hides (Settings › Pinned Tabs).
         let row = TabRow(tabs: (space?.tabs ?? []).filter(session.preferences.shows), splits: space?.splits ?? [],
-                         current: window.tabID)
+                         current: window.tabID, barTabs: Set(barTabs.values.map(\.id)))
         let others = session.workspace.spaces.filter { $0.id != window.spaceID }
         HStack(spacing: Side.gap) {
             HStack(spacing: 2) {
@@ -58,16 +59,20 @@ struct TopTabs: View {
                     }
                 }
                 .animation(.bar, value: split.shown.map(\.id))
-                if !row.others.isEmpty {
-                    Rectangle()
-                        .fill(Side.secondary.opacity(0.3))
-                        .frame(width: 1, height: 16)
-                }
+            }
+            if let space, space.bar?.children?.isEmpty == false {
+                TopBarBookmarks(window: window, space: space, act: act)
+            }
+            if !row.others.isEmpty, !row.pinned.isEmpty || space?.bar?.children?.isEmpty == false {
+                Rectangle()
+                    .fill(Side.secondary.opacity(0.3))
+                    .frame(width: 1, height: 16)
             }
             GeometryReader { box in
-                // A pinned tab on screen has the address too, first in the row: where the page
-                // is, and its …, whichever kind of tab it is.
+                // A pinned or bookmarks bar tab on screen has the address too, first in the
+                // row: where the page is, and its …, whichever kind of tab it is.
                 let pinnedOnScreen = row.pinned.first { $0.id == window.tabID }
+                    ?? barTabs.values.first { $0.id == window.tabID }
                 let address = pinnedOnScreen != nil || row.others.contains { $0.id == window.tabID }
                 let widths = TabWidths.widths(count: row.others.count + (pinnedOnScreen == nil ? 0 : 1), room: box.size.width,
                                               gap: 4, address: address)
@@ -104,6 +109,9 @@ struct TopTabs: View {
                         .padding(.vertical, (Metrics.bar - Side.control) / 2)
                         .animation(.bar, value: row.others.map(\.id))
                         .animation(.bar, value: pinnedOnScreen?.id)
+                        .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(TopTabs.space)).minX } action: { _ in
+                            act(.hideTabHover)
+                        }
                     }
                     .scrollIndicators(.never)
                     .padding(.horizontal, -3)
@@ -124,7 +132,7 @@ struct TopTabs: View {
                 DownloadActivityButton { act(.downloads) }
                 SidePlainIcon("plus", label: String(localized: "New Tab")) { act(.command(.newTab)) }
                     .contextMenu {
-                        if window.tabID.flatMap({ session.workspace.tab($0) }).map({ !$0.isPinned }) == true {
+                        if space?.otherTabs.contains(where: { $0.id == window.tabID }) == true {
                             Button("New Tab in Split View", systemImage: "rectangle.split.2x1") { act(.splitWithNewTab) }
                         }
                     }
@@ -135,7 +143,91 @@ struct TopTabs: View {
         }
         .padding(.horizontal, Side.gap)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+        .onChange(of: window.spaceID) { _, _ in act(.hideTabHover) }
+        .onDisappear { act(.hideTabHover) }
     }
+
+    /// The top row's own coordinates, for the window's hover card.
+    nonisolated static let space = "top-tabs"
+}
+
+/// The bookmarks bar beside the pinned tiles, its open tabs kept in view
+/// under folders that are shut, as they are in the sidebar.
+private struct TopBarBookmarks: View {
+    let window: WindowModel
+    let space: Space
+    let act: (BarAction) -> Void
+    @State private var showing = false
+    @State private var open: Set<UUID> = []
+    @State private var hovering = false
+
+    var body: some View {
+        // The bar's tabs once for the button and all the rows in its popover, not by each.
+        let map = space.barMap
+        let selected = map.tabs.values.contains { $0.id == window.tabID }
+        let shape = RoundedRectangle(cornerRadius: TopTab.corner, style: .continuous)
+        Button {
+            act(.hideTabHover)
+            showing.toggle()
+        } label: {
+            Image(systemName: "bookmark")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(Palette.ink)
+                .frame(width: Side.control + 4, height: Side.control)
+                // As under the pinned tiles beside it: the glyph is as tall as their icons.
+                .overlay {
+                    OpenDot(shown: !map.tabs.isEmpty, size: 3)
+                        .offset(y: OpenDot.under(icon: 16, size: 3))
+                }
+                .background {
+                    if selected {
+                        Color.clear.liquidGlass(reacting: false, in: shape, otherwise: Palette.card)
+                    } else {
+                        shape.fill(hovering ? Side.hover : .clear)
+                    }
+                }
+                .contentShape(shape)
+        }
+        .buttonStyle(PressScale())
+        .onHover { inside in withAnimation(.easeOut(duration: 0.12)) { hovering = inside } }
+        .accessibilityLabel("Bookmarks Bar")
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .popover(isPresented: $showing, arrowEdge: .top) {
+            let canSplit = BarBookmarkRow.canSplit(window, in: space, map: map)
+            ScrollView {
+                VStack(spacing: 2) {
+                    ForEach(Bookmarks.rows(of: space.bar?.children ?? [], opening: open,
+                                           keeping: Set(map.tabs.keys)), id: \.item.id) { row in
+                        BarBookmarkRow(window: window, space: space, map: map, canSplit: canSplit, item: row.item,
+                                       depth: row.depth, open: open.contains(row.item.id), source: .window, toggle: {
+                            withAnimation(.bar) {
+                                if !open.insert(row.item.id).inserted { open.remove(row.item.id) }
+                            }
+                        }, act: { action in
+                            if case .openFromBar = action { showing = false }
+                            act(action)
+                        })
+                    }
+                }
+                .padding(8)
+                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(Self.coordinates)).minY } action: { _ in
+                    act(.hideTabHover)
+                }
+            }
+            .scrollIndicators(.never)
+            .coordinateSpace(.named(Self.coordinates))
+            .frame(width: 288)
+            .frame(maxHeight: 420)
+            .presentationCompactAdaptation(.popover)
+        }
+        .onChange(of: showing) { _, _ in act(.hideTabHover) }
+        .onChange(of: window.spaceID) { _, _ in
+            showing = false
+            open = []
+        }
+    }
+
+    nonisolated private static let coordinates = "top-bar-bookmarks"
 }
 
 /// The pinned tabs past their share of the row (PinnedOverflow), behind a
@@ -331,14 +423,22 @@ private struct TopPinnedTab: View {
         let colour = Session.shared.workspace.space(window.spaceID)?.color ?? .blue
         let ground = selected ? PinnedIcon.tileTint(for: url, colour: colour) : nil
         Button {
+            act(.hideTabHover)
             act(selected ? .editAddress : .select(tab.id))
         } label: {
             ZStack {
                 let lean = Plate.lean(toward: pointer, in: size, reach: CGSize(width: 6, height: 4))
                 PointerGlow(lean: lean, radius: 28)
-                PinnedIcon(url: url, open: selected, colour: colour, size: 16, lean: lean, plate: (side: 18, corner: 6, blur: 6))
+                // Lit on screen and under the pointer only, as the Mac's row is; on screen its light fills it (CoreLight).
+                PinnedIcon(url: url, open: selected, colour: colour, size: 16, lean: lean, plate: (side: 18, corner: 6, blur: 6),
+                           lit: selected || hovering, current: selected, fills: true)
             }
             .frame(width: Side.control + 4, height: Side.control)
+            // Open, as the phone's dock marks it: a dot just under the icon.
+            .overlay {
+                OpenDot(shown: Pinned.isOpen(tab), size: 3)
+                    .offset(y: OpenDot.under(icon: 16, size: 3))
+            }
             .onGeometryChange(for: CGSize.self) { $0.size } action: { size = $0 }
             .background(shape.fill(hovering && !selected ? Side.hover : .clear))
             .clipShape(shape)
@@ -353,6 +453,8 @@ private struct TopPinnedTab: View {
         }
         .buttonStyle(PressScale())
         .onHover { inside in withAnimation(.easeOut(duration: 0.12)) { hovering = inside } }
+        .modifier(TabHoverModifier(id: tab.id, tab: tab.id, title: tab.label, url: url,
+                                   isOpen: Pinned.isOpen(tab), source: .top, act: act))
         .onContinuousHover { phase in
             withAnimation(.spring(duration: 0.6, bounce: 0)) {
                 if case .active(let point) = phase { pointer = point } else { pointer = nil }

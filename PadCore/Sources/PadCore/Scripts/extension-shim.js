@@ -649,7 +649,10 @@
           try { answer = deliverRelayed(data.relay, { id: runtime.id, url: data.url, origin: location.origin }); } finally { relaying = false; }
           if (answer && typeof data.id === "string") {
             channel.postMessage({ answering: data.id, from: me });
-            answer.then((value) => { if (value !== undefined) channel.postMessage({ answered: data.id, value, from: me }); });
+            // An empty answer goes back too for a tab's message, which has
+            // one page to wait for, not every page that might answer.
+            const forTab = !!(data.relay && typeof data.relay === "object" && data.relay.__egluToFrame);
+            answer.then((value) => { if (value !== undefined || forTab) channel.postMessage({ answered: data.id, value, from: me }); });
           }
         }, 50);
         return;
@@ -706,7 +709,7 @@
     delete plain.tab;
     return plain;
   };
-  // The tab an extension's framed page is in, asked once (see __egluToFrame).
+  // The tab an extension's page is in, asked once (see __egluToFrame).
   let ownTab = null;
 
   // What one of the extension's pages or its worker posts to another before
@@ -870,19 +873,22 @@
         if ((message.__egluToFrame || message.__egluCall) && !fromHere) return undefined;
         if (message.__egluToFrame && !fromOwnPages(sender)) return undefined;
         // A tab's message, handed on by the worker (see alsoFramed): taken
-        // by the frame it names, in the tab it names; every other page lets
-        // it pass without answering, as it would a message not for it.
+        // by the page it names, framed or the tab's own, in the tab it
+        // names; every other page lets it pass without answering, as it
+        // would a message not for it.
         if (message.__egluToFrame) {
           const to = message.__egluToFrame;
-          if (!embedded || !(to.urls || []).includes(location.href)) {
-            if (background) return undefined;
+          const viaChannel = relaying;
+          if (background || !(to.urls || []).includes(location.href)) {
+            // Its channel copy wants no word from a page it isn't for.
+            if (background || viaChannel) return undefined;
             setTimeout(silent, 10000);
             return answer;
           }
           if (!ownTab) ownTab = Promise.resolve(Object.getPrototypeOf(runtime).sendMessage.call(runtime, { __egluCall: { space: "tabs", method: "getCurrent", args: [] } }))
             .then((reply) => reply && reply.value ? reply.value.id : null, () => null);
           ownTab.then((id) => {
-            if (id !== to.tabId) return setTimeout(silent, 10000);
+            if (id !== to.tabId) return viaChannel ? silent() : setTimeout(silent, 10000);
             let held = false;
             for (const listener of [...listeners]) if (run(listener, to.message, sender)) held = true;
             if (!held) silent();
@@ -1120,17 +1126,53 @@
     if (tabs && typeof tabs.sendMessage === "function") {
       const send = tabs.sendMessage.bind(tabs);
       // A message for a tab reaches only its content scripts in WebKit. In
-      // Chrome it reaches the extension's own pages framed in that tab too:
-      // 1Password's sign-in banner is one. So the worker hands it to those
-      // frames as well, and the first answer from either wins. (Search)
+      // Chrome it reaches the extension's own pages in that tab too, framed
+      // or the tab's own: 1Password's sign-in banner is framed, and
+      // NordPass's sign-in page, a tab of its own, is told by a message to
+      // its tab where to go next. So the worker hands it to those pages as
+      // well, and the first answer from either wins. (Search)
       const alsoFramed = (answer, tabId, message, options) => {
+        if (typeof tabId !== "number") return answer;
         const nav = chrome.webNavigation;
-        if (!nav || typeof nav.getAllFrames !== "function" || typeof tabId !== "number") return answer;
         const wanted = options && typeof options.frameId === "number" ? options.frameId : null;
-        const framed = Promise.resolve(nav.getAllFrames({ tabId })).then((frames) => {
-          const urls = (frames || []).filter((f) => f.url && f.url.startsWith(ownPlace) && f.frameId !== 0 && (wanted === null || f.frameId === wanted)).map((f) => f.url);
+        const frames = nav && typeof nav.getAllFrames === "function"
+          ? Promise.resolve(nav.getAllFrames({ tabId })).then((list) => list || [], () => []) : Promise.resolve([]);
+        // The tab's own page, as the tab says, should its frames leave it out.
+        const top = (wanted === null || wanted === 0) && typeof tabs.get === "function"
+          ? Promise.resolve(tabs.get(tabId)).then((tab) => tab && tab.url, () => null) : Promise.resolve(null);
+        const framed = Promise.all([frames, top]).then(([list, url]) => {
+          const ours = list.filter((f) => f.url && f.url.startsWith(ownPlace) && (wanted === null || f.frameId === wanted));
+          const urls = ours.map((f) => f.url);
+          if (typeof url === "string" && url.startsWith(ownPlace) && !urls.includes(url)) urls.push(url);
           if (!urls.length) return undefined;
-          return Object.getPrototypeOf(runtime).sendMessage.call(runtime, { __egluToFrame: { tabId, urls, message } });
+          // A page framed in the tab is one WebKit's copy can reach.
+          const framedPage = ours.some((f) => f.frameId !== 0);
+          const envelope = { __egluToFrame: { tabId, urls, message } };
+          // A framed page hears the worker from WebKit; a tab's own page
+          // doesn't (see relay), so it goes over the pages' channel too.
+          const natively = Promise.resolve(Object.getPrototypeOf(runtime).sendMessage.call(runtime, envelope)).catch(() => undefined);
+          const relayed = relay(envelope);
+          if (!relayed) return natively;
+          return new Promise((resolve) => {
+            // Pages that might take it say so in the first moment, then
+            // answer, if only with nothing (one in another tab, at once).
+            // The first real answer wins; nothing once every page that
+            // spoke has answered and the moment to speak has passed.
+            // A framed page has no channel, so WebKit's reply is waited for
+            // too, but only then: the tab's own page doesn't hear WebKit's
+            // copy, and the extension's pages it isn't for answer that copy
+            // with nothing only after ten seconds (dispatch).
+            let claims = framedPage ? 1 : 0, open = true, done = false;
+            const finish = (value) => { if (!done) { done = true; relays.delete(relayed); resolve(value); } };
+            const answered = (value) => { if (value !== undefined) finish(value); else if (--claims <= 0 && !open) finish(undefined); };
+            relays.set(relayed, {
+              answering: () => { claims++; },
+              answer: answered,
+            });
+            natively.then(framedPage ? answered : (value) => { if (value !== undefined) finish(value); });
+            setTimeout(() => { open = false; if (claims <= 0) finish(undefined); }, 300);
+            setTimeout(() => finish(undefined), 30000);
+          });
         }, () => undefined);
         return new Promise((resolve, reject) => {
           let left = 2, failed = null;

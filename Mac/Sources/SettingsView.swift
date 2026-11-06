@@ -1,5 +1,5 @@
 import AppKit
-import Engines
+import WritingServiceKit
 import PadCore
 import SwiftUI
 
@@ -627,7 +627,7 @@ private struct WritingSettings: View {
     @ObservedObject private var access = AccessibilityAccess.shared
     @ObservedObject private var fields = FrontField.shared
     @ObservedObject private var session = Session.shared
-    @State private var rules: [GrammarRule] = []
+    @State private var rules: [WritingRule] = []
     @State private var words: [String] = WritingWords.load()
     @State private var harperDesktop: [String]? = nil
 
@@ -692,7 +692,7 @@ private struct WritingSettings: View {
                 Section {
                     Picker("English", selection: $session.preferences.writingDialect) {
                         // Harper's dialects, in its own order.
-                        ForEach(Dialect.allCases, id: \.rawValue) { dialect in
+                        ForEach(WritingDialect.allCases, id: \.rawValue) { dialect in
                             Text(dialect.name).tag(dialect.rawValue)
                         }
                     }

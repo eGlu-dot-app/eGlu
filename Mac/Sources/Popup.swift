@@ -1,6 +1,6 @@
 import AppKit
 import PadCore
-import WebKit
+import WebEngineCore
 
 /// A window a page opened at a size of its own (a sign-in with Google or
 /// Apple, a share dialog) where no Peek can have it: from a page in a Peek,
@@ -27,15 +27,14 @@ final class Popup: NSObject, PageHost, NSWindowDelegate {
     /// The window it stands over closing: it closes too.
     private var parentClosing: NSObjectProtocol?
 
-    static func open(from opener: Page, configuration: WKWebViewConfiguration, features: WKWindowFeatures,
-                     over parent: NSWindow?) -> WKWebView {
+    static func open(from opener: Page, child: any WebChildRequest, over parent: NSWindow?) -> Page {
         // A page of no tab: what it says about itself is kept nowhere.
-        let page = Page(tab: UUID(), space: opener.space, configuration: configuration)
+        let page = Session.shared.engine.makePage(tab: UUID(), space: opener.space, source: .child(child))
         page.openedFrom = opener.tab
-        let size = NSSize(width: features.width?.doubleValue ?? 520, height: features.height?.doubleValue ?? 640)
+        let size = NSSize(width: child.features.width ?? 520, height: child.features.height ?? 640)
         let popup = Popup(page: page, opener: opener, size: size, over: parent)
         open.insert(popup)
-        return popup.page.view
+        return popup.page
     }
 
     /// An extension's popup window (windows.create with type "popup"): a
@@ -108,7 +107,7 @@ final class Popup: NSObject, PageHost, NSWindowDelegate {
         progress.minValue = 0
         progress.maxValue = 1
         [status, progress, recovery].forEach(statusBox.addArrangedSubview)
-        let stack = NSStackView(views: [header, statusBox, page.view])
+        let stack = NSStackView(views: [header, statusBox, page.surface.view])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 0
@@ -123,7 +122,7 @@ final class Popup: NSObject, PageHost, NSWindowDelegate {
             stack.bottomAnchor.constraint(equalTo: content.bottomAnchor),
             header.widthAnchor.constraint(equalTo: stack.widthAnchor),
             statusBox.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            page.view.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            page.surface.view.widthAnchor.constraint(equalTo: stack.widthAnchor),
             progress.widthAnchor.constraint(equalTo: statusBox.widthAnchor, constant: -24),
             security.widthAnchor.constraint(equalToConstant: 16),
         ])
@@ -131,7 +130,7 @@ final class Popup: NSObject, PageHost, NSWindowDelegate {
 
     @objc private func closePopup() { panel.close() }
     @objc private func recoverPage() {
-        if page.googleRefused, page.view.canGoBack { page.view.goBack() } else { page.reload() }
+        if page.googleRefused, page.state.canGoBack { page.goBack() } else { page.reload() }
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -151,14 +150,15 @@ final class Popup: NSObject, PageHost, NSWindowDelegate {
 
     func pageDidChange(_ page: Page) {
         let url = page.displayURL
-        let title = page.view.title ?? ""
+        let state = page.state
+        let title = state.title ?? ""
         panel.title = title.isEmpty ? (url?.host ?? String(localized: "Loading…")) : title
         // An extension's own page (its popup window, ExtensionPopupWindow)
         // is named by its extension, and has no connection to vouch for.
         let owner = page.isExtensionPage ? url?.host().flatMap { id in Extensions.shared.installed.first { $0.id == id }?.name } : nil
         address.stringValue = owner ?? url.map(Destination.pretty) ?? String(localized: "Loading…")
         address.setAccessibilityLabel(url?.absoluteString ?? String(localized: "Loading page"))
-        let secure = url?.scheme == "https" && page.view.hasOnlySecureContent && page.failure == nil
+        let secure = url?.scheme == "https" && state.hasOnlySecureContent && page.failure == nil
         security.image = NSImage(systemSymbolName: secure ? "lock.fill" : "exclamationmark.triangle", accessibilityDescription: nil)
         security.contentTintColor = secure ? .systemGreen : .systemOrange
         security.setAccessibilityLabel(secure ? String(localized: "Secure connection") : String(localized: "Connection is not verified as secure"))
@@ -166,11 +166,11 @@ final class Popup: NSObject, PageHost, NSWindowDelegate {
         let problem = page.googleRefused ? SignIn.fallback : page.failure
             ?? (page.exhausted ? String(localized: "This page stopped after repeated memory problems. Close another tab, then reload.") : nil)
         status.stringValue = problem ?? String(localized: "Loading page…")
-        statusBox.isHidden = problem == nil && !page.view.isLoading
-        progress.isHidden = problem != nil || !page.view.isLoading
-        progress.doubleValue = page.view.estimatedProgress
+        statusBox.isHidden = problem == nil && !state.isLoading
+        progress.isHidden = problem != nil || !state.isLoading
+        progress.doubleValue = state.estimatedProgress
         recovery.isHidden = problem == nil
-        recovery.title = page.googleRefused && page.view.canGoBack ? String(localized: "Go Back") : String(localized: "Reload")
+        recovery.title = page.googleRefused && state.canGoBack ? String(localized: "Go Back") : String(localized: "Reload")
         if let problem, problem != announced {
             announced = problem
             NSAccessibility.post(element: panel, notification: .announcementRequested,
@@ -183,9 +183,8 @@ final class Popup: NSObject, PageHost, NSWindowDelegate {
         panel.isVisible
     }
 
-    func page(_ page: Page, open configuration: WKWebViewConfiguration, for action: WKNavigationAction,
-              features: WKWindowFeatures) -> WKWebView? {
-        Popup.open(from: page, configuration: configuration, features: features, over: panel)
+    func page(_ page: Page, openChild request: any WebChildRequest) -> Page? {
+        Popup.open(from: page, child: request, over: panel)
     }
 
     /// No tabs here: the page goes there itself.

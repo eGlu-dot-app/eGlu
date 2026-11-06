@@ -1,0 +1,301 @@
+import PadCore
+import WebEngineAppKit
+import WebEngineCore
+import WebKit
+import WebKitExtensions
+import WebKitMacPlugin
+import WebKitSupport
+import XCTest
+@testable import eGluMac
+
+/// Every page is made through one factory, `MacPageEngine`
+/// (Docs/EngineSplitPlan.md, 7, step 2): `Pages` asks the one it is given,
+/// with the source each kind of page needs, and the app's own factory,
+/// `AppPageEngine`, makes the pages and configurations the app made
+/// before the factory existed.
+@MainActor
+final class PageEngineTests: PageTestCase {
+    /// Pages made here straight from the app's factory, no tab's; torn down after each test.
+    private var madeHere: [Page] = []
+    /// A `Pages` of the test's own, given the spy; its live pages are closed after each test.
+    private var spied: Pages?
+    /// Tabs opened here in the test run's workspace; closed after each test.
+    private var openedHere: [UUID] = []
+
+    override func tearDown() async throws {
+        if let spied {
+            for tab in Array(spied.live.keys) { spied.close(tab) }
+        }
+        spied = nil
+        for page in madeHere { page.tearDown() }
+        madeHere.removeAll()
+        for tab in openedHere { Session.shared.closeTab(tab) }
+        openedHere.removeAll()
+        try await super.tearDown()
+    }
+
+    // MARK: Pages asks its factory
+
+    /// A tab's page is asked for once, with the tab's address; asked for
+    /// again in the same space, the tab keeps the page it has.
+    func testATabsPageIsAskedForOnce() throws {
+        let spy = SpyEngine()
+        let pages = spiedPages(spy)
+        let (record, space) = try openRecord(Self.address("Engine"))
+
+        let page = pages.page(for: record, in: space)
+        XCTAssertEqual(spy.calls.count, 1)
+        let call = try XCTUnwrap(spy.calls.first)
+        XCTAssertEqual(call.source, .tab(record.url))
+        XCTAssertNotNil(record.url, "the tab has an address, so .tab(nil) would not pass for it")
+        XCTAssertEqual(page.tab, record.id)
+        XCTAssertEqual(call.space, space)
+        XCTAssertTrue(call.page === page.enginePage, "Pages gave back a page the factory didn't make")
+        XCTAssertTrue(pages.live[record.id] === page)
+
+        let again = pages.page(for: record, in: space)
+        XCTAssertTrue(again === page, "the same tab and space got a new page")
+        XCTAssertEqual(spy.calls.count, 1, "the factory was asked again for a page the tab has")
+    }
+
+    /// A tab asked for in another space has moved: its page goes, and the
+    /// factory is asked for one in the new space.
+    func testAMovedTabsPageIsAskedForAgain() throws {
+        let spy = SpyEngine()
+        let pages = spiedPages(spy)
+        let (record, space) = try openRecord(Self.address("Moving"))
+        let first = pages.page(for: record, in: space)
+
+        let other = UUID()
+        let second = pages.page(for: record, in: other)
+        XCTAssertEqual(spy.calls.count, 2)
+        let call = try XCTUnwrap(spy.calls.last)
+        XCTAssertEqual(call.source, .tab(record.url))
+        XCTAssertEqual(second.tab, record.id)
+        XCTAssertEqual(call.space, other)
+        XCTAssertTrue(call.page === second.enginePage)
+        XCTAssertFalse(second === first, "the moved tab kept the page made in its old space")
+        XCTAssertEqual(second.space, other)
+        XCTAssertTrue(pages.live[record.id] === second)
+    }
+
+    /// A page WebKit made for a tab is asked for with the very configuration
+    /// WebKit gave, through a child request or an extension configuration.
+    func testAdoptPassesTheConfigurationItWasGiven() throws {
+        let spy = SpyEngine()
+        let pages = spiedPages(spy)
+        let space = try XCTUnwrap(Session.shared.workspace.spaces.first?.id)
+
+        let website = Self.keepingNothing()
+        let tab = UUID()
+        let page = pages.adopt(tab: tab, space: space, child: PageWebKitForTests.child(configuration: website))
+        let call = try XCTUnwrap(spy.calls.last)
+        XCTAssertEqual(call.source, .child)
+        XCTAssertTrue(call.configuration === website, "the factory was given another configuration")
+        XCTAssertEqual(page.tab, tab)
+        XCTAssertEqual(call.space, space)
+        XCTAssertTrue(call.page === page.enginePage)
+        XCTAssertFalse(page.isExtensionPage)
+        XCTAssertTrue(pages.live[tab] === page)
+
+        let extensions = Self.keepingNothing()
+        let extensionTab = UUID()
+        let extensionPage = pages.adopt(tab: extensionTab, space: space, configuration: WebKitExtensionPageConfiguration(extensions))
+        let extensionCall = try XCTUnwrap(spy.calls.last)
+        XCTAssertEqual(extensionCall.source, .supplied)
+        XCTAssertTrue(extensionCall.configuration === extensions, "the factory was given another configuration")
+        XCTAssertEqual(extensionPage.tab, extensionTab)
+        XCTAssertTrue(extensionPage.isExtensionPage)
+        XCTAssertEqual(spy.calls.count, 2)
+    }
+
+    /// A window a website opened, as a tab: its page is asked for with the
+    /// very request, which carries what the child must be made with, and
+    /// becomes the tab's live page.
+    func testAdoptPassesTheChildRequestItWasGiven() throws {
+        let spy = SpyEngine()
+        let pages = spiedPages(spy)
+        let space = try XCTUnwrap(Session.shared.workspace.spaces.first?.id)
+        let request = TestChildRequest()
+        let tab = UUID()
+        let page = pages.adopt(tab: tab, space: space, child: request)
+        let call = try XCTUnwrap(spy.calls.last)
+        XCTAssertEqual(call.source, .child)
+        XCTAssertTrue(call.child === request, "the factory was given another request")
+        XCTAssertEqual(page.tab, tab)
+        XCTAssertEqual(call.space, space)
+        XCTAssertTrue(call.page === page.enginePage)
+        XCTAssertFalse(page.isExtensionPage)
+        XCTAssertTrue(pages.live[tab] === page)
+        XCTAssertEqual(spy.calls.count, 1)
+    }
+
+    // MARK: The app's factory
+
+    /// A child's configuration makes an ordinary page; an extension's
+    /// supplied configuration makes an extension page, in the same store.
+    func testSuppliedConfigurationKeepsItsExtensionFlag() {
+        let engine = EngineComposition.makePageEngine()
+        for extensionPage in [false, true] {
+            let configuration = Self.keepingNothing()
+            let tab = UUID()
+            let space = UUID()
+            let page = made(engine.makePage(tab: tab, space: space,
+                                            source: extensionPage
+                                                ? .supplied(WebKitExtensionPageConfiguration(configuration))
+                                                : .child(PageWebKitForTests.child(configuration: configuration))))
+            XCTAssertEqual(page.isExtensionPage, extensionPage)
+            XCTAssertEqual(page.tab, tab)
+            XCTAssertEqual(page.space, space)
+            XCTAssertTrue(page.view.configuration.websiteDataStore === configuration.websiteDataStore,
+                          "the page is not in the supplied configuration's store")
+        }
+    }
+
+    /// A tab with no address, a website's address or no tab at all gets an
+    /// ordinary page in the space's lasting store.
+    func testTabAndSpaceSourcesMakeOrdinaryPages() throws {
+        let engine = EngineComposition.makePageEngine()
+        let space = try XCTUnwrap(Session.shared.workspace.spaces.first?.id)
+        let sources: [(String, MacPageSource)] = [
+            ("a tab with no address", .tab(nil)),
+            ("a tab with a website's address", .tab(Self.address("Website"))),
+            ("the space", .space),
+        ]
+        for (what, source) in sources {
+            let page = made(engine.makePage(tab: UUID(), space: space, source: source))
+            XCTAssertFalse(page.isExtensionPage, "\(what) made an extension's page")
+            XCTAssertEqual(page.space, space, what)
+            XCTAssertTrue(page.view.configuration.websiteDataStore === WebKitStores.store(for: space),
+                          "\(what): the page is not in the space's store")
+        }
+    }
+
+    /// A new configuration has the space's store and extension controller,
+    /// and Safari's name at the end of the user agent.
+    func testConfigurationIsTheSpaces() throws {
+        let space = try XCTUnwrap(Session.shared.workspace.spaces.first?.id)
+        let configuration = EngineComposition.pageFactory.configuration(space: space)
+        XCTAssertTrue(configuration.websiteDataStore === WebKitStores.store(for: space), "not the space's store")
+        XCTAssertEqual(configuration.applicationNameForUserAgent,
+                       Identity.applicationName(for: ProcessInfo.processInfo.operatingSystemVersion))
+        XCTAssertTrue(configuration.webExtensionController === (Extensions.shared.runtime as! WebKitExtensionRuntime).controllers.controller(for: space),
+                      "not the space's extension controller")
+    }
+
+    /// The app's one Session makes its pages with the app's WebKit factory.
+    func testSessionUsesTheAppsFactory() {
+        XCTAssertTrue(Session.shared.engine is AppPageEngine)
+        let factory = Mirror(reflecting: Session.shared.engine).children.first { $0.label == "factory" }?.value
+        XCTAssertTrue((factory as? WebKitMacPageFactory) === EngineComposition.pageFactory)
+    }
+
+    // MARK: Helpers
+
+    /// A `Pages` of the test's own, which asks `spy` for its pages.
+    private func spiedPages(_ spy: SpyEngine) -> Pages {
+        let pages = Pages(engine: AppPageEngine(factory: spy))
+        spied = pages
+        return pages
+    }
+
+    /// A page from the app's factory, torn down after the test.
+    private func made(_ page: Page) -> Page {
+        madeHere.append(page)
+        return page
+    }
+
+    /// A new tab at `url` in the workspace's first space, as `openTab()`
+    /// opens one, but with no page made for it yet.
+    private func openRecord(_ url: URL?) throws -> (record: TabRecord, space: UUID) {
+        let session = Session.shared
+        XCTAssertTrue(session.canUseWorkspace, "the test run's workspace can't be used")
+        let space = try XCTUnwrap(session.workspace.spaces.first?.id)
+        let tab = try XCTUnwrap(session.change { $0.openTab(url, in: space) })
+        openedHere.append(tab)
+        let record = try XCTUnwrap(session.workspace.tab(tab))
+        return (record, space)
+    }
+}
+
+/// A page factory that writes down each page it is asked for, and makes it
+/// as the app's factory would, but in a store that keeps nothing unless a
+/// configuration is supplied. It sweeps and starts nothing.
+@MainActor
+final class SpyEngine: WebMacPageFactory {
+    private var factory: WebKitMacPageFactory { EngineComposition.pageFactory }
+    var svgRasterizer: any WebSVGRasterizer { factory.svgRasterizer }
+    var spaceStores: any WebSpaceStores { factory.spaceStores }
+
+    func spellingFollows(writing: Bool, pages: [any WebMacPage]) {
+        factory.spellingFollows(writing: writing, pages: pages)
+    }
+
+    func ruleListStore() -> (any WebRuleListStore)? { factory.ruleListStore() }
+
+    /// The source a page was asked for with; a supplied configuration is in `Call`.
+    enum Source: Equatable {
+        case space
+        case tab(URL?)
+        case supplied
+        case child
+    }
+
+    /// One engine page asked for, and the page made.
+    struct Call {
+        let source: Source
+        let space: UUID
+        let configuration: WKWebViewConfiguration?
+        let child: (any WebChildRequest)?
+        let page: any WebMacPage
+    }
+
+    private(set) var calls: [Call] = []
+
+    func makePage(space: UUID, source: WebMacPageSource) -> any WebMacPage {
+        let page: WebKitMacPage
+        let kind: Source
+        var supplied: WKWebViewConfiguration?
+        var child: (any WebChildRequest)?
+        switch source {
+        case .space:
+            kind = .space
+            page = PageWebKitForTests.page(configuration: PageTestCase.keepingNothing())
+        case .tab(let url):
+            kind = .tab(url)
+            page = PageWebKitForTests.page(configuration: PageTestCase.keepingNothing())
+        case .child(let request):
+            kind = .child
+            child = request
+            // A translated request carries the child's configuration;
+            // a contract-only request gets a blank fixture configuration.
+            if let request = request as? WebKitChildRequest {
+                supplied = request.configuration
+                page = PageWebKitForTests.page(configuration: request.configuration)
+            } else {
+                page = PageWebKitForTests.page(configuration: PageTestCase.keepingNothing())
+            }
+        case .supplied(let handle):
+            kind = .supplied
+            supplied = (handle as! WebKitExtensionPageConfiguration).configuration
+            page = PageWebKitForTests.page(configuration: supplied!, extensionPage: true)
+        }
+        calls.append(Call(source: kind, space: space, configuration: supplied, child: child, page: page))
+        return page
+    }
+
+    func downloadStarter(space: UUID) -> any WebDownloadStarting {
+        factory.downloadStarter(space: space)
+    }
+}
+
+/// A website's request for a window, as a test makes one: an address and
+/// no size, with nothing WebKit made behind it.
+@MainActor
+final class TestChildRequest: WebChildRequest {
+    let navigation = WebNavigation(request: URLRequest(url: URL(string: "https://eglu-tests.invalid/child")!),
+                                   sourceOrigin: .opaque, targetIsMainFrame: nil, kind: .other, modifiers: [],
+                                   buttonNumber: 0, requestsDownload: false, isServerRedirect: false,
+                                   contentRuleRedirect: nil, sourceIsMainFrame: true)
+    let features = WebWindowFeatures(width: nil, height: nil)
+}

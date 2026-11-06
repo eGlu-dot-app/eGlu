@@ -1,4 +1,4 @@
-import Engines
+import WritingServiceKit
 import Foundation
 import NaturalLanguage
 import PadCore
@@ -18,10 +18,10 @@ final class WritingChecker {
 
     private static let log = Logger(subsystem: "net.taehee.safience", category: "Writing")
 
-    private var grammar: Grammar?
+    private var grammar: (any GrammarService)?
     /// The settings the linter was made with, to keep a change that makes
     /// no difference from rebuilding its dictionaries.
-    private var made: GrammarSettings?
+    private var made: WritingConfiguration?
     /// The last change on its way to the linter (settings, words, a lint
     /// ignored): a lint waits for it, so a word just added or a rule just
     /// turned off already counts in the answer the card's action asks for.
@@ -41,8 +41,8 @@ final class WritingChecker {
             changing = nil
             return
         }
-        let settings = GrammarSettings(
-            dialect: Dialect(rawValue: preferences.writingDialect) ?? .american,
+        let settings = WritingConfiguration(
+            dialect: WritingDialect(rawValue: preferences.writingDialect) ?? .american,
             rules: preferences.writingRules,
             words: WritingWords.load())
         guard settings != made else { return }
@@ -52,7 +52,7 @@ final class WritingChecker {
             return
         }
         do {
-            grammar = try Grammar(settings: settings)
+            grammar = try Self.engine.makeService(settings)
         } catch {
             Self.log.error("grammar engine would not start: \(String(describing: error))")
             return
@@ -72,10 +72,10 @@ final class WritingChecker {
     /// says is not English (a guess surer than 0.6) is not sent, so a
     /// paragraph of Korean draws no English underlines. Offsets in what
     /// comes back are for the text as given.
-    func lint(_ text: String) async -> [GrammarLint] {
+    func lint(_ text: String) async -> [WritingIssue] {
         await changing?.value
         guard let grammar else { return [] }
-        var lints: [GrammarLint] = []
+        var lints: [WritingIssue] = []
         var offset = 0
         for paragraph in text.split(separator: "\n", omittingEmptySubsequences: false) {
             // Checking turned off while the paragraphs before were linted:
@@ -131,16 +131,16 @@ final class WritingChecker {
     }
 
     /// New settings for the linter there is, after any still on their way.
-    private func configure(_ settings: GrammarSettings) {
+    private func configure(_ settings: WritingConfiguration) {
         change { grammar in
-            do { try await grammar.configure(settings: settings) } catch {
+            do { try await grammar.configure(settings) } catch {
                 Self.log.error("grammar engine would not take the settings: \(String(describing: error))")
             }
         }
     }
 
     /// A change to the linter there is, made after the ones before it.
-    private func change(_ make: @escaping @MainActor @Sendable (Grammar) async -> Void) {
+    private func change(_ make: @escaping @MainActor @Sendable (any GrammarService) async -> Void) {
         guard let grammar else { return }
         let before = changing
         changing = Task {
@@ -162,14 +162,14 @@ final class WritingChecker {
     /// Harper's rules, for Settings › Writing; empty if the engine can't say.
     /// Harper builds every rule to list them, so this is for a screen that
     /// shows them, not for a check made at launch.
-    nonisolated static func rules() -> [GrammarRule] {
-        (try? Grammar.rules()) ?? []
+    nonisolated static func rules() -> [WritingRule] {
+        (try? engine.rules()) ?? []
     }
 
     /// Whether this device can check at all: the engine is linked and takes
     /// its default settings. Quick, as making a Grammar is: its dictionary
     /// and rules wait for a first lint, which this never asks for.
     nonisolated static var canCheck: Bool {
-        (try? Grammar()) != nil
+        engine.canCheck
     }
 }

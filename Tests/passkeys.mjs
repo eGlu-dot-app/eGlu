@@ -66,10 +66,12 @@ function page(answer = () => null, { top = true, ancestors = [], timers = null, 
   ours.top = top ? ours : {};
   ours.addEventListener = events.addEventListener.bind(events);
   ours.dispatchEvent = events.dispatchEvent.bind(events);
-  ours.webkit = { messageHandlers: { egluPasskeys: { postMessage(message) {
+  // egluBridge, as the app puts it in front of the bridge (Page.bridged).
+  ours.egluBridge = { post(channel, message) { this.request(channel, message); }, request(channel, message) {
+    if (channel !== 'egluPasskeys') throw new TypeError('no channel ' + channel);
     sent.push(message);
     return Promise.resolve(answer(message));
-  } } } };
+  } };
   // In either order, as WebKit runs the two worlds' scripts in no set order.
   if (bridgeFirst) vm.runInContext(written(bridgeScript), ours);
   vm.runInContext(written(pageScript), own);

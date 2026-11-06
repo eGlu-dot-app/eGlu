@@ -20,7 +20,8 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const engine = process.argv[2] || 'chromium';
 const playwright = await import(process.env.PLAYWRIGHT || 'playwright');
-const source = fs.readFileSync(path.join(root, 'PadCore/Sources/PadCore/Scripts/measure.js'), 'utf8');
+const source = fs.readFileSync(path.join(root, 'WebKitEngine/Sources/WebKitSupport/Scripts/eglu-bridge.js'), 'utf8')
+  + '\n' + fs.readFileSync(path.join(root, 'PadCore/Sources/PadCore/Scripts/measure.js'), 'utf8');
 
 
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript' };

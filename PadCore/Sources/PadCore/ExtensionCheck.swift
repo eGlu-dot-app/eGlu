@@ -185,7 +185,8 @@ public struct ExtensionEvidence: Equatable, Sendable {
     /// From reading the code: APIs used with no test first, that nothing
     /// on this Mac answers.
     public var mayNotWork: [String] = []
-    /// It asked for `cookies`, which no extension gets (hands-off).
+    /// It asked for `cookies`, which it gets only once the person allows
+    /// them for it (its settings).
     public var cookiesKeptBack = false
     /// Its entry in the list of extensions tried by hand for this release.
     public var tried: Tried?
@@ -265,7 +266,7 @@ public struct ExtensionVerdict: Equatable, Sendable {
             // What was seen not to work isn't said again as what may not.
             let seen = Set(evidence.problems.map { Self.words(for: $0.api) })
             lines += evidence.mayNotWork.map { Self.words(for: $0) }.filter { !seen.contains($0) }.map { String(format: BrowserText.localized("May not work: %@."), $0) }
-            if evidence.cookiesKeptBack { lines.append(BrowserText.localized("Can't read cookies: kept from Google's sign-in.")) }
+            if evidence.cookiesKeptBack { lines.append(BrowserText.localized("Can't read cookies until you allow them in its settings.")) }
         }
         title = Self.titles[status] ?? ""
         self.lines = lines

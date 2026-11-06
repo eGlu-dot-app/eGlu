@@ -84,6 +84,12 @@ final class DesktopPad: UIView, UIGestureRecognizerDelegate {
     private lazy var click = UITapGestureRecognizer(target: self, action: #selector(clicked(_:)))
     private lazy var rightClick = UITapGestureRecognizer(target: self, action: #selector(rightClicked(_:)))
     private lazy var hold = UILongPressGestureRecognizer(target: self, action: #selector(held(_:)))
+    /// Each touch as it lands, before any of the others can tell what it is.
+    private let landing = TouchDown(target: nil, action: nil)
+    /// Whether the fingers now down stopped a glide as they landed: then
+    /// they click, hold and right-click nothing, as a touch that stops a
+    /// scroll view presses nothing. Moved on, they move the cursor or scroll.
+    private var caught = false
 
     init(page: Page, size: CGSize) {
         self.page = page
@@ -108,6 +114,14 @@ final class DesktopPad: UIView, UIGestureRecognizerDelegate {
             recognizer.delegate = self
             addGestureRecognizer(recognizer)
         }
+        // The others hear of a touch only once it moves, holds or lifts; a
+        // finger put down to stop the page gliding does none of that.
+        landing.landed = { [weak self] _ in
+            guard let self else { return }
+            self.caught = self.glide != nil
+            self.stopGlide()
+        }
+        addGestureRecognizer(landing)
 
         addSubview(typing)
         addSubview(cursor)
@@ -520,6 +534,7 @@ final class DesktopPad: UIView, UIGestureRecognizerDelegate {
     }
 
     @objc private func clicked(_ tap: UITapGestureRecognizer) {
+        guard !caught else { return }
         stopGlide()
         let at = tap.location(in: self)
         let count = clicks.click(at: CACurrentMediaTime(), x: Double(at.x), y: Double(at.y))
@@ -529,6 +544,7 @@ final class DesktopPad: UIView, UIGestureRecognizerDelegate {
     }
 
     @objc private func rightClicked(_ tap: UITapGestureRecognizer) {
+        guard !caught else { return }
         secondaryClick()
     }
 
@@ -540,6 +556,7 @@ final class DesktopPad: UIView, UIGestureRecognizerDelegate {
     /// Touch and hold, then move: the button goes down where the cursor is
     /// and stays down until the finger lifts. A light tap says it is down.
     @objc private func held(_ press: UILongPressGestureRecognizer) {
+        guard !caught || holding else { return }
         let at = press.location(in: self)
         switch press.state {
         case .began:

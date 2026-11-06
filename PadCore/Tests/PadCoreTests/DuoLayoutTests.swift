@@ -37,3 +37,75 @@ struct DuoLayoutTests {
         #expect(sidebar(fold: fold) == DuoLayout.Sidebar(width: 248, gap: 8))
     }
 }
+
+/// The strip's bands over a page that runs on under it (Docs/iPhoneDuoDesign.md §9).
+struct StripBandsTests {
+    private func bands(_ frames: [CGRect], pageTop: CGFloat = 0) -> [[CGFloat]] {
+        DuoLayout.stripBands(of: frames, pageTop: pageTop, pageHeight: 586, margin: 4)
+    }
+
+    @Test func `each frame's top and bottom, a margin further out`() {
+        #expect(bands([CGRect(x: 395, y: 180, width: 46, height: 96)]) == [[176, 280]])
+    }
+
+    @Test func `overlapping and touching frames are one band, top first`() {
+        let frames = [
+            CGRect(x: 382, y: 0, width: 84, height: 174),
+            CGRect(x: 395, y: 284, width: 46, height: 52),
+            CGRect(x: 395, y: 178, width: 46, height: 100),
+            CGRect(x: 399.7, y: 29.3, width: 37, height: 37),
+        ]
+        #expect(bands(frames) == [[-4, 340]])
+    }
+
+    @Test func `apart, two bands`() {
+        let frames = [CGRect(x: 395, y: 180, width: 46, height: 96), CGRect(x: 395, y: 542, width: 46, height: 102)]
+        #expect(bands(frames) == [[176, 280], [538, 648]])
+    }
+
+    @Test func `in the page's points, wholly outside it left out`() {
+        let frames = [CGRect(x: 395, y: 10, width: 46, height: 20), CGRect(x: 395, y: 700, width: 46, height: 40),
+                      CGRect(x: 395, y: 200, width: 46, height: 40), CGRect(x: 395, y: 300, width: 46, height: 0)]
+        #expect(bands(frames, pageTop: 40) == [[156, 204]])
+    }
+
+    @Test func `encoded for the page's script`() throws {
+        let strip = DuoLayout.Strip(side: .right, width: 84, bands: [[0, 340], [538, 648]], ramp: 44)
+        let json = String(decoding: try JSONEncoder().encode(strip), as: UTF8.self)
+        #expect(json.contains("\"side\":\"right\""))
+        #expect(json.contains("\"bands\":[[0,340],[538,648]]"))
+        #expect(json.contains("\"known\":true"))
+    }
+
+    private let back = CGRect(x: 395, y: 180, width: 46, height: 46)
+    private let forward = CGRect(x: 395, y: 230, width: 46, height: 46)
+    private let tabs = CGRect(x: 395, y: 542, width: 46, height: 102)
+
+    @Test func `the items and the regions above them, where all the items have a place`() {
+        let status = CGRect(x: 382, y: 0, width: 84, height: 160)
+        let cover = DuoLayout.stripBands(items: [back, forward, tabs], occlusions: [status], pageTop: 0, pageHeight: 586, margin: 4)
+        #expect(cover.known)
+        #expect(cover.bands == [[-4, 164], [176, 280], [538, 648]])
+    }
+
+    @Test func `without the regions, the strip above the topmost item is theirs`() {
+        let cover = DuoLayout.stripBands(items: [back, forward, tabs], occlusions: nil, pageTop: 0, pageHeight: 586, margin: 4)
+        #expect(cover.known)
+        #expect(cover.bands == [[-4, 280], [538, 648]])
+    }
+
+    @Test(arguments: [CGRect?.none, .some(.zero)])
+    func `an item without a place makes the whole strip one band`(missing: CGRect?) {
+        let cover = DuoLayout.stripBands(items: [back, forward, missing, tabs], occlusions: [], pageTop: 0, pageHeight: 585.5,
+                                         margin: 4)
+        #expect(!cover.known)
+        #expect(cover.bands == [[0, 586]])
+    }
+
+    @Test func `no items at all is not known`() {
+        let cover = DuoLayout.stripBands(items: [], occlusions: [CGRect(x: 382, y: 0, width: 84, height: 160)],
+                                         pageTop: 0, pageHeight: 586, margin: 4)
+        #expect(!cover.known)
+        #expect(cover.bands == [[0, 586]])
+    }
+}

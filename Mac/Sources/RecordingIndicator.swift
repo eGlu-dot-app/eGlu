@@ -1,6 +1,5 @@
 import AppKit
 import SwiftUI
-import WebKit
 
 /// "● Loom is recording your screen  Stop": a small pill of eGlu's own,
 /// floating at the foot of the screen for as long as an extension records
@@ -34,7 +33,7 @@ final class RecordingIndicator: ObservableObject {
     private var panel: PillPanel?
     /// Offscreen pages lent to the pill while they record, with where each
     /// came from, to be given back.
-    private var hosted: [(web: WKWebView, home: NSView?)] = []
+    private var hosted: [(web: NSView, home: NSView?)] = []
 
     /// The lines as they are now: shown when there are any, or a page is
     /// lent to the pill; gone when there are none.
@@ -51,7 +50,7 @@ final class RecordingIndicator: ObservableObject {
     /// An offscreen document's page, lent to the pill so that WebKit counts
     /// it as seen while it records. Asked again for the same page, nothing
     /// more happens.
-    func host(_ web: WKWebView) {
+    func host(_ web: NSView) {
         guard !hosted.contains(where: { $0.web === web }) else { return }
         hosted.append((web, web.superview))
         let panel = ownPanel()
@@ -61,7 +60,7 @@ final class RecordingIndicator: ObservableObject {
     }
 
     /// Given back to where it was, or to nowhere if it had no home.
-    func release(_ web: WKWebView) {
+    func release(_ web: NSView) {
         guard let index = hosted.firstIndex(where: { $0.web === web }) else { return }
         let home = hosted.remove(at: index).home
         web.removeFromSuperview()
@@ -119,12 +118,12 @@ private final class PillPanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 
-    func lend(_ web: WKWebView) {
+    func lend(_ web: NSView) {
         web.frame = lending.bounds
         lending.addSubview(web)
     }
 
-    func holds(_ web: WKWebView) -> Bool {
+    func holds(_ web: NSView) -> Bool {
         web.superview === lending
     }
 

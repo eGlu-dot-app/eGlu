@@ -1,4 +1,5 @@
 import PadCore
+import WebEngineCore
 #if os(macOS)
 import AppKit
 #else
@@ -20,7 +21,7 @@ typealias SiteImage = UIImage
 /// bookmarks file's own icons (Chrome's) are kept the same way. Files are
 /// written and removed away from the main thread, one at a time and in
 /// order, and an icon is announced once its file is written. An icon drawn as SVG is drawn into a
-/// picture by WebKit (SVGRaster), and a second time in its dark look where
+/// picture by its rasterizer (WebSVGRasterizer), and a second time in its dark look where
 /// it has one, which a dark screen shows. The app fetches them itself, not
 /// the page, with no cookies and nothing kept by the system, and only ever
 /// takes a picture back. A site without one shows its first letter
@@ -54,6 +55,7 @@ final class SiteIcons: ObservableObject {
     /// The pixel size kept: sharp at 48 points, the largest the app draws.
     nonisolated private static let side: CGFloat = 96
 
+    private let rasterizer: any WebSVGRasterizer
     private let folder: URL
     private let formerFolder: URL
     /// Where icons were kept before, in the Caches folder, which the system
@@ -63,7 +65,8 @@ final class SiteIcons: ObservableObject {
     /// `data` is the app's data folder; `caches` the Caches folder icons
     /// were kept in before, or nil to leave it alone (a Mac test copy's,
     /// whose Caches folder is the real app's).
-    init(data: URL, caches: URL?) {
+    init(data: URL, caches: URL?, rasterizer: any WebSVGRasterizer) {
+        self.rasterizer = rasterizer
         folder = data.appendingPathComponent("Icons", isDirectory: true)
         formerFolder = data.appendingPathComponent("SiteIcons", isDirectory: true)
         cachedFolders = caches.map {
@@ -263,14 +266,15 @@ final class SiteIcons: ObservableObject {
             data = bytes
             declaredSVG = response.mimeType?.lowercased().contains("svg") == true
         }
-        // A drawing goes to WebKit, never to NSImage, which would draw it without its dark look.
+        // A drawing goes to the rasterizer, never to NSImage, which would draw it without its dark look.
         if declaredSVG || Self.looksLikeSVG(data) {
             guard let text = String(data: data, encoding: .utf8) else { return nil }
-            let raster = SVGRaster.shared
-            guard let light = await raster.picture(of: text, side: Int(Self.side), dark: false)
+            guard let png = await rasterizer.png(of: text, side: Int(Self.side), dark: false),
+                  let light = SiteImage(data: png)
             else { return nil }
-            let dark = SVGRaster.hasDarkLook(text)
-                ? await raster.picture(of: text, side: Int(Self.side), dark: true) : nil
+            let darkPNG = Self.hasDarkLook(text)
+                ? await rasterizer.png(of: text, side: Int(Self.side), dark: true) : nil
+            let dark = darkPNG.flatMap { SiteImage(data: $0) }
             return await Task.detached(priority: .utility) {
                 guard let light = Self.prepared(light) else { return nil as Fetched? }
                 return Fetched(light: light, dark: dark.flatMap(Self.prepared))
@@ -280,6 +284,11 @@ final class SiteIcons: ObservableObject {
             guard let picture = SiteImage(data: data).flatMap(Self.prepared) else { return nil as Fetched? }
             return Fetched(light: picture, dark: nil)
         }.value
+    }
+
+    /// Whether the drawing has a look of its own for a dark screen.
+    nonisolated private static func hasDarkLook(_ svg: String) -> Bool {
+        svg.range(of: "prefers-color-scheme", options: .caseInsensitive) != nil
     }
 
     /// An SVG file whatever its server called it: `<svg` near its start.

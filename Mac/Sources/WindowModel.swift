@@ -1,8 +1,8 @@
 import AppKit
-import Engines
+import WritingServiceKit
 import PadCore
 import SwiftUI
-import WebKit
+import WebEngineCore
 
 /// What the command bar was opened for.
 enum CommandBarPurpose: Equatable {
@@ -80,10 +80,29 @@ final class WindowModel: ObservableObject, PageHost {
     /// Where the bookmarks are, in the window's own coordinates from its
     /// top (BookmarksPanel): a click anywhere else puts them away.
     var bookmarksFrame = CGRect.null
+    /// The bookmarks bar's rows are out under its button along the top
+    /// (BarPanel): the button's frame in the window (BrowserView.place),
+    /// while they are.
+    @Published var barPanelButton: CGRect? {
+        didSet {
+            if barPanelButton == nil { barPanelFrame = .null }
+            watchBookmarkClicks()
+        }
+    }
+    /// Where the bar's rows are, as `bookmarksFrame`.
+    var barPanelFrame = CGRect.null
     private var bookmarksWatch: Any?
     /// What a command just did that leaves nothing to see, said for a
     /// moment over the page's top right (ActionToast).
     @Published var toast: ActionToast?
+    /// The card beside the pinned tile or bar bookmark the pointer rests on
+    /// (PinnedCardView): its whole name, and going back or to a split.
+    @Published private(set) var pinnedCard: PinnedCard?
+    /// The sidebar's trailing edge in the window (BrowserView.place): a
+    /// card beside a tile or a row stands past it, over the page.
+    var sidebarEdge: CGFloat = 0
+    /// The card's wait to come, or to go.
+    private var cardWait: Task<Void, Never>?
     private var toastWait: Task<Void, Never>?
     /// The peeking sidebar going back in, a moment after the pointer left it.
     private var unpeeking: Task<Void, Never>?
@@ -180,7 +199,7 @@ final class WindowModel: ObservableObject, PageHost {
         case "writingPanel":
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                 let json = #"{"start":0,"end":4,"rule":"SpellCheck","kind":"Spelling","message":"Did you mean to spell `IPTV` this way?","priority":0,"suggestions":[],"context":"IPTV"}"#
-                guard let lint = try? JSONDecoder().decode(GrammarLint.self, from: Data(json.utf8)),
+                guard let lint = try? JSONDecoder().decode(WritingIssue.self, from: Data(json.utf8)),
                       let frame = self.window?.frame, let screen = self.window?.screen ?? NSScreen.main else { return }
                 let rect = CGRect(x: frame.midX - 20, y: screen.frame.maxY - frame.midY, width: 40, height: 18)
                 WritingPanel.shared.show(lint: lint, at: rect, suggestions: ["IP's", "Int", "Iota"],
@@ -211,6 +230,8 @@ final class WindowModel: ObservableObject, PageHost {
     func disappear() {
         // Its watch on clicks goes with it: AppKit keeps a monitor for the app's life.
         bookmarksOpen = false
+        barPanelButton = nil
+        putCardAway()
         attach(nil)
         setPartner(nil)
         // At once: the window is going, and won't be here to look later.
@@ -301,17 +322,17 @@ final class WindowModel: ObservableObject, PageHost {
     /// The page's state, read again for the sidebar and the card.
     func refresh() {
         let record = tab
-        let view = page?.view
+        let state = page?.state
         url = page?.displayURL ?? record?.url
-        title = view?.title.flatMap { $0.isEmpty ? nil : $0 } ?? record?.label ?? ""
-        loading = view?.isLoading ?? false
-        progress = view?.estimatedProgress ?? 0
-        canGoBack = view?.canGoBack ?? false || record.map { Session.shared.canGoBackPastReplacement($0.id) } ?? false
-        canGoForward = view?.canGoForward ?? false
-        secure = page?.failure == nil && url?.scheme == "https" && (view?.hasOnlySecureContent ?? true)
+        title = state?.title.flatMap { $0.isEmpty ? nil : $0 } ?? record?.label ?? ""
+        loading = state?.isLoading ?? false
+        progress = state?.estimatedProgress ?? 0
+        canGoBack = (state?.canGoBack ?? false) || record.map { Session.shared.canGoBackPastReplacement($0.id) } ?? false
+        canGoForward = state?.canGoForward ?? false
+        secure = page?.failure == nil && url?.scheme == "https" && (state?.hasOnlySecureContent ?? true)
         failure = page?.failure
         statusCode = page?.statusCode
-        zoom = Double(view?.pageZoom ?? 1)
+        zoom = page?.pageZoom ?? 1
         window?.title = record == nil ? (space?.name ?? "eGlu") : title
         syncPeek()
     }
@@ -328,7 +349,7 @@ final class WindowModel: ObservableObject, PageHost {
     /// The keys go to the page, as they do after a click on it; to the
     /// Peek's while one is up, since the page under it is out of reach.
     func focusPage() {
-        guard let view = peek?.page.view ?? page?.view else { return }
+        guard let view = peek?.page.surface.view ?? page?.surface.view else { return }
         DispatchQueue.main.async { [weak self] in self?.window?.makeFirstResponder(view) }
     }
 
@@ -336,6 +357,7 @@ final class WindowModel: ObservableObject, PageHost {
     /// window that shows it comes forward.
     func select(_ tab: UUID) {
         let session = Session.shared
+        putCardAway()
         if let other = session.window(showing: tab), other !== self {
             other.window?.makeKeyAndOrderFront(nil)
             return
@@ -347,6 +369,8 @@ final class WindowModel: ObservableObject, PageHost {
 
     func showSpace(_ id: UUID) {
         guard let space = Session.shared.workspace.space(id), id != spaceID || tabID == nil else { return }
+        putCardAway()
+        barPanelButton = nil
         var tab = space.selected
         if let shown = tab, let other = Session.shared.window(showing: shown), other !== self { tab = nil }
         withAnimation(.bar) { show(tab: tab, inSpace: id) }
@@ -442,7 +466,7 @@ final class WindowModel: ObservableObject, PageHost {
             withAnimation(.bar) { show(tab: record.id, inSpace: spaceID) }
             newTabOpened = record.id
         } else if replacing, let record = tab, record.id == newTabOpened, !record.isPinned, record.url != url,
-                  Extensions.shared.isNewTabPage(record.url, in: spaceID), session.pages.live[record.id]?.view.canGoBack != true {
+                  Extensions.shared.isNewTabPage(record.url, in: spaceID), session.pages.live[record.id]?.state.canGoBack != true {
             // The new tab ⌘T just opened, another extension's page still
             // where it opened (a yes to the question as it opened): this
             // one's page in its place, not a second new tab. Any other tab
@@ -510,12 +534,13 @@ final class WindowModel: ObservableObject, PageHost {
     /// While the bookmarks are out, every click in the window is watched, not
     /// taken, as clickWatch watches for the pane beside.
     private func watchBookmarkClicks() {
-        if bookmarksOpen, bookmarksWatch == nil {
+        let out = bookmarksOpen || barPanelButton != nil
+        if out, bookmarksWatch == nil {
             bookmarksWatch = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] event in
                 self?.clickedAway(event)
                 return event
             }
-        } else if !bookmarksOpen, let watch = bookmarksWatch {
+        } else if !out, let watch = bookmarksWatch {
             NSEvent.removeMonitor(watch)
             bookmarksWatch = nil
         }
@@ -523,18 +548,25 @@ final class WindowModel: ObservableObject, PageHost {
 
     /// A click in the window off the bookmarks, on the page, the address or
     /// a pinned tab, puts them away, as one outside a popover does; the
-    /// click still goes where it was meant to.
+    /// click still goes where it was meant to. The same for the bar's rows
+    /// along the top, but for a click on their own button, which puts them
+    /// away itself.
     private func clickedAway(_ event: NSEvent) {
-        guard bookmarksOpen, let window, event.window === window, let content = window.contentView else { return }
+        guard let window, event.window === window, let content = window.contentView else { return }
         let point = event.locationInWindow
         // The window counts from its foot, SwiftUI from its top.
-        guard !bookmarksFrame.contains(CGPoint(x: point.x, y: content.bounds.height - point.y)) else { return }
-        DispatchQueue.main.async { [weak self] in withAnimation(.bar) { self?.bookmarksOpen = false } }
+        let spot = CGPoint(x: point.x, y: content.bounds.height - point.y)
+        if bookmarksOpen, !bookmarksFrame.contains(spot) {
+            DispatchQueue.main.async { [weak self] in withAnimation(.bar) { self?.bookmarksOpen = false } }
+        }
+        if let button = barPanelButton, !barPanelFrame.contains(spot), !button.contains(spot) {
+            DispatchQueue.main.async { [weak self] in withAnimation(.bar) { self?.barPanelButton = nil } }
+        }
     }
 
     private func clicked(_ event: NSEvent) {
-        guard let partner, let window, event.window === window, partner.view.window === window else { return }
-        let view = partner.view
+        guard let partner, let window, event.window === window, partner.surface.view.window === window else { return }
+        let view = partner.surface.view
         guard view.bounds.contains(view.convert(event.locationInWindow, from: nil)) else { return }
         // What lies over the page (the command bar, the find bar) is not the page: a click there moves nothing.
         if let hit = window.contentView?.hitTest(event.locationInWindow), hit !== view, !hit.isDescendant(of: view) { return }
@@ -576,12 +608,11 @@ final class WindowModel: ObservableObject, PageHost {
     }
 
     func back() {
-        if let page, !page.view.canGoBack, Session.shared.wentBackPastReplacement(page.tab) { return }
-        page?.view.goBack()
+        page?.goBack()
     }
 
     func forward() {
-        page?.view.goForward()
+        page?.goForward()
     }
 
     func reload() {
@@ -593,7 +624,7 @@ final class WindowModel: ObservableObject, PageHost {
     }
 
     func stop() {
-        page?.view.stopLoading()
+        page?.stopLoading()
     }
 
     // MARK: Tabs
@@ -609,9 +640,9 @@ final class WindowModel: ObservableObject, PageHost {
         focusPage()
     }
 
-    /// Arc's Clear: every tab of the space that isn't pinned.
+    /// Arc's Clear: every tab of the space that isn't pinned or in the bookmarks bar.
     func clearTabs() {
-        let ids = space?.tabs.filter { !$0.isPinned }.map(\.id) ?? []
+        let ids = space?.otherTabs.map(\.id) ?? []
         requestCloseTabs(ids)
     }
 
@@ -719,6 +750,8 @@ final class WindowModel: ObservableObject, PageHost {
         withAnimation(.bar) {
             session.change { workspace in
                 guard let isPinned = workspace.tab(id)?.isPinned else { return }
+                // From the bar's row into the list: out of the bar, its bookmark staying.
+                if !pinned { workspace.separateFromBar(id) }
                 if pinned != isPinned, !(pinned ? workspace.pin(id) : workspace.unpin(id)) { return }
                 guard let tabs = workspace.space(destination)?.tabs, target != id else { return }
                 let others = tabs.filter { $0.id != id }
@@ -763,6 +796,121 @@ final class WindowModel: ObservableObject, PageHost {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.writeObjects([link as NSURL])
         NSPasteboard.general.setString(link.absoluteString, forType: .string)
+    }
+
+    // MARK: The bookmarks bar
+
+    /// A bookmark of the bar in its own tab, which stands in the bar's row:
+    /// the one open for it already, or a new one. With ⌘ held, its page in an
+    /// ordinary new tab instead, as a ⌘-click on a link does.
+    func openFromBar(_ bookmark: UUID) {
+        let session = Session.shared
+        pinnedCard = nil
+        guard let url = space.flatMap({ Bookmarks.find(bookmark, in: $0.bookmarks)?.url }) else { return }
+        HistoryRecorder.shared.expect(.bookmark, url)
+        if NSEvent.modifierFlags.contains(.command) {
+            open(url, newTab: true)
+            return
+        }
+        guard let tab = session.change({ $0.openFromBar(bookmark, in: spaceID) }) else { return }
+        // As a tab chosen in the sidebar: the window that shows it already comes forward.
+        withAnimation(.bar) { select(tab) }
+    }
+
+    /// A tab into the bar, at the end of `folder` (nil: the bar itself) or before `before` there.
+    func addToBar(_ tab: UUID, into folder: UUID? = nil, before: UUID? = nil) {
+        withAnimation(.bar) { _ = Session.shared.change { $0.addToBar(tab, into: folder, before: before) } }
+    }
+
+    /// One of the bar's bookmarks or folders to another place in it.
+    func moveInBar(_ bookmark: UUID, into folder: UUID?, before: UUID?) {
+        withAnimation(.bar) { Session.shared.change { $0.moveBookmark(bookmark, into: folder, before: before, in: spaceID) } }
+    }
+
+    /// A bar tab out of the bar's row, among the others; its bookmark stays.
+    func separateFromBar(_ tab: UUID) {
+        withAnimation(.bar) { _ = Session.shared.change { $0.separateFromBar(tab) } }
+    }
+
+    /// A bookmark or folder out of the bar; a tab open for it stays, among the others.
+    func removeFromBar(_ bookmark: UUID) {
+        withAnimation(.bar) { Session.shared.change { $0.removeBookmark(bookmark, in: spaceID) } }
+    }
+
+    /// A folder in the bar's `parent`, its name asked for at once.
+    func newFolderInBar(in parent: UUID) {
+        guard let id = Session.shared.change({ $0.addFolder(named: "", in: parent, of: spaceID) }) else { return }
+        renameInBar(id)
+    }
+
+    /// A bookmark's or a folder's name in the bar, asked for in a sheet.
+    func renameInBar(_ id: UUID) {
+        guard let window, let item = space.flatMap({ Bookmarks.find(id, in: $0.bookmarks) }) else { return }
+        let space = spaceID
+        let field = NSTextField(string: item.label)
+        field.frame = NSRect(x: 0, y: 0, width: 260, height: 24)
+        let alert = NSAlert()
+        alert.messageText = item.isFolder ? String(localized: "Rename Folder") : String(localized: "Rename Bookmark")
+        alert.accessoryView = field
+        alert.addButton(withTitle: String(localized: "Rename"))
+        alert.addButton(withTitle: String(localized: "Cancel"))
+        alert.window.initialFirstResponder = field
+        alert.beginSheetModal(for: window) { answer in
+            guard answer == .alertFirstButtonReturn else { return }
+            Session.shared.change { $0.renameBookmark(id, to: field.stringValue, in: space) }
+        }
+    }
+
+    /// Whether a page can open beside the tab on screen: an ordinary tab.
+    var canSplitBeside: Bool {
+        guard let tabID else { return false }
+        return space?.otherTabs.contains { $0.id == tabID } == true
+    }
+
+    /// `url` in a new tab beside the tab on screen, on its right, as Split
+    /// View: a pinned tab's page or a bar bookmark's, the pinned tab itself
+    /// staying where it is.
+    func splitBeside(_ url: URL) {
+        pinnedCard = nil
+        guard canSplitBeside, let tab = tabID,
+              let new = Session.shared.change({ $0.splitWithNewTab(tab, url: url) }) else { return }
+        withAnimation(.bar) { show(tab: new, inSpace: spaceID) }
+        focusPage()
+    }
+
+    // MARK: Pinned cards
+
+    /// The pointer came onto a pinned tile or a bar row: its card comes
+    /// after a moment, as a tooltip does, or at once while another's is out.
+    func pointer(on card: PinnedCard) {
+        cardWait?.cancel()
+        if pinnedCard != nil {
+            pinnedCard = card
+            return
+        }
+        cardWait = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled, let self else { return }
+            withAnimation(.hover) { self.pinnedCard = card }
+        }
+    }
+
+    /// The pointer left a tile, a row or the card (`inside` false), or came
+    /// onto the card (true): it goes once the pointer is off both a moment,
+    /// long enough to cross the gap between them.
+    func pointerOnCard(_ inside: Bool) {
+        cardWait?.cancel()
+        guard !inside else { return }
+        cardWait = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(200))
+            guard !Task.isCancelled, let self else { return }
+            withAnimation(.hover) { self.pinnedCard = nil }
+        }
+    }
+
+    func putCardAway() {
+        cardWait?.cancel()
+        pinnedCard = nil
     }
 
     /// A bookmark's page: here, or in a new tab with ⌘ held, as a ⌘-click on a link does.
@@ -830,11 +978,12 @@ final class WindowModel: ObservableObject, PageHost {
     }
 
     /// Whether the Peek can open beside the tab it stands over: an ordinary
-    /// tab, with the keys, in no split yet.
+    /// tab (not pinned, not in the bookmarks bar), with the keys, in no split yet.
     var peekCanSplit: Bool {
         guard let opener = peek?.opener, opener === page else { return false }
         let workspace = Session.shared.workspace
-        return workspace.tab(opener.tab)?.isPinned == false && workspace.split(containing: opener.tab) == nil
+        return workspace.spaceID(of: opener.tab).flatMap(workspace.space)?.otherTabs.contains { $0.id == opener.tab } == true
+            && workspace.split(containing: opener.tab) == nil
     }
 
     /// The Peek's page in a tab of its own, as it is, right after the tab it
@@ -844,11 +993,11 @@ final class WindowModel: ObservableObject, PageHost {
         let beside = split && peekCanSplit
         guard let peek, let opener = peek.opener, let space = session.workspace.spaceID(of: opener.tab),
               let child = peek.handOver() else { return }
-        let url = child.view.url ?? peek.url
+        let url = child.state.url ?? peek.url
         session.pages.adopt(child)
         let opened = session.change { workspace -> Bool in
             guard workspace.openTab(url, in: space, after: opener.tab, id: child.tab) != nil else { return false }
-            workspace.record(child.tab, url: nil, title: child.view.title)
+            workspace.record(child.tab, url: nil, title: child.state.title)
             if beside { workspace.split(opener.tab, with: child.tab) }
             return true
         }
@@ -866,7 +1015,7 @@ final class WindowModel: ObservableObject, PageHost {
     /// Whether Handoff can be asked for here: on in Settings, on a Mac with
     /// Apple Intelligence, for a page that isn't hands-off.
     var canHandoff: Bool {
-        canHandoffFiles && page?.view.url != nil && page?.isHandsOff == false
+        canHandoffFiles && page?.state.url != nil && page?.isHandsOff == false
     }
 
     /// Whether a file can be handed off from here: a chosen or dropped one,
@@ -902,7 +1051,7 @@ final class WindowModel: ObservableObject, PageHost {
                 chosen = file
             } else {
                 // Asked after the wait: the page may have gone, or another taken its place.
-                guard let page, self.page === page, !page.isHandsOff, page.view.url != nil else { return }
+                guard let page, self.page === page, !page.isHandsOff, page.state.url != nil else { return }
                 chosen = page
             }
             handoffChoosing = false
@@ -999,9 +1148,9 @@ final class WindowModel: ObservableObject, PageHost {
     /// A developer tool's button or key. WebKit opens the inspector itself
     /// where it answers the private calls; where it doesn't, the way is
     /// Safari's Develop menu, said once in a toast.
-    func showInspector(_ part: WebInspector.Part) {
-        guard let view = toolsPage?.view else { return }
-        if !WebInspector.show(part, for: view) {
+    func showInspector(_ part: WebDeveloperTool) {
+        guard let page = toolsPage else { return }
+        if !page.showDeveloperTool(part) {
             show(ActionToast(symbol: "hammer", text: WebInspector.unavailable))
         }
     }
@@ -1143,9 +1292,9 @@ final class WindowModel: ObservableObject, PageHost {
             if let window { Session.shared.chooseBookmarksFile(into: spaceID, in: window) }
         case .inspector: showInspector(.inspector)
         case .console: showInspector(.console)
-        case .selectElement: showInspector(.elements)
+        case .selectElement: showInspector(.elementSelection)
         case .elementPicture: elementPicture()
-        case .reloadOrigin: toolsPage?.view.reloadFromOrigin()
+        case .reloadOrigin: toolsPage?.reloadFromOrigin()
         case .measure: page?.toggleMeasuring()
         case .developerMode: toggleDeveloperMode()
         case .diagnostics, .siteMode, .linkMenu: break
@@ -1222,7 +1371,7 @@ final class WindowModel: ObservableObject, PageHost {
     /// "Handoff Linked File" in the page's menu: fetched through the
     /// tab's own view and read as the document it is.
     func page(_ page: Page, handOffFileAt url: URL) {
-        startHandoff(source: DocumentSource(link: url, view: page.view))
+        startHandoff(source: DocumentSource(link: url, downloads: page.downloadStarter))
     }
 
     // MARK: PageHost
@@ -1242,28 +1391,27 @@ final class WindowModel: ObservableObject, PageHost {
 
     func isShowing(_ page: Page) -> Bool {
         (page === self.page || page === partner) && window?.isVisible == true
-            && page.view.window === window && !page.view.isHiddenOrHasHiddenAncestor
+            && page.surface.view.window === window && !page.surface.view.isHiddenOrHasHiddenAncestor
     }
 
-    func page(_ page: Page, open configuration: WKWebViewConfiguration, for action: WKNavigationAction,
-              features: WKWindowFeatures) -> WKWebView? {
+    func page(_ page: Page, openChild request: any WebChildRequest) -> Page? {
         // A window with a size asked for is a pop-up: a sign-in, a share
         // dialog. It opens in a Peek over its page, and closes by itself
         // when done; from a page not on screen here, over this window.
-        if features.width != nil || features.height != nil {
+        if request.features.width != nil || request.features.height != nil {
             if page.canPeek, page === self.page || page === partner {
-                return page.openPeek(action.request.url, configuration: configuration,
-                                     width: features.width?.doubleValue, height: features.height?.doubleValue).page.view
+                return page.openPeek(request.navigation.request.url, child: request,
+                                     width: request.features.width, height: request.features.height).page
             }
-            return Popup.open(from: page, configuration: configuration, features: features, over: window)
+            return Popup.open(from: page, child: request, over: window)
         }
         // Anything else is a tab, right after the one it came from; behind
         // this one when a ⌘-click asked for it, live there with its tie to this page.
         let session = Session.shared
-        let behind = action.modifierFlags.contains(.command) && !action.modifierFlags.contains(.shift)
-        guard let id = session.change({ $0.openTab(action.request.url, in: page.space, after: behind ? behindAfter(page) : page.tab) })
+        let behind = request.navigation.modifiers.contains(.command) && !request.navigation.modifiers.contains(.shift)
+        guard let id = session.change({ $0.openTab(request.navigation.request.url, in: page.space, after: behind ? behindAfter(page) : page.tab) })
         else { return nil }
-        let child = session.pages.adopt(tab: id, space: page.space, configuration: configuration)
+        let child = session.pages.adopt(tab: id, space: page.space, child: request)
         // Its tie to the page that opened it, as a pop-up's: a sign-in's
         // window, opened as a tab, may finish that page's flow (ExtensionAuth).
         child.openedFrom = page.tab
@@ -1271,7 +1419,7 @@ final class WindowModel: ObservableObject, PageHost {
             session.change { $0.select(page.tab) }
             openedBehind = (page.tab, id)
             session.pages.enforce()
-            return child.view
+            return child
         }
         openedBehind = nil
         withAnimation(.bar) {
@@ -1282,7 +1430,7 @@ final class WindowModel: ObservableObject, PageHost {
         }
         focusPage()
         session.pages.enforce()
-        return child.view
+        return child
     }
 
     func page(_ page: Page, openInNewTab url: URL, inFront: Bool) -> Bool {

@@ -102,8 +102,8 @@ public enum Scripts {
 
     /// The measuring tool (measure.js), run once in the app's own world with
     /// `guides` (the guide and ruler settings) as its argument. It resolves
-    /// when the tool ends, and while it runs it talks through the egluMeasure
-    /// script message handler.
+    /// when the tool ends, and while it runs it talks through egluBridge on the
+    /// egluMeasure channel.
     public static let measure = load("measure", "js")
 
     /// The JSON view over a page that is JSON (json-view.js), injected at
@@ -165,6 +165,20 @@ public enum Scripts {
         let json = (try? JSONEncoder().encode(["strings": strings, "keys": keys]))
             .map { String(decoding: $0, as: UTF8.self) } ?? "{}"
         return writing.replacingOccurrences(of: writingMark, with: json)
+    }
+
+    /// The page under the iPhone Duo's strip (strip.js), for the app's own
+    /// content world: what can be pressed moved out from under the strip's
+    /// items, as Page.strip says where they are.
+    public static let strip = load("strip", "js")
+
+    /// The call that tells strip.js where the strip is, or that the page no
+    /// longer runs under one: the strip as JSON, which can't break out of it.
+    public static func strip(set strip: DuoLayout.Strip?) -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let json = strip.flatMap { try? encoder.encode($0) }.map { String(decoding: $0, as: UTF8.self) } ?? "null"
+        return "if (window.__egluStrip) window.__egluStrip.set(\(json));"
     }
 
     /// A script that can fail without taking anything else down with it.

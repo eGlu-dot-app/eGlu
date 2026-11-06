@@ -1,7 +1,9 @@
 import AppKit
+import Security
 import PadCore
 import SwiftUI
-import WebKit
+import WebEngineAppKit
+import WebEngineCore
 
 /// Apple Passwords under the sign-in box, the way Safari offers them,
 /// without the iCloud Passwords extension.
@@ -78,7 +80,7 @@ enum ApplePasswords {
             guard let program = program() else {
                 throw ApplePasswordsSession.Unavailable(errorDescription: String(localized: "Apple's Passwords helper isn't on this Mac"))
             }
-            return HelperLink(program: program)
+            return HelperLink(connection: Extensions.nativeConnection(program: program, origin: AppleHelper.origin))
         }
         // Off, or eGlu quitting: the helper is told goodbye and stopped,
         // and the key goes with it.
@@ -132,27 +134,27 @@ enum ApplePasswords {
     }
 }
 
-/// Apple's helper, run over Chrome's framing (HostPipe).
+/// Apple's helper, run over Chrome's native messaging framing.
 @MainActor
 final class HelperLink: AppleLink {
     var onMessage: (([String: Any]) -> Void)?
     var onEnd: (() -> Void)?
-    private let pipe: HostPipe
+    private let pipe: any WebNativeConnection
 
-    init(program: URL) {
-        pipe = HostPipe(program: program, origin: AppleHelper.origin)
+    init(connection: any WebNativeConnection) {
+        pipe = connection
         pipe.onMessage = { [weak self] message in
             guard let message = message as? [String: Any] else { return }
             nonisolated(unsafe) let sent = message
             DispatchQueue.main.async { MainActor.assumeIsolated { self?.onMessage?(sent) } }
         }
-        pipe.onExit = { [weak self] in
+        pipe.onEnd = { [weak self] in
             DispatchQueue.main.async { MainActor.assumeIsolated { self?.onEnd?() } }
         }
     }
 
     func start() throws { try pipe.start() }
-    func send(_ message: [String: Any]) throws { try pipe.write(message) }
+    func send(_ message: [String: Any]) throws { try pipe.send(message) }
     func stop() { pipe.stop() }
 }
 
@@ -168,7 +170,7 @@ enum ApplePasswordsForm {
     static let script = """
     (() => {
       if (window.top !== window) return;
-      const post = (body) => { try { window.webkit.messageHandlers.\(name).postMessage(body); } catch (e) {} };
+      const post = (body) => { try { globalThis.egluBridge.post("\(name)", body); } catch (e) {} };
       const kindOf = (el) => {
         if (!(el instanceof HTMLInputElement) || el.disabled || el.readOnly) return null;
         const type = (el.type || "text").toLowerCase();
@@ -223,32 +225,30 @@ enum ApplePasswordsForm {
 /// What the sign-in box script tells the Mac: the main frame's own
 /// messages, in the app's own world, on a page Apple Passwords serves.
 @MainActor
-final class ApplePasswordsHandler: NSObject, WKScriptMessageHandler {
+final class ApplePasswordsHandler {
     private weak var page: Page?
 
     init(page: Page) {
         self.page = page
     }
 
-    nonisolated func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
-        MainActor.assumeIsolated {
-            // From the document shown now: one being left as the page goes
-            // elsewhere speaks for its own site, not the new one's.
-            let origin = message.frameInfo.securityOrigin
-            guard let page, message.frameInfo.isMainFrame, message.world == Page.world, !page.isHandsOff,
-                  ApplePasswords.serves(page.view.url), origin.host.lowercased() == page.view.url?.host()?.lowercased(),
-                  origin.protocol.lowercased() == page.view.url?.scheme?.lowercased(),
-                  let body = message.body as? [String: Any], let kind = body["kind"] as? String else { return }
-            switch kind {
-            case "focus":
-                let number = { (key: String) in (body[key] as? NSNumber)?.doubleValue ?? 0 }
-                let rect = CGRect(x: number("x"), y: number("y"), width: number("width"), height: number("height"))
-                ApplePasswordsCard.shared.focused(page, field: rect, password: body["field"] as? String == "password")
-            case "blur":
-                ApplePasswordsCard.shared.left(page)
-            default:
-                break
-            }
+    func received(_ message: WebMessage) {
+        // From the document shown now: one being left as the page goes
+        // elsewhere speaks for its own site, not the new one's.
+        guard let page, message.isMainFrame, message.world == .app, !page.isHandsOff,
+              ApplePasswords.serves(page.pageURL), case let .tuple(scheme, host, _) = message.origin,
+              host.lowercased() == page.pageURL?.host()?.lowercased(),
+              scheme.lowercased() == page.pageURL?.scheme?.lowercased(),
+              let body = message.body.foundation as? [String: Any], let kind = body["kind"] as? String else { return }
+        switch kind {
+        case "focus":
+            let number = { (key: String) in (body[key] as? NSNumber)?.doubleValue ?? 0 }
+            let rect = CGRect(x: number("x"), y: number("y"), width: number("width"), height: number("height"))
+            ApplePasswordsCard.shared.focused(page, field: rect, password: body["field"] as? String == "password")
+        case "blur":
+            ApplePasswordsCard.shared.left(page)
+        default:
+            break
         }
     }
 }
@@ -299,8 +299,8 @@ final class ApplePasswordsCard: ObservableObject {
 
     /// A sign-in box has the caret: what to show under it.
     func focused(_ page: Page, field: CGRect, password: Bool) {
-        guard page.host?.isShowing(page) == true, let host = ApplePasswords.host(of: page.view.url),
-              let screen = Self.screenRect(of: field, in: page.view)
+        guard page.host?.isShowing(page) == true, let host = ApplePasswords.host(of: page.pageURL),
+              let screen = page.enginePage.coordinates?.screenRect(of: field, zoom: CGFloat(page.pageZoom * page.magnification))
         else { return }
         if showing == .pairing { return }
         let same = self.page === page && self.host == host
@@ -329,11 +329,11 @@ final class ApplePasswordsCard: ObservableObject {
                 // given up is never sent to the helper.
                 let names = await ApplePasswords.session.logins(for: host, tab: tab) {
                     !Task.isCancelled && self?.page === page && self?.host == host
-                        && page.host?.isShowing(page) == true && page.view.window != nil
+                        && page.host?.isShowing(page) == true && page.surface.view.window != nil
                 }
                 guard let self, !Task.isCancelled, self.page === page, self.host == host,
-                      page.host?.isShowing(page) == true, page.view.window != nil,
-                      ApplePasswords.host(of: page.view.url) == host
+                      page.host?.isShowing(page) == true, page.surface.view.window != nil,
+                      ApplePasswords.host(of: page.pageURL) == host
                 else { return }
                 let mine = names.filter { ApplePasswordsSession.belongs($0.sites.isEmpty ? [host] : $0.sites, to: host, wide: true) }
                 self.show(mine.isEmpty ? .none : .accounts(mine))
@@ -343,7 +343,7 @@ final class ApplePasswordsCard: ObservableObject {
             // resized, and it moves with the field.
             if same, case .offer(let site) = showing, offerShown == site { return show(.offer(site: site)) }
             let offer = ApplePasswordsOffer(store: .standard)
-            let field = ApplePasswordsOffer.Field(page: page.view.url)
+            let field = ApplePasswordsOffer.Field(page: page.pageURL)
             guard let site = offer.site(for: field, .init(appleOn: false, helper: ApplePasswords.helperHere)) ?? testSite(page) else {
                 return show(.none)
             }
@@ -355,7 +355,7 @@ final class ApplePasswordsCard: ObservableObject {
 
     private func testSite(_ page: Page) -> String? {
         #if DEBUG
-        if UserDefaults.standard.bool(forKey: "applePasswordsTest"), page.view.url?.host() == "127.0.0.1" { return "127.0.0.1" }
+        if UserDefaults.standard.bool(forKey: "applePasswordsTest"), page.pageURL?.host() == "127.0.0.1" { return "127.0.0.1" }
         #endif
         return nil
     }
@@ -397,8 +397,8 @@ final class ApplePasswordsCard: ObservableObject {
             guard let self, let resigned = self.resigned else { return }
             self.resigned = nil
             guard self.showing == .none, let page = resigned.page,
-                  page.host?.isShowing(page) == true, page.view.window != nil,
-                  ApplePasswords.host(of: page.view.url) == resigned.host
+                  page.host?.isShowing(page) == true, page.surface.view.window != nil,
+                  ApplePasswords.host(of: page.pageURL) == resigned.host
             else { return }
             self.focused(page, field: resigned.field.rect, password: resigned.field.password)
         }
@@ -496,9 +496,9 @@ final class ApplePasswordsCard: ObservableObject {
     /// accounts up once paired.
     private func finishPairing() {
         show(.none)
-        guard let page, let window = page.view.window else { return }
+        guard let page, let window = page.surface.view.window else { return }
         window.makeKeyAndOrderFront(nil)
-        window.makeFirstResponder(page.view)
+        page.surface.focus()
         if session.state == .paired, let field { focused(page, field: field.rect, password: field.password) }
     }
 
@@ -545,15 +545,6 @@ final class ApplePasswordsCard: ObservableObject {
         } else {
             window.orderFront(nil)
         }
-    }
-
-    /// A rect of the page's (CSS pixels from its top left), on screen.
-    private static func screenRect(of rect: CGRect, in view: WKWebView) -> CGRect? {
-        guard let window = view.window else { return nil }
-        let zoom = view.pageZoom * view.magnification
-        let scaled = CGRect(x: rect.minX * zoom, y: rect.minY * zoom, width: rect.width * zoom, height: rect.height * zoom)
-        let local = view.isFlipped ? scaled : CGRect(x: scaled.minX, y: view.bounds.height - scaled.maxY, width: scaled.width, height: scaled.height)
-        return window.convertToScreen(view.convert(local, to: nil))
     }
 }
 

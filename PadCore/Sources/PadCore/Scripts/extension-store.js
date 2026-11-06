@@ -19,7 +19,7 @@
   if (location.hostname !== 'chromewebstore.google.com' || window.__egluStore) return;
   var state = { installed: [], busy: null };
   var post = function (message) {
-    try { window.webkit.messageHandlers.egluStore.postMessage(message); } catch (e) {}
+    try { globalThis.egluBridge.post('egluStore', message); } catch (e) {}
   };
 
   // The address as the app reads it (ExtensionStore.id(ofPage:)).

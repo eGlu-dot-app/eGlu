@@ -373,7 +373,7 @@ final class HandoffJob {
     private static func read(_ picture: PagePicture, on page: Page, into folder: URL,
                              by time: ContinuousClock.Instant) async -> (PagePicture.Read, CGImage)? {
         await HandoffTime.value(by: time) { @MainActor () -> (PagePicture.Read, CGImage)? in
-            guard let file = try? await HandoffFetch.fetch(picture.address, with: page.view, into: folder),
+            guard let file = try? await HandoffFetch.fetch(picture.address, with: page.downloadStarter, into: folder),
                   let image = await thumbnail(of: file) else { return nil }
             let text = (try? await HandoffVision.read(image)) ?? ""
             return (PagePicture.Read(address: picture.address, text: text, block: picture.block), image)

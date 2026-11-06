@@ -5,7 +5,8 @@ import OSLog
 import PadCore
 import Security
 import SwiftUI
-import WebKit
+import WebEngineAppKit
+import WebEngineCore
 
 // Passkeys and security keys, for a browser that isn't Safari. Copied from
 // Search (github.com/driceroland/Search, MIT, its Passkeys.swift), with
@@ -17,10 +18,14 @@ import WebKit
 // (com.apple.developer.web-browser.public-key-credential), which Apple grants
 // on request and which only a build signed with a provisioning profile that
 // carries it may have (Release/mac.sh, PASSKEYS=1). Without it nothing here
-// runs: no script goes into a page, no handler is added, and pages see
-// WebKit's own navigator.credentials as they always have. Nor on a
+// runs: no script goes into a page, no channel is opened, and pages see the
+// engine's own navigator.credentials as they always have. Nor on a
 // hands-off host (HandsOff), which gets no script of eGlu's in any build:
-// Google's sign-in keeps WebKit's own, so its passkeys are left out.
+// Google's sign-in keeps the engine's own, so its passkeys are left out.
+//
+// It talks to pages only through the engine's contracts (WebEngineCore): a
+// channel in the app's world, scripts in either world, and the origin and
+// frame the engine records for each message, never one its body states.
 //
 // Left to WebKit, a site's request fails: WebKit answers navigator.credentials
 // itself only for the app's own associated domains, and hands any other
@@ -37,8 +42,8 @@ import WebKit
 // and never opens that operation: it takes the request from the page
 // (passkeys.js), checks it against the frame it came from, and hands it to
 // AuthenticationServices through the API made for browsers, with client data
-// it writes: the origin in it is the one WebKit reports for the frame, never
-// one the page states. The Mac's own sheet answers, with Touch ID and the
+// it writes: the origin in it is the one the engine reports for the frame,
+// never one the page states. The Mac's own sheet answers, with Touch ID and the
 // passkeys in iCloud Keychain or a password app, an iPhone nearby over the QR
 // code, or a security key, and what comes back goes to the page as the
 // credential WebKit would have made.
@@ -88,7 +93,7 @@ final class Passkeys: NSObject {
 
     /// Whether pages get eGlu's passkeys: in a build with the entitlement, and
     /// in a rehearsal. `defaults write net.taehee.safience passkeyRelay -bool
-    /// NO` leaves an entitled build's pages with WebKit's own instead, to tell
+    /// NO` leaves an entitled build's pages with the engine's own instead, to tell
     /// a fault of eGlu's from one of macOS's; sites' passkeys then fail as
     /// they do without the entitlement. Read once at launch: a page's scripts
     /// go in before it loads.
@@ -142,20 +147,19 @@ final class Passkeys: NSObject {
     private weak var anchor: NSWindow?
     /// The page whose request it is: a new document there, or the tab
     /// closing, ends it, so its sheet never stays over another site.
-    private weak var asker: WKWebView?
+    private weak var asker: Page?
     /// Called off by their pages before they could start.
     private var withdrawn: Set<String> = []
-    /// Requests waiting on macOS's question, each with its page's view: a new
+    /// Requests waiting on macOS's question, each with its page: a new
     /// document there (forget) lets that page's go, though it be of the
     /// same site.
     private var awaiting: [UUID: ObjectIdentifier] = [:]
 
-    /// Where a request came from, as WebKit knows it rather than as the page says.
+    /// Where a request came from, as the engine knows it rather than as the page says.
     struct Caller {
         let frame: PasskeyFrame
-        let window: NSWindow?
-        /// The page's view, for a request that waits under its field.
-        weak var web: WKWebView?
+        /// The page, for a request that waits under its field.
+        weak var page: Page?
     }
 
     func cancel(token: String?) {
@@ -163,7 +167,7 @@ final class Passkeys: NSObject {
         if let (key, waiting) = conditional.first(where: { $0.value.token == token }) {
             conditional[key] = nil
             waiting.answer(PasskeyFailure.aborted.reply)
-            list.close(for: waiting.web)
+            list.close(for: waiting.page)
             return
         }
         if token == self.token {
@@ -181,9 +185,9 @@ final class Passkeys: NSObject {
         }
         // The page in front of you only (inFront). A rehearsal from the shell
         // is always behind.
-        let focused = Self.rehearsal || Self.inFront(caller.web)
+        let focused = Self.rehearsal || Self.inFront(caller.page)
         let passed: PasskeyCheck.Passed
-        switch PasskeyCheck.verdict(for: request, from: caller.frame, focused: focused, hasView: caller.web != nil,
+        switch PasskeyCheck.verdict(for: request, from: caller.frame, focused: focused, hasView: caller.page != nil,
                                     isSuffix: Self.isSuffix) {
         case .wait:
             return answer(PasskeyFailure.wait.reply)
@@ -200,15 +204,15 @@ final class Passkeys: NSObject {
             clientData.crossOrigin = .crossOrigin
         }
 
-        if passed.underField, let web = caller.web {
-            return wait(request, passed: passed, clientData: clientData, in: web, answer: answer)
+        if passed.underField, let page = caller.page {
+            return wait(request, passed: passed, clientData: clientData, in: page, answer: answer)
         }
         // A request of the page's own, with a sheet: the one waiting under the
         // field is over, as in any browser. One from a frame leaves it, but
         // not its list over the sheet.
-        if let web = caller.web {
-            list.close(for: web)
-            if caller.frame.isMain, let waiting = conditional.removeValue(forKey: ObjectIdentifier(web)) {
+        if let page = caller.page {
+            list.close(for: page)
+            if caller.frame.isMain, let waiting = conditional.removeValue(forKey: ObjectIdentifier(page)) {
                 waiting.answer(PasskeyFailure.replaced.reply)
             }
         }
@@ -224,10 +228,10 @@ final class Passkeys: NSObject {
         let requests = request.kind == .get
             ? Self.assertion(request, rp: passed.rp, clientData: clientData)
             : Self.registration(request, rp: passed.rp, clientData: clientData)
-        let page = PasskeyCheck.origin(of: Self.committed(caller.web))
+        let pageOrigin = PasskeyCheck.origin(of: Self.committed(caller.page))
         let ticket = UUID()
-        if let web = caller.web { awaiting[ticket] = ObjectIdentifier(web) }
-        Self.ensure { [weak self, weak web = caller.web] in
+        if let page = caller.page { awaiting[ticket] = ObjectIdentifier(page) }
+        Self.ensure { [weak self, weak page = caller.page] in
             guard let self else { return }
             let current = self.awaiting.removeValue(forKey: ticket) != nil
             if let token = request.token, self.withdrawn.remove(token) != nil {
@@ -235,16 +239,16 @@ final class Passkeys: NSObject {
             }
             // macOS's question may have been on screen a while: the document
             // must still be there, the same site's, and in front.
-            guard current, let web, PasskeyCheck.origin(of: Self.committed(web)) == page, Self.inFront(web) else {
+            guard current, let page, PasskeyCheck.origin(of: Self.committed(page)) == pageOrigin, Self.inFront(page) else {
                 return answer(PasskeyFailure.notAllowed.reply)
             }
-            self.begin(requests, token: request.token, from: web, answer: answer)
+            self.begin(requests, token: request.token, from: page, answer: answer)
             self.prfKey = PasskeyReply.pageKey(request)
             self.wantedPRF = request.prf != nil
         }
     }
 
-    private func begin(_ requests: [ASAuthorizationRequest], token: String?, from web: WKWebView,
+    private func begin(_ requests: [ASAuthorizationRequest], token: String?, from page: Page,
                        answer: @escaping ([String: Any]) -> Void) {
         if let running = controller {
             let previous = self.answer
@@ -258,8 +262,8 @@ final class Passkeys: NSObject {
         self.controller = controller
         self.token = token
         self.answer = answer
-        anchor = web.window
-        asker = web
+        anchor = page.surface.view.window
+        asker = page
         controller.performRequests()
     }
 
@@ -282,20 +286,20 @@ final class Passkeys: NSObject {
         let origin: String
         let clientData: ASPublicKeyCredentialClientData
         let answer: ([String: Any]) -> Void
-        weak var web: WKWebView?
+        weak var page: Page?
         var offered: [Offered] = []
         var token: String? { request.token }
     }
 
-    /// One per page, by its view.
+    /// One per page.
     private var conditional: [ObjectIdentifier: Waiting] = [:]
     private let list = PasskeyList()
 
     /// The passkeys to offer under the fields of this page; none when the
     /// page isn't waiting for one, or has gone to another site since.
-    func offered(in web: WKWebView?) -> [Offered] {
-        guard let web, let waiting = conditional[ObjectIdentifier(web)], waiting.web === web,
-              waiting.origin == PasskeyCheck.origin(of: Self.committed(web))
+    func offered(in page: Page?) -> [Offered] {
+        guard let page, let waiting = conditional[ObjectIdentifier(page)], waiting.page === page,
+              waiting.origin == PasskeyCheck.origin(of: Self.committed(page))
         else { return [] }
         return waiting.offered
     }
@@ -303,29 +307,29 @@ final class Passkeys: NSObject {
     /// The page is gone (a new document, or the tab) and its request with
     /// it. The answer asks the page to keep waiting, which a page that is
     /// gone never hears.
-    func forget(_ web: WKWebView) {
-        if let running = controller, asker === web {
+    func forget(_ page: Page) {
+        if let running = controller, asker === page {
             finish(PasskeyFailure.wait.reply)
             running.cancel()
         }
-        awaiting = awaiting.filter { $0.value != ObjectIdentifier(web) }
-        conditional[ObjectIdentifier(web)].map { $0.answer(PasskeyFailure.wait.reply) }
-        conditional[ObjectIdentifier(web)] = nil
-        list.close(for: web)
-        for (key, waiting) in conditional where waiting.web == nil {
+        awaiting = awaiting.filter { $0.value != ObjectIdentifier(page) }
+        conditional[ObjectIdentifier(page)].map { $0.answer(PasskeyFailure.wait.reply) }
+        conditional[ObjectIdentifier(page)] = nil
+        list.close(for: page)
+        for (key, waiting) in conditional where waiting.page == nil {
             waiting.answer(PasskeyFailure.wait.reply)
             conditional[key] = nil
         }
     }
 
     private func wait(_ request: PasskeyRequest, passed: PasskeyCheck.Passed, clientData: ASPublicKeyCredentialClientData,
-                      in web: WKWebView, answer: @escaping ([String: Any]) -> Void) {
-        let key = ObjectIdentifier(web)
+                      in page: Page, answer: @escaping ([String: Any]) -> Void) {
+        let key = ObjectIdentifier(page)
         // Asked again: the one before is over, as in any browser, and its list.
         conditional[key].map { $0.answer(PasskeyFailure.replaced.reply) }
-        list.close(for: web)
+        list.close(for: page)
         conditional[key] = Waiting(request: request, rp: passed.rp, origin: passed.origin, clientData: clientData,
-                                   answer: answer, web: web)
+                                   answer: answer, page: page)
         // A rehearsal never asks the Mac: it would list the passkeys of
         // whoever is working beside it. One made up, for the site.
         if Self.rehearsal {
@@ -364,11 +368,11 @@ final class Passkeys: NSObject {
         waiting.offered = offered
         conditional[key] = waiting
         Self.log.notice("\(offered.count, privacy: .public) offered under the field for \(waiting.rp, privacy: .public)")
-        guard !offered.isEmpty, let web = waiting.web else { return list.close(for: waiting.web) }
-        Task { @MainActor [weak web] in
-            guard let web, let page = (web as? PageView)?.page else { return }
+        guard !offered.isEmpty, let page = waiting.page else { return list.close(for: waiting.page) }
+        Task { @MainActor [weak page] in
+            guard let page else { return }
             let rect = await page.passkeyField()
-            self.field(rect, in: web)
+            self.field(rect, in: page)
         }
     }
 
@@ -377,41 +381,41 @@ final class Passkeys: NSObject {
     /// `clicked`: the field was clicked. Before macOS has been asked whether
     /// eGlu may use passkeys, that is when it is asked, for a page waiting
     /// for one, and the site's passkeys are looked for once it is answered.
-    func field(_ rect: CGRect?, in web: WKWebView, clicked: Bool = false) {
-        let key = ObjectIdentifier(web)
-        if clicked, Self.entitled, !Self.rehearsal, let waiting = conditional[key], waiting.web === web, waiting.offered.isEmpty,
-           waiting.origin == PasskeyCheck.origin(of: Self.committed(web)), Self.inFront(web), Self.access == .notDetermined {
+    func field(_ rect: CGRect?, in page: Page, clicked: Bool = false) {
+        let key = ObjectIdentifier(page)
+        if clicked, Self.entitled, !Self.rehearsal, let waiting = conditional[key], waiting.page === page, waiting.offered.isEmpty,
+           waiting.origin == PasskeyCheck.origin(of: Self.committed(page)), Self.inFront(page), Self.access == .notDetermined {
             let token = waiting.token
             Self.ensure { [weak self] in
                 guard let self, Self.access == .authorized, self.conditional[key]?.token == token else { return }
                 self.lookUp(key)
             }
         }
-        let offered = offered(in: web)
+        let offered = offered(in: page)
         // Shown only for the page in front; once shown, it follows the field
         // even while a click on it has its own window in front.
-        let allowed = Self.rehearsal || Self.inFront(web) || (NSApp.isActive && list.isShown(for: web))
-        guard let rect, !offered.isEmpty, web.window != nil, allowed else {
-            return list.close(for: web)
+        let allowed = Self.rehearsal || Self.inFront(page) || (NSApp.isActive && list.isShown(for: page))
+        guard let rect, !offered.isEmpty, page.surface.view.window != nil, allowed else {
+            return list.close(for: page)
         }
-        list.show(offered, under: rect, in: web) { [weak self, weak web] picked in
-            guard let self, let web else { return }
-            self.sign(in: web, with: picked.id)
+        list.show(offered, under: rect, in: page) { [weak self, weak page] picked in
+            guard let self, let page else { return }
+            self.sign(in: page, with: picked.id)
         }
     }
 
     /// One of the passkeys under the field, picked from its list (which only
     /// the page in front is shown): the Mac's sheet for it alone, and the
     /// page's waiting request answered with what it gives.
-    func sign(in web: WKWebView, with id: Data) {
-        let key = ObjectIdentifier(web)
-        guard let waiting = conditional[key], waiting.web === web,
+    func sign(in page: Page, with id: Data) {
+        let key = ObjectIdentifier(page)
+        guard let waiting = conditional[key], waiting.page === page,
               waiting.offered.contains(where: { $0.id == id }),
-              waiting.origin == PasskeyCheck.origin(of: Self.committed(web)),
-              Self.rehearsal || (NSApp.isActive && list.isShown(for: web))
+              waiting.origin == PasskeyCheck.origin(of: Self.committed(page)),
+              Self.rehearsal || (NSApp.isActive && list.isShown(for: page))
         else { return }
         conditional[key] = nil
-        list.close(for: web)
+        list.close(for: page)
         Self.log.notice("picked under the field for \(waiting.rp, privacy: .public)")
         if Self.rehearsal {
             var reply = PasskeyReply.rehearsal(.get, origin: waiting.origin, challenge: waiting.clientData.challenge)
@@ -427,18 +431,18 @@ final class Passkeys: NSObject {
         request.prf = Self.prfAssertion(waiting.request.prf, only: id)
         let ticket = UUID()
         awaiting[ticket] = key
-        Self.ensure { [weak self, weak web] in
+        Self.ensure { [weak self, weak page] in
             guard let self else { return }
             let current = self.awaiting.removeValue(forKey: ticket) != nil
             if let token = waiting.token, self.withdrawn.remove(token) != nil {
                 return waiting.answer(PasskeyFailure.aborted.reply)
             }
-            guard current, let web, waiting.origin == PasskeyCheck.origin(of: Self.committed(web)), NSApp.isActive,
-                  web.window != nil
+            guard current, let page, waiting.origin == PasskeyCheck.origin(of: Self.committed(page)), NSApp.isActive,
+                  page.surface.view.window != nil
             else {
                 return waiting.answer(PasskeyFailure.notAllowed.reply)
             }
-            self.begin([request], token: waiting.token, from: web, answer: waiting.answer)
+            self.begin([request], token: waiting.token, from: page, answer: waiting.answer)
             self.prfKey = PasskeyReply.pageKey(waiting.request)
             self.wantedPRF = waiting.request.prf != nil
         }
@@ -572,15 +576,12 @@ final class Passkeys: NSObject {
 
     // MARK: Checks
 
-    /// The address of the page a view shows, once it is that page's: a tab's
-    /// committed address. WKWebView.url moves as soon as a navigation starts,
-    /// while the page before and its frames can still ask; and before a
-    /// pop-up's first page commits, its opener can still write into it. A
-    /// view that is no page of eGlu's has only its url.
-    static func committed(_ web: WKWebView?) -> URL? {
-        guard let web else { return nil }
-        if let page = (web as? PageView)?.page { return page.committed }
-        return web.url
+    /// The address of the document a page shows, once it is that document's:
+    /// the committed address. The engine's own moves as soon as a navigation
+    /// starts, while the page before and its frames can still ask; and before
+    /// a pop-up's first page commits, its opener can still write into it.
+    static func committed(_ page: Page?) -> URL? {
+        page?.committed
     }
 
     /// Whether a page is the one in front of you: eGlu in front, the page's
@@ -588,14 +589,14 @@ final class Passkeys: NSObject {
     /// the keyboard, as a page does once it has been clicked. A tab behind, a
     /// window behind, the pane beside the one with the keys, or a tab under a
     /// Peek doesn't get to bring up the Mac's sheet over what you are looking at.
-    static func inFront(_ web: WKWebView?) -> Bool {
-        guard let web, let window = web.window, NSApp.isActive, window.isKeyWindow, window.attachedSheet == nil,
-              let holder = window.firstResponder as? NSView
+    static func inFront(_ page: Page?) -> Bool {
+        guard let view = page?.surface.view, let window = view.window, NSApp.isActive, window.isKeyWindow,
+              window.attachedSheet == nil, let holder = window.firstResponder as? NSView
         else { return false }
-        return holder.isDescendant(of: web)
+        return holder.isDescendant(of: view)
     }
 
-    /// WebKit's own test for a public suffix, from the list macOS keeps.
+    /// macOS's own test for a public suffix, from the list it keeps.
     /// Private to CFNetwork, as Search uses it: without it, a page's own host
     /// is the only relying party it gets and a frame only its page's host.
     nonisolated static let publicSuffix: (@convention(c) (CFString) -> Bool)? = {
@@ -676,46 +677,56 @@ extension Passkeys: ASAuthorizationControllerDelegate, ASAuthorizationController
 }
 
 /// The page's side: requests handed over, answers handed back, and where the
-/// sign-in field is while it has the keyboard.
-final class PasskeyRelay: NSObject, WKScriptMessageHandlerWithReply {
+/// sign-in field is while it has the keyboard. One for each page, on the
+/// channel it opens in the app's world (Page.setUp).
+@MainActor
+final class PasskeyRelay {
     /// As passkeys-bridge.js names it.
     static let name = "egluPasskeys"
 
-    nonisolated func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage,
-                                           replyHandler: @escaping @MainActor @Sendable (Any?, String?) -> Void) {
-        MainActor.assumeIsolated {
-            guard message.world == Page.world, let body = message.body as? [String: Any] else {
-                return replyHandler(nil, "Not a request")
+    private weak var page: Page?
+
+    init(page: Page) {
+        self.page = page
+    }
+
+    func handle(_ message: WebMessage, reply: @escaping @MainActor (WebJSON?) -> Void) {
+        let answer = { (value: Any) in reply(WebJSON(foundation: value)) }
+        guard message.world == .app, let body = message.body.foundation as? [String: Any] else {
+            return reply(nil)
+        }
+        switch body["kind"] as? String {
+        case "cancel":
+            Passkeys.shared.cancel(token: body["token"] as? String)
+            return answer(true)
+        case "field":
+            if message.isMainFrame, let page {
+                let rect = (body["rect"] as? [String: Any]).flatMap(Self.rect)
+                Passkeys.shared.field(rect, in: page, clicked: body["clicked"] as? Bool == true)
             }
-            switch body["kind"] as? String {
-            case "cancel":
-                Passkeys.shared.cancel(token: body["token"] as? String)
-                return replyHandler(true, nil)
-            case "field":
-                if message.frameInfo.isMainFrame, let web = message.webView {
-                    let rect = (body["rect"] as? [String: Any]).flatMap(Self.rect)
-                    Passkeys.shared.field(rect, in: web, clicked: body["clicked"] as? Bool == true)
-                }
-                return replyHandler(true, nil)
-            default:
-                let origin = message.frameInfo.securityOrigin
-                let isMain = message.frameInfo.isMainFrame
-                let web = message.webView
-                let ancestors = body["ancestors"] as? [String]
-                let ask = { (delegations: [PasskeyFrame.Delegation]?) in
-                    let caller = Passkeys.Caller(
-                        frame: PasskeyFrame(scheme: origin.protocol, host: origin.host, port: origin.port, isMain: isMain,
-                                            page: Passkeys.committed(web), ancestors: ancestors, delegations: delegations,
-                                            activated: body["activated"] as? Bool ?? false),
-                        window: web?.window,
-                        web: web
-                    )
-                    Passkeys.shared.perform(body, from: caller) { replyHandler($0, nil) }
-                }
-                // A frame's page says first what it lets its frames do.
-                guard !isMain, let page = (web as? PageView)?.page else { return ask(nil) }
-                Task { @MainActor in ask(await page.passkeyDelegations()) }
+            return answer(true)
+        default:
+            // The origin the engine recorded for the frame; one it can't
+            // name (a sandboxed frame's) has no host, and is no secure page.
+            let (scheme, host, port): (String, String, Int)
+            switch message.origin {
+            case let .tuple(tupleScheme, tupleHost, tuplePort): (scheme, host, port) = (tupleScheme, tupleHost, tuplePort)
+            case .opaque: (scheme, host, port) = ("", "", 0)
             }
+            let isMain = message.isMainFrame
+            let ancestors = body["ancestors"] as? [String]
+            let ask = { [weak page] (delegations: [PasskeyFrame.Delegation]?) in
+                let caller = Passkeys.Caller(
+                    frame: PasskeyFrame(scheme: scheme, host: host, port: port, isMain: isMain,
+                                        page: Passkeys.committed(page), ancestors: ancestors, delegations: delegations,
+                                        activated: body["activated"] as? Bool ?? false),
+                    page: page
+                )
+                Passkeys.shared.perform(body, from: caller) { answer($0) }
+            }
+            // A frame's page says first what it lets its frames do.
+            guard !isMain, let page else { return ask(nil) }
+            Task { @MainActor in ask(await page.passkeyDelegations()) }
         }
     }
 
@@ -736,21 +747,22 @@ final class PasskeyRelay: NSObject, WKScriptMessageHandlerWithReply {
 @MainActor
 final class PasskeyList: NSObject, NSPopoverDelegate {
     private var popover: NSPopover?
-    private weak var web: WKWebView?
+    private weak var page: Page?
 
-    func show(_ offered: [Passkeys.Offered], under rect: CGRect, in web: WKWebView, pick: @escaping (Passkeys.Offered) -> Void) {
-        let spot = Self.spot(rect, in: web)
+    func show(_ offered: [Passkeys.Offered], under rect: CGRect, in page: Page, pick: @escaping (Passkeys.Offered) -> Void) {
+        let view = page.surface.view
+        guard let spot = Self.spot(rect, in: page) else { return close(for: page) }
         // Already there for this page and these passkeys: it follows the field.
-        if let popover, popover.isShown, self.web === web,
+        if let popover, popover.isShown, self.page === page,
            (popover.contentViewController as? NSHostingController<PasskeyRows>)?.rootView.offered == offered {
             popover.positioningRect = spot
             return
         }
-        close(for: self.web)
-        let rows = PasskeyRows(offered: offered, site: Passkeys.committed(web)?.host() ?? "") { [weak self] picked in
+        close(for: self.page)
+        let rows = PasskeyRows(offered: offered, site: Passkeys.committed(page)?.host() ?? "") { [weak self, weak page] picked in
             // Picked while the list is still up, which is what lets it count.
             pick(picked)
-            self?.close(for: web)
+            self?.close(for: page)
         }
         let popover = NSPopover()
         popover.behavior = .transient
@@ -758,10 +770,10 @@ final class PasskeyList: NSObject, NSPopoverDelegate {
         popover.contentViewController = NSHostingController(rootView: rows)
         popover.delegate = self
         self.popover = popover
-        self.web = web
-        popover.show(relativeTo: spot, of: web, preferredEdge: web.isFlipped ? .maxY : .minY)
+        self.page = page
+        popover.show(relativeTo: spot, of: view, preferredEdge: view.isFlipped ? .maxY : .minY)
         // The keyboard stays in the field.
-        if let window = web.window, !window.isKeyWindow { window.makeKey() }
+        if let window = view.window, !window.isKeyWindow { window.makeKey() }
         Passkeys.log.notice("\(offered.count, privacy: .public) listed under the field")
         #if DEBUG
         // A rehearsal from the shell picks the first, as a click on it would
@@ -775,14 +787,14 @@ final class PasskeyList: NSObject, NSPopoverDelegate {
         #endif
     }
 
-    func isShown(for web: WKWebView) -> Bool {
-        popover?.isShown == true && self.web === web
+    func isShown(for page: Page) -> Bool {
+        popover?.isShown == true && self.page === page
     }
 
-    func close(for web: WKWebView?) {
-        guard let popover, web == nil || self.web === web || self.web == nil else { return }
+    func close(for page: Page?) {
+        guard let popover, page == nil || self.page === page || self.page == nil else { return }
         self.popover = nil
-        self.web = nil
+        self.page = nil
         popover.close()
     }
 
@@ -790,17 +802,23 @@ final class PasskeyList: NSObject, NSPopoverDelegate {
         MainActor.assumeIsolated {
             if (notification.object as? NSPopover) === popover {
                 popover = nil
-                web = nil
+                page = nil
             }
         }
     }
 
-    /// The field's place in the view: the page's points, zoomed as the page is.
-    private static func spot(_ rect: CGRect, in web: WKWebView) -> CGRect {
-        let scale = web.pageZoom * web.magnification
-        var spot = CGRect(x: rect.minX * scale, y: rect.minY * scale, width: rect.width * scale, height: rect.height * scale)
-        if !web.isFlipped { spot.origin.y = web.bounds.height - spot.maxY }
-        return spot.intersection(web.bounds).isNull ? CGRect(x: spot.minX, y: 0, width: max(spot.width, 1), height: 1) : spot
+    /// The field's place in the page's view: the page's points, zoomed as
+    /// the page is, placed on the screen by the engine as Apple Passwords'
+    /// card is (WebPageCoordinates), and brought back into the view; nil
+    /// while the view is in no window.
+    private static func spot(_ rect: CGRect, in page: Page) -> CGRect? {
+        let view = page.surface.view
+        guard let window = view.window,
+              let screen = page.enginePage.coordinates?.screenRect(of: rect, zoom: CGFloat(page.pageZoom * page.magnification))
+        else { return nil }
+        let spot = view.convert(window.convertFromScreen(screen), from: nil)
+        return spot.intersection(view.bounds).isNull
+            ? CGRect(x: spot.minX, y: view.isFlipped ? 0 : view.bounds.maxY - 1, width: max(spot.width, 1), height: 1) : spot
     }
 }
 
