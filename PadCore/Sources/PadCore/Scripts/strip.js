@@ -643,7 +643,10 @@
   // Where what a box holds stands from side to side, in the window, before
   // the box is laid out anew: the boxes it lays out (a header's left and
   // right halves), not those the page moves or animates itself, nor one
-  // moved here (it holds its own shift).
+  // moved here (it holds its own shift). Nor one that holds what the page
+  // places by a box outside it (a fixed menu, a link's ::after over its
+  // card): gliding, it would become what that is placed by, and that would
+  // jump for the glide (untouchable); it is in its new place at once.
   function placesIn(node) {
     const box = node.isConnected ? node.getBoundingClientRect() : null;
     if (!box || box.bottom <= 0 || box.top >= m.height) return [];
@@ -652,7 +655,7 @@
       if (places.length >= 24) break;
       if (moved.has(child) || child.getAnimations().length) continue;
       const style = getComputedStyle(child);
-      if (style.translate && style.translate !== 'none') continue;
+      if ((style.translate && style.translate !== 'none') || untouchable(child)) continue;
       const r = child.getBoundingClientRect();
       if (r.width < 1 || r.height < 1 || r.bottom <= 0 || r.top >= m.height) continue;
       places.push([child, r.left]);

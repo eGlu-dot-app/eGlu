@@ -8,7 +8,9 @@
 // in, glides aside (at once under Reduce Motion); a header laid out anew
 // after an early touch glides to its new place; a layer the page fixes is
 // moved by the strip's width; a row the page takes out leaves the rest of
-// its list in place; and nothing is laid out while the page moves.
+// its list in place; a menu the page fixes inside a header's half stays
+// put while the header's insides glide; and nothing is laid out while the
+// page moves.
 //
 //   node Tests/strip.mjs              Chromium
 //   node Tests/strip.mjs webkit       Playwright's WebKit, closest to Safari
@@ -68,7 +70,7 @@ const browser = await playwright[engine].launch();
 
 // A page beside the strip, told it once loaded; `early` touches it first,
 // as a finger on a slow phone does before the script has looked.
-async function open({ early = false, reducedMotion = 'no-preference', body = html } = {}) {
+async function open({ early = false, reducedMotion = 'no-preference', body = html, tell = true } = {}) {
   const context = await browser.newContext({ viewport: { width: WIDTH, height: HEIGHT }, hasTouch: true, reducedMotion });
   const page = await context.newPage();
   await page.route('http://strip.test/', (route) => route.fulfill({ body, contentType: 'text/html' }));
@@ -89,6 +91,7 @@ async function open({ early = false, reducedMotion = 'no-preference', body = htm
       }
     });
   }
+  if (!tell) return { context, page };
   await page.evaluate((strip) => window.__egluStrip.set(strip), STRIP);
   await idle(page);
   return { context, page };
@@ -248,6 +251,36 @@ try {
     check('after an early touch the header is still laid out clear of the strip', state.settled && header <= EDGE, `${Math.round(header)} ${JSON.stringify(state)}`);
     check('and what is in it glided there', state.glides > 0, state.glides);
     check('nothing laid out while the page moved, after an early touch', state.unsteady === 0 && state.failures === 0);
+    await context.close();
+  }
+
+  // A header laid out anew after an early touch, one half holding a menu the
+  // page fixes in the window: that half doesn't glide (gliding, it would be
+  // what the menu is placed by), so the menu stays put in every frame; the
+  // other half glides.
+  {
+    const { context, page } = await open({ early: true, tell: false, body: `<!doctype html><style>
+      body { margin: 0; font: 16px/1.4 -apple-system, system-ui, sans-serif; }
+      header { display: flex; justify-content: flex-end; align-items: center; gap: 12px; height: 48px; padding: 0 8px; background: #eee; }
+      nav { display: flex; gap: 12px; }
+      .menu { position: fixed; left: 20px; top: 200px; width: 120px; height: 40px; background: #fde; }
+      </style><header><nav class="a"><a href="#">Docs</a><a href="#">Blog</a></nav>
+      <nav class="b"><a href="#">Sign in</a><div class="menu"><a href="#">Menu item</a></div></nav></header>
+      <p>${'Running text below the header. '.repeat(20)}</p><div style="height: 2000px"></div>` });
+    const seen = await page.evaluate(async (strip) => {
+      const menu = document.querySelector('.menu');
+      const place = () => { const r = menu.getBoundingClientRect(); return `${Math.round(r.left)},${Math.round(r.top)}`; };
+      const places = new Set([place()]);
+      window.__egluStrip.set(strip);
+      for (const end = performance.now() + 1500; performance.now() < end;) {
+        await new Promise((done) => requestAnimationFrame(done));
+        places.add(place());
+      }
+      const right = (selector) => Math.round(document.querySelector(selector).getBoundingClientRect().right);
+      return { places: [...places], a: right('nav.a'), b: right('nav.b'), glides: window.__egluStrip.state().glides };
+    }, STRIP);
+    check('a menu the page fixes inside a header\'s half stays put while the header glides', seen.places.length === 1, JSON.stringify(seen));
+    check('and the header is laid out clear of the strip, its other half gliding there', seen.b <= EDGE && seen.glides > 0, JSON.stringify(seen));
     await context.close();
   }
 } finally {
