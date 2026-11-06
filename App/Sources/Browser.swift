@@ -3275,12 +3275,16 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         })
         guide.view.backgroundColor = Palette.UI.ground
         guide.modalPresentationStyle = .formSheet
-        // As high as what it says, on a phone from the bottom edge.
+        // Room for what the handoff holds, which comes as it is made: the whole height on a phone, from the
+        // bottom edge, and a tall sheet elsewhere. What is more than that scrolls, over the button at its foot.
         let width = min(view.bounds.width, 480)
-        let height = guide.sizeThatFits(in: CGSize(width: width, height: .greatestFiniteMagnitude)).height
+        let height = min(max(view.bounds.height - 120, 480), 720)
         guide.preferredContentSize = CGSize(width: width, height: height)
         if let sheet = guide.sheetPresentationController {
-            sheet.detents = [.custom(identifier: .init("guide")) { context in min(height, context.maximumDetentValue) }]
+            // On a phone the handoff's parts come over seconds and need the room. Elsewhere a large detent, should the
+            // sheet keep to detents there, would undo the height cap above; a custom one keeps to it.
+            sheet.detents = traitCollection.horizontalSizeClass == .compact ? [.large()]
+                : [.custom(identifier: .init("guide")) { context in min(height, context.maximumDetentValue) }]
             sheet.prefersGrabberVisible = true
             sheet.preferredCornerRadius = HandoffGuide.corner
         }
