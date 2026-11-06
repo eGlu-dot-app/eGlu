@@ -215,6 +215,28 @@ public enum Bookmarks {
         return false
     }
 
+    /// What the bookmark manager lists while words are typed, as Chromium's
+    /// does: every link and folder, at any depth and in order, whose name or
+    /// address holds each of the words, with the folders it is in, outermost
+    /// first. The bookmarks bar itself is no result: it is always in the
+    /// manager's list of folders already.
+    public static func matching(_ query: String, in items: [Bookmark]) -> [(item: Bookmark, path: [Bookmark])] {
+        let words = query.split(whereSeparator: \.isWhitespace).map(String.init)
+        guard !words.isEmpty else { return [] }
+        func holds(_ item: Bookmark) -> Bool {
+            let text = [item.label, item.url?.absoluteString ?? ""].joined(separator: " ")
+            return words.allSatisfy { text.range(of: $0, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
+        }
+        func walk(_ level: [Bookmark], path: [Bookmark], top: Bool) -> [(item: Bookmark, path: [Bookmark])] {
+            level.flatMap { item -> [(item: Bookmark, path: [Bookmark])] in
+                let bar = top && item.id == Bookmarks.bar(in: items)?.id
+                let own = !bar && holds(item) ? [(item: item, path: path)] : []
+                return own + walk(item.children ?? [], path: path + [item], top: false)
+            }
+        }
+        return walk(items, path: [], top: true)
+    }
+
     /// `imported` added to `existing`: a link already at its level is left
     /// out, and a folder whose name is already there is merged into that
     /// one, so importing the same file twice adds nothing. Returns how many
@@ -407,6 +429,58 @@ public enum BookmarkFile {
     public static func parse(_ data: Data) -> BookmarkImport {
         var reader = Reader(bytes: [UInt8](data))
         return reader.read()
+    }
+
+    /// A space's bookmarks in the same format, as Chrome writes it: the bar
+    /// as the folder marked PERSONAL_TOOLBAR_FOLDER, first, and the rest
+    /// after it at the top, so Chrome, Firefox, Safari and eGlu each read the
+    /// bar back as their own. There are no dates to write: none are kept.
+    public static func export(_ items: [Bookmark]) -> Data {
+        var lines = [
+            "<!DOCTYPE NETSCAPE-Bookmark-file-1>",
+            "<!-- This is an automatically generated file.",
+            "     It will be read and overwritten.",
+            "     DO NOT EDIT! -->",
+            "<META HTTP-EQUIV=\"Content-Type\" CONTENT=\"text/html; charset=UTF-8\">",
+            "<TITLE>Bookmarks</TITLE>",
+            "<H1>Bookmarks</H1>",
+            "<DL><p>",
+        ]
+        func write(_ level: [Bookmark], depth: Int) {
+            let indent = String(repeating: "    ", count: depth)
+            for item in level {
+                if let url = item.url {
+                    lines.append("\(indent)<DT><A HREF=\"\(escaped(url.absoluteString))\">\(escaped(item.title))</A>")
+                    continue
+                }
+                let bar = depth == 1 && Bookmarks.isBar(item) && Bookmarks.bar(in: items)?.id == item.id
+                let mark = bar ? " PERSONAL_TOOLBAR_FOLDER=\"true\"" : ""
+                lines.append("\(indent)<DT><H3\(mark)>\(escaped(bar ? Bookmarks.barName : item.title))</H3>")
+                lines.append("\(indent)<DL><p>")
+                write(item.children ?? [], depth: depth + 1)
+                lines.append("\(indent)</DL><p>")
+            }
+        }
+        let bar = Bookmarks.bar(in: items).map { [$0] } ?? []
+        write(bar + Bookmarks.others(in: items), depth: 1)
+        lines.append("</DL><p>")
+        return Data((lines.joined(separator: "\n") + "\n").utf8)
+    }
+
+    /// Text safe in an attribute in double quotes, and between tags.
+    static func escaped(_ text: String) -> String {
+        var out = ""
+        out.reserveCapacity(text.count)
+        for character in text {
+            switch character {
+            case "&": out += "&amp;"
+            case "<": out += "&lt;"
+            case ">": out += "&gt;"
+            case "\"": out += "&quot;"
+            default: out.append(character)
+            }
+        }
+        return out
     }
 
     /// Names a folder of favourites goes by: the bar under the address bar.

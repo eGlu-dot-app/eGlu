@@ -256,6 +256,7 @@
 		91AAC447EC8D9176C94AF0C0 /* SuggestionSources.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD6F465D4F18EB80D6332AD3 /* SuggestionSources.swift */; };
 		9260E5E2116F0F86830BE381 /* PageSharedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3928FEC1BBB393112EDB2FFC /* PageSharedTests.swift */; };
 		9265981BEFD80BDEC9056F08 /* BookmarkImportStatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BB47E33CC439730A294794A /* BookmarkImportStatusView.swift */; };
+		961968E29974484B743BC5AF /* BookmarkManagerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF18A76D93E514FCC9487B2D /* BookmarkManagerView.swift */; };
 		96FBC548A16D7C6CD0F0FC95 /* WindowModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B66540A3A739C184927A5CA7 /* WindowModel.swift */; };
 		97506CC7230D13B2E9C2FC29 /* HandoffSpeech.swift in Sources */ = {isa = PBXBuildFile; fileRef = 175C837A0864F7FFAB8BA56D /* HandoffSpeech.swift */; };
 		97825E633CA502AC1FBCF286 /* WebEngineCore in Frameworks */ = {isa = PBXBuildFile; productRef = 56D09A77AD0739677088D877 /* WebEngineCore */; };
@@ -365,6 +366,7 @@
 		D58CCBCF07DEEF2DF75DEE28 /* Feather.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18B265C71B0477CE9C358898 /* Feather.swift */; };
 		D5CC0C682A064F7E8413B34B /* BookmarkImportStatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BB47E33CC439730A294794A /* BookmarkImportStatusView.swift */; };
 		D615627FBEB96919054AB35A /* DeveloperBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC0997249B1BC263DD2907D1 /* DeveloperBar.swift */; };
+		D69D00D0FCF8590F91E3B479 /* BookmarkManagerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF18A76D93E514FCC9487B2D /* BookmarkManagerView.swift */; };
 		D7470F2CB3E70BA949600BF1 /* ExtensionUpdates.swift in Sources */ = {isa = PBXBuildFile; fileRef = 210589C96919CFE141110E25 /* ExtensionUpdates.swift */; };
 		D9253AAD4420218D0DD5E1B1 /* Intelligence.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4996B7C50A6BD2F6DF4BC27 /* Intelligence.swift */; };
 		D9A0CFCCEB856AD57BF4AEB0 /* Window.swift in Sources */ = {isa = PBXBuildFile; fileRef = 879CF644BDF286752225F650 /* Window.swift */; };
@@ -437,6 +439,7 @@
 		FBFED4E4695DF4722A494F35 /* WritingHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F66F0340300C67A64807FA9 /* WritingHandler.swift */; };
 		FCF273A94676E2B7095C94BC /* Pages.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8CF2A3A921F7506994D255C /* Pages.swift */; };
 		FD6F507EDD98485F1D2E829E /* ExtensionCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AA47374F100620B5D221A40 /* ExtensionCapture.swift */; };
+		FE79392A09F8C48042E49D5F /* BookmarkManagerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF18A76D93E514FCC9487B2D /* BookmarkManagerView.swift */; };
 		FEE1DA390CD5FB77258B1162 /* EgluApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 347EDC395F093B60F66EE23C /* EgluApp.swift */; };
 		FEE91FB5E101622B9EAA69D9 /* ContentBlocker.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6D8D2E159368BB0EB9BE7F1 /* ContentBlocker.swift */; };
 		FEFB7377FDD301F37F9B0A1E /* ExtensionSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D3F65E6A920CEB086F43C4C /* ExtensionSettings.swift */; };
@@ -714,6 +717,7 @@
 		EAC6D7743FC4ED97C5CF909C /* Signal.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = Signal.icon; sourceTree = "<group>"; };
 		EB18E3E3C75E9CA5A464D302 /* PageWebKitSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageWebKitSurface.swift; sourceTree = "<group>"; };
 		EBFB0D78527781DD2B86C793 /* Updates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Updates.swift; sourceTree = "<group>"; };
+		EF18A76D93E514FCC9487B2D /* BookmarkManagerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookmarkManagerView.swift; sourceTree = "<group>"; };
 		F0DF1060B96AAB063281BCA3 /* MeasureChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeasureChannel.swift; sourceTree = "<group>"; };
 		F26C79B66C0BC2E23D7F30D5 /* PageShared.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageShared.swift; sourceTree = "<group>"; };
 		F30932046C37BE960EE46DC7 /* PageHistoryWebKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageHistoryWebKit.swift; sourceTree = "<group>"; };
@@ -832,6 +836,7 @@
 				D89D1D697094FA9C252B1AAA /* ActionToast.swift */,
 				38319A4244550866F7A02039 /* AddressText.swift */,
 				7BB47E33CC439730A294794A /* BookmarkImportStatusView.swift */,
+				EF18A76D93E514FCC9487B2D /* BookmarkManagerView.swift */,
 				E6D8D2E159368BB0EB9BE7F1 /* ContentBlocker.swift */,
 				78C9E868A57B67626745DAEB /* Deflate.swift */,
 				2BF0C979D82EB7CEE10797AB /* DownloadActivity.swift */,
@@ -1503,6 +1508,7 @@
 				E70CD85FE415FA7654E4FC31 /* ApplePasswords.swift in Sources */,
 				F815F81763FBF44CEA2613B9 /* BookmarkImport.swift in Sources */,
 				71C03A2A856B3B4ADD90500B /* BookmarkImportStatusView.swift in Sources */,
+				D69D00D0FCF8590F91E3B479 /* BookmarkManagerView.swift in Sources */,
 				3FD5922E6F18BB3CE9BCD170 /* BrowserCloseCommands.swift in Sources */,
 				C960FDA3BE2ECCC87C14FB14 /* BrowserView.swift in Sources */,
 				3A001779E80627A6B6C3A6AE /* CommandBar.swift in Sources */,
@@ -1681,6 +1687,7 @@
 				5F11F8BD6896E6982B5999D1 /* ApplePasswords.swift in Sources */,
 				F959FA505153433B9AA50686 /* BookmarkImport.swift in Sources */,
 				9265981BEFD80BDEC9056F08 /* BookmarkImportStatusView.swift in Sources */,
+				961968E29974484B743BC5AF /* BookmarkManagerView.swift in Sources */,
 				3B832A6B8020C365C3D65788 /* BrowserCloseCommands.swift in Sources */,
 				A76924AAD9114FC4FCA47186 /* BrowserView.swift in Sources */,
 				A1045054D241E3750D510AD9 /* CommandBar.swift in Sources */,
@@ -1829,6 +1836,7 @@
 				3CD3EA95AE1B414628F5BF21 /* BarBackdrop.swift in Sources */,
 				DCA1726AACC1B5BBAE7D86C1 /* Bars.swift in Sources */,
 				D5CC0C682A064F7E8413B34B /* BookmarkImportStatusView.swift in Sources */,
+				FE79392A09F8C48042E49D5F /* BookmarkManagerView.swift in Sources */,
 				B174748623F73BD563B09544 /* Browser.swift in Sources */,
 				4F3E8B02D0942D47B38DB531 /* ChromeConstraints.swift in Sources */,
 				7AF31EA5C0076A632C0B490B /* CommandBar.swift in Sources */,

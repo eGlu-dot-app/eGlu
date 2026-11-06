@@ -853,10 +853,47 @@ public struct Workspace: Codable, Equatable, Sendable {
         return bookmark.id
     }
 
+    /// Takes a bookmark or a folder away, at any depth. Asked of the
+    /// bookmarks bar itself, it does nothing: the bar is where the bar's
+    /// bookmarks go, and only what is in it is ever deleted, as Chromium's.
     public mutating func removeBookmark(_ id: UUID, in space: UUID) {
-        guard let s = spaces.firstIndex(where: { $0.id == space }) else { return }
+        guard let s = spaces.firstIndex(where: { $0.id == space }), spaces[s].bar?.id != id else { return }
         Bookmarks.remove(id, from: &spaces[s].bookmarks)
         spaces[s].forgetGoneBookmarks()
+    }
+
+    /// A bookmark at the end of `folder` (nil: the top level), or before
+    /// `before` in it, as the bookmark manager adds one. Unlike
+    /// addBookmark(_:title:in:) the address may be bookmarked elsewhere in
+    /// the space already, as Chromium allows. Returns its id; nil when the
+    /// space or the folder is not there.
+    @discardableResult
+    public mutating func addBookmark(_ url: URL, title: String, into folder: UUID?, before: UUID? = nil,
+                                     in space: UUID) -> UUID? {
+        guard let s = spaces.firstIndex(where: { $0.id == space }) else { return nil }
+        let named = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let bookmark = Bookmark(title: named.isEmpty ? Address.pretty(url) : named, url: url)
+        return Bookmarks.insert(bookmark, into: folder, before: before, of: &spaces[s].bookmarks) ? bookmark.id : nil
+    }
+
+    /// A link's address changed in place; a folder has none. A tab open from
+    /// the bar for it stays where it is, and goes back to the new address.
+    public mutating func changeBookmarkAddress(_ id: UUID, to url: URL, in space: UUID) {
+        guard let s = spaces.firstIndex(where: { $0.id == space }) else { return }
+        Bookmarks.update(id, in: &spaces[s].bookmarks) { item in
+            if !item.isFolder { item.url = url }
+        }
+    }
+
+    /// The space's bookmarks bar, made at the top of its bookmarks when it
+    /// has none yet. Nil for no such space.
+    @discardableResult
+    public mutating func makeBar(in space: UUID) -> UUID? {
+        guard let s = spaces.firstIndex(where: { $0.id == space }) else { return nil }
+        if let bar = spaces[s].bar { return bar.id }
+        let made = Bookmark(folder: Bookmarks.barName, children: [])
+        spaces[s].bookmarks.insert(made, at: 0)
+        return made.id
     }
 
     /// A new folder at the end of `parent` (nil: the top level), named as
@@ -944,14 +981,7 @@ public struct Workspace: Codable, Equatable, Sendable {
         guard let s = spaces.firstIndex(where: { $0.tabs.contains { $0.id == tab } }),
               let index = spaces[s].tabs.firstIndex(where: { $0.id == tab }),
               let url = spaces[s].tabs[index].url else { return nil }
-        let bar: UUID
-        if let made = spaces[s].bar?.id {
-            bar = made
-        } else {
-            let made = Bookmark(folder: Bookmarks.barName, children: [])
-            spaces[s].bookmarks.insert(made, at: 0)
-            bar = made.id
-        }
+        guard let bar = makeBar(in: spaces[s].id) else { return nil }
         if let folder, folder != bar, !Bookmarks.barIDs(in: spaces[s].bookmarks).contains(folder) { return nil }
         let record = spaces[s].tabs[index]
         let bookmark: UUID

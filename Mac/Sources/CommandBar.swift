@@ -239,6 +239,7 @@ extension Command {
         case .pinTab: return "pin"
         case .splitTab: return "rectangle.split.2x1"
         case .bookmark: return "star"
+        case .bookmarkManager: return "book"
         case .share: return "square.and.arrow.up"
         case .copyLink: return "doc.on.doc"
         case .siteMode: return "desktopcomputer"
