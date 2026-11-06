@@ -109,10 +109,11 @@ extension Handoff {
         let spoken = outline.transcript
             ? lines.indices.last { levels[$0] != nil && lines[$0] == Transcript.heading } : nil
         var found = levels.indices.filter { $0 != spoken }.compactMap { levels[$0] }
-        // One heading above all the others is the page's title, not its only part: it is left out,
-        // the card over the outline saying what the page is called.
+        // One heading above all the others, heading the page, is its title, not its only part: it is left out,
+        // the card over the outline saying what the page is called. One that comes after other headings
+        // ("## Appendix" after "### Intro") is a part.
         if let level = found.min(), found.count(where: { $0 == level }) == 1, found.contains(where: { $0 > level }),
-           let title = levels.indices.first(where: { levels[$0] == level && $0 != spoken }) {
+           let title = levels.indices.first(where: { levels[$0] != nil && $0 != spoken }), levels[title] == level {
             levels[title] = nil
             skipped = title
             found.removeAll { $0 == level }

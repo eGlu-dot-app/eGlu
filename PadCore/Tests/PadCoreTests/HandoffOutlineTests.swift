@@ -278,6 +278,14 @@ struct HandoffOutlineReviewTests {
         #expect(outline.sections[1].opening == "A label")
     }
 
+    @Test func aLoneHigherHeadingAfterThePartsIsAPart() {
+        let body = "### Intro\n\nWords.\n\n### Details\n\nMore words.\n\n## Appendix\n\nExtra text.\n\n## Transcript\n\n0:00 Hello there."
+        let spoken = Handoff.outline(of: Handoff.Composed(kind: .media, body: body), reading: Self.spoken())
+        #expect(spoken.sections.map(\.heading) == ["Intro", "Details", "Appendix"])
+        let plain = Handoff.outline(of: Handoff.Composed(kind: .article, body: "### Intro\n\nWords.\n\n### Details\n\nMore.\n\n## Appendix\n\nExtra."))
+        #expect(plain.sections.map(\.heading) == ["Intro", "Details", "Appendix"])
+    }
+
     @Test func aPageWithNoHeadingsButTheTranscript() {
         let body = "The page's only paragraph.\n\n## Transcript\n\n0:00 Hello there."
         let outline = Handoff.outline(of: Handoff.Composed(kind: .media, body: body), reading: Self.spoken())
