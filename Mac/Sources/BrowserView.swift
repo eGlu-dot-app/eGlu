@@ -124,6 +124,37 @@ struct BrowserView: View {
         .sheet(isPresented: $model.historyClearing) {
             ClearHistoryView(spaceID: model.spaceID) { model.historyClearing = false }
         }
+        .sheet(isPresented: $model.bookmarkManagerShown) {
+            BookmarkManagerView(spaceID: model.spaceID) { urls, newTab in
+                model.open(urls, newTab: newTab)
+            } done: {
+                model.bookmarkManagerShown = false
+            }
+            .frame(minWidth: 680, idealWidth: 820, minHeight: 460, idealHeight: 620)
+        }
+        #if DEBUG
+        // `-bookmarkManagerTest YES`: a space without bookmarks given a few,
+        // in the bar and out of it, and the manager open on them, for a picture.
+        .task {
+            guard UserDefaults.standard.bool(forKey: "bookmarkManagerTest") else { return }
+            try? await Task.sleep(for: .seconds(1))
+            let space = model.spaceID
+            if session.workspace.space(space)?.bookmarks.isEmpty == true {
+                session.change { w in
+                    let figma = URL(string: "https://www.figma.com/files")!
+                    guard let bar = w.makeBar(in: space),
+                          let docs = w.addFolder(named: "Docs", in: bar, of: space) else { return }
+                    w.addBookmark(URL(string: "https://app.slack.com/client")!, title: "Slack", into: bar, in: space)
+                    w.addBookmark(URL(string: "https://www.notion.so/")!, title: "Notion", into: docs, in: space)
+                    w.addBookmark(URL(string: "https://developer.apple.com/design/")!, title: "Apple Design", into: docs, in: space)
+                    w.addBookmark(figma, title: "Figma", into: nil, in: space)
+                    let reading = w.addFolder(named: "Reading", in: nil, of: space)
+                    w.addBookmark(URL(string: "https://news.ycombinator.com/")!, title: "Hacker News", into: reading, in: space)
+                }
+            }
+            model.bookmarkManagerShown = true
+        }
+        #endif
         .sheet(isPresented: $askingWriting) {
             WritingQuestion(offersOtherApps: true,
                             check: { otherApps in

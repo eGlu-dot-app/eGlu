@@ -878,6 +878,10 @@ private struct BookmarksPanel: View {
                     Text("Other Bookmarks")
                         .font(.system(size: 13, weight: .semibold))
                     Spacer(minLength: 0)
+                    ManageButton {
+                        close()
+                        model.bookmarkManagerShown = true
+                    }
                     CloseButton(label: String(localized: "Close Bookmarks"), help: String(localized: "Close Bookmarks (Esc)")) { close() }
                         .keyboardShortcut(.cancelAction)
                         .accessibilityFocused($closeFocused)
@@ -939,6 +943,27 @@ private struct BookmarksPanel: View {
 
     private func close() {
         withAnimation(.bar) { model.bookmarksOpen = false }
+    }
+}
+
+/// The way from the panel to the Bookmark Manager, beside its ✕ and drawn as it is.
+private struct ManageButton: View {
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "book")
+                .font(.system(size: 10, weight: .bold))
+                .frame(width: 20, height: 20)
+                .background(Highlight(hovering: hovering, shape: Circle()))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(hovering ? Color.primary : Color.secondary)
+        .onHover { hovering = $0 }
+        .help("Bookmark Manager (⌥⌘B)")
+        .accessibilityLabel("Bookmark Manager")
     }
 }
 

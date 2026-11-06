@@ -239,6 +239,7 @@ extension Command {
         case .pinTab: return "pin"
         case .splitTab: return "rectangle.split.2x1"
         case .bookmark: return "star"
+        case .bookmarkManager: return "book"
         case .share: return "square.and.arrow.up"
         case .copyLink: return "doc.on.doc"
         case .siteMode: return "desktopcomputer"
@@ -296,7 +297,8 @@ struct CommandBar: View {
         let shape = RoundedRectangle(cornerRadius: Metrics.pane, style: .continuous)
         VStack(spacing: 0) {
             HStack(spacing: 12) {
-                Image(systemName: purpose == .newTab ? "plus.magnifyingglass" : "magnifyingglass")
+                // A plain magnifier for a new tab too, as on the iPad: the plus read as zooming in.
+                Image(systemName: "magnifyingglass")
                     .font(.system(size: 17, weight: .medium))
                     .foregroundStyle(.secondary)
                     .frame(width: 22)

@@ -92,8 +92,11 @@ public struct Transcript: Equatable, Sendable {
     /// thousand lines of a few words each, and an hour's talk in one block
     /// could not be found in. No more than `room` characters: where that
     /// is not all of it, the last block says so.
+    /// The heading the transcript goes under, which the sheet's outline knows it by (Handoff.outline).
+    static let heading = "## Transcript"
+
     public func blocks(room: Int) -> [PageBlock] {
-        var blocks = [PageBlock(kind: .heading, level: 2, text: "## Transcript", hint: .transcript, start: "Transcript")]
+        var blocks = [PageBlock(kind: .heading, level: 2, text: Self.heading, hint: .transcript, start: "Transcript")]
         var used = blocks[0].characters + 2
         var current = ""
         var stopped = cut
