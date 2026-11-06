@@ -1726,8 +1726,8 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
 
     /// The page on under the iPhone Duo's strip to the window's edge: its
     /// pictures, colours and text seen through the strip's glass, and what
-    /// can be pressed on it moved out from under the strip's items by
-    /// strip.js, told where they are (stripCover; Docs/iPhoneDuoDesign.md §9).
+    /// can be pressed on it placed clear of the strip by strip.js, told
+    /// where it is (stripCover; Docs/iPhoneDuoDesign.md §9).
     /// Only where the page is edge to edge beside the strip, so only in a
     /// phone-width window: on a card (every wider window is one, show),
     /// beside a split, in the desktop view, on the start page, and on a
@@ -1814,15 +1814,12 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         let systemVersion = ProcessInfo.processInfo.operatingSystemVersionString
         stripSources = "items \(items.map { $0.map { "\(Int($0.minY))–\(Int($0.maxY))" } ?? "none" }.joined(separator: ", "))"
             + " · regions \(occlusions.map { "\($0.count)" } ?? "unasked") · iOS \(systemVersion)"
-        return DuoLayout.Strip(side: side == .maxXEdge ? .right : .left, width: width, bands: cover.bands, ramp: Self.stripRamp,
-                               known: cover.known)
+        return DuoLayout.Strip(side: side == .maxXEdge ? .right : .left, width: width, bands: cover.bands, known: cover.known)
     }
 
-    /// Room kept above and below what stands in the strip (the items'
-    /// frames are their symbols', inside their glass), and the height of the
-    /// slant from beside it to clear of it: a finger's width.
+    /// Room kept above and below what stands in the strip: the items'
+    /// frames are their symbols', inside their glass.
     private static let stripMargin: CGFloat = 8
-    private static let stripRamp: CGFloat = 44
 
     /// The strip's tools stay in reach where the phone bar's go (an address
     /// typed, the tabs out), so what one does first puts those away: the

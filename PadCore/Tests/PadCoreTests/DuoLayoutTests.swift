@@ -70,7 +70,7 @@ struct StripBandsTests {
     }
 
     @Test func `encoded for the page's script`() throws {
-        let strip = DuoLayout.Strip(side: .right, width: 84, bands: [[0, 340], [538, 648]], ramp: 44)
+        let strip = DuoLayout.Strip(side: .right, width: 84, bands: [[0, 340], [538, 648]])
         let json = String(decoding: try JSONEncoder().encode(strip), as: UTF8.self)
         #expect(json.contains("\"side\":\"right\""))
         #expect(json.contains("\"bands\":[[0,340],[538,648]]"))

@@ -5,32 +5,33 @@
 // edge (Browser.placeUnderStrip). The page's pictures, colours and
 // backgrounds stay where the page puts them, seen through the strip's
 // glass. Its running text wraps at the strip's edge, so no line runs under
-// it. What can be pressed is moved out from under the strip's items.
+// it. What can be pressed is placed beside the strip.
 //
-// The strip is taken only in bands (DuoLayout.Strip): the status bar with
-// Back and Forward at its top, New Tab and Tabs at its foot. Between them it
-// is empty, and there what can be pressed keeps its place. Above and below a
-// band the room for it slants (the ramp), so a button slides aside as it
-// scrolls up towards the items, and back as it scrolls clear of them: the
-// room is a trapezoid, not a step. Where the app couldn't find where the
-// items stand, the whole strip is one band.
+// The strip is taken from top to bottom. As the page scrolls, all that is
+// in its column passes under the status bar with Back and Forward at its
+// top and New Tab and Tabs at its foot, so what can be pressed is placed
+// clear of the whole column, once, and stays there while the page scrolls:
+// where it stands never depends on where the page is scrolled to (asked for
+// on 4 November 2026, in place of a slant that slid it aside as it neared
+// the strip's items and back between them).
 //
 // What moves is a button, a link or a field, with the box round it while
 // that box is no more than a few controls (a header's icons in their own
 // list go together), and the controls close beside it, the gaps between
 // them kept; it moves the whole way or not at all, never over what is next
 // to it. Running text in its way gives a little more room first, where it
-// may still be laid out (Apple's country banner's ✕). Each moves by an
-// animation on its own place in the window (a view timeline), which WebKit
-// runs as the page scrolls: nothing is measured or written then.
+// may still be laid out (Apple's country banner's ✕). Each is shifted
+// aside by an animation of its own on `translate` that holds, which lays
+// nothing out. What can be pressed is looked at two windows before it
+// scrolls in, so it is shifted before it shows; one shifted where it shows,
+// once the page has come in, glides there instead of jumping.
 // Nothing is moved that the page animates or transforms itself, or that
 // sits in a box that scrolls by itself or sideways (a carousel).
 //
 // What the page floats or sticks over itself is a layer of its own, found
 // by what is topmost down the strip's column as the page stacks it
 // (z-index), into shadow roots however deep: a box the page fixes in the
-// window or makes sticky. A layer is drawn inside the safe area whatever
-// the bands, the trapezoid being for what scrolls under the strip: a small
+// window or makes sticky. A layer is drawn inside the safe area: a small
 // one (a FAB, a chat button, a menu) moved by the strip's width, its margin
 // kept; a wide one (a bar, a sheet) given padding on the strip's side, its
 // ground still running on under the glass.
@@ -39,7 +40,8 @@
 // moves, and it works in slices of a few milliseconds, the page's own work
 // between. What it lays out (text's room, a header's row) it writes while
 // the page is still coming in, before the first touch; after that only
-// where the page is below the window, so nothing shown moves.
+// where the page is below the window, or where what is laid out keeps its
+// place and height, what is in it gliding to where it is laid out now.
 //
 // It runs in the app's own content world. The app calls set() with the
 // strip in the page view's points, or null when the page no longer runs
@@ -78,7 +80,16 @@
   const DRAWN = /^(IMG|SVG|VIDEO|CANVAS|IFRAME|INPUT|BUTTON|SELECT|TEXTAREA|PICTURE|OBJECT|EMBED|svg)$/;
   // Text that is not laid out as text on the page.
   const UNSEEN = /^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE|TEXTAREA|OPTION|TITLE)$/;
-  const timelines = typeof ViewTimeline === 'function' && typeof Element.prototype.animate === 'function';
+  // How far above and below the window the observer looks, in windows:
+  // what can be pressed is placed before it scrolls in, after a long flick too.
+  const AHEAD = 2;
+  // A shift made where it shows, once the page has come in, glides there
+  // over this long, in milliseconds, slowing as it arrives; at once under
+  // Reduce Motion.
+  const GLIDE = 240;
+  const EASE = 'cubic-bezier(0.25, 1, 0.5, 1)';
+  const animates = typeof Element.prototype.animate === 'function';
+  const lessMotion = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
 
   let strip = null;
   // The strip in the page's CSS pixels, as last measured.
@@ -98,6 +109,10 @@
   // Slices a page's own state threw off, and the last error.
   let failures = 0;
   let failed = '';
+  // Shifts that glided where they showed; until when what is in a box laid
+  // out anew glides, the work held back meanwhile (glideInside).
+  let glides = 0;
+  let glidingUntil = 0;
   // The room given, each text block's or bar row's padding at the strip's
   // side, in its own style, with what the page had there before.
   let given = new Map();
@@ -110,6 +125,9 @@
   let lists = new Map();
   let moved = new WeakMap();
   const ours = new WeakSet();
+  // How far aside a member let go of still shows, until the slice ends: a
+  // member moved again in the same slice glides on from there (drop).
+  const drawn = new WeakMap();
   // Each control looked at in this generation, moved or not; each layer.
   let tried = new WeakMap();
   let layered = new WeakMap();
@@ -157,26 +175,13 @@
       left,
       top,
       scale,
-      // The window's height as the page's view timelines see it.
       height: window.innerHeight,
       // The safe area's edge, beside the strip.
       edge: right ? left + width - inset : left + inset,
+      // Where the strip's items stand: the first, the status bar's, tells
+      // the page's own header at its top (atTop).
       bands: strip.bands.map(([a, b]) => [top + a / scale, top + b / scale]),
-      ramp: Math.max(1, strip.ramp / scale),
     };
-  }
-
-  // How much of the way aside a box from `top` to `bottom` must be: all of
-  // it beside a band, none where the strip is empty, and on the slant
-  // between in proportion.
-  function cover(top, bottom) {
-    let most = 0;
-    for (const [a, b] of m.bands) {
-      if (top < b && bottom > a) return 1;
-      const away = top >= b ? top - b : a - bottom;
-      most = Math.max(most, 1 - away / m.ramp);
-    }
-    return most;
   }
 
   // How far a box reaches past the safe area's edge, under the strip.
@@ -607,7 +612,8 @@
   // its parent its height, and the boxes beside it in its parent their
   // places and sizes (a row grown wider pushes the one beside it): what
   // is in it moves along it, and nothing round it moves. One that doesn't
-  // is taken back before it is drawn. Whether it stands.
+  // is taken back before it is drawn. Whether it stands. What is in one
+  // that stands glides from where it was to where it is laid out now.
   function inPlace(node, write, undo) {
     const before = node.getBoundingClientRect();
     if (layable(before.top)) {
@@ -618,6 +624,7 @@
     const held = holder ? holder.getBoundingClientRect().height : 0;
     const beside = holder ? [...holder.children].filter((child) => child !== node)
       .map((child) => [child, child.getBoundingClientRect()]) : [];
+    const inside = placesIn(node);
     write();
     const after = node.getBoundingClientRect();
     if (Math.abs(after.top - before.top) < 0.5 && Math.abs(after.height - before.height) < 0.5 &&
@@ -626,10 +633,51 @@
           const now = child.getBoundingClientRect();
           return ['left', 'top', 'width', 'height'].every((key) => Math.abs(now[key] - was[key]) < 0.5);
         })) {
+      glideInside(inside);
       return true;
     }
     undo();
     return false;
+  }
+
+  // Where what a box holds stands from side to side, in the window, before
+  // the box is laid out anew: the boxes it lays out (a header's left and
+  // right halves), not those the page moves or animates itself, nor one
+  // moved here (it holds its own shift). Nor one that holds what the page
+  // places by a box outside it (a fixed menu, a link's ::after over its
+  // card): gliding, it would become what that is placed by, and that would
+  // jump for the glide (untouchable); it is in its new place at once.
+  function placesIn(node) {
+    const box = node.isConnected ? node.getBoundingClientRect() : null;
+    if (!box || box.bottom <= 0 || box.top >= m.height) return [];
+    const places = [];
+    for (const child of node.children) {
+      if (places.length >= 24) break;
+      if (moved.has(child) || child.getAnimations().length) continue;
+      const style = getComputedStyle(child);
+      if ((style.translate && style.translate !== 'none') || untouchable(child)) continue;
+      const r = child.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1 || r.bottom <= 0 || r.top >= m.height) continue;
+      places.push([child, r.left]);
+    }
+    return places;
+  }
+
+  // What a box laid out anew where it shows holds, gliding from where it
+  // stood (placesIn) to where it stands now, instead of jumping there. The
+  // work waits until the glides end: what glides seems moved by the page.
+  function glideInside(places) {
+    if (!places.length || (lessMotion && lessMotion.matches)) return;
+    for (const [child, left] of places) {
+      if (!child.isConnected) continue;
+      const by = left - child.getBoundingClientRect().left;
+      if (Math.abs(by) < 1) continue;
+      const animation = child.animate([{ translate: `${by.toFixed(1)}px 0` }, { translate: '0px 0' }],
+        { duration: GLIDE, easing: EASE });
+      ours.add(animation);
+      glides++;
+      glidingUntil = performance.now() + GLIDE + 20;
+    }
   }
 
   // What is beside the group, on the side away from the strip, level with
@@ -770,15 +818,13 @@
       for (const one of near) pending.add(one);
       return;
     }
-    if (!timelines || (how === 'sticky' && !layer)) return;
+    if (!animates || (how === 'sticky' && !layer)) return;
     // In a list or a table: its rows' controls move as one column (asked
     // for on 2 November 2026: "rows in the same table have to get same
     // width").
     if (how === 'page' && !layer && moveList(pick, around, scrolling)) return;
     // The whole way or not at all: part of the way leaves it under the strip still.
-    const full = !!layer;
-    const needed = !full && how === 'fixed' ? around.reach * cover(around.union.top, around.union.bottom) : around.reach;
-    if (needed < 1) return;
+    const needed = around.reach;
     if (around.space < needed - 1) {
       // Kept from it by running text given room already, which may be laid
       // out anew still: the text gives a little more, and the group is
@@ -789,13 +835,9 @@
       }
       return;
     }
-    const one = {
-      how: full ? 'fixed' : how, full, reach: around.reach, top: around.union.top,
-      height: around.union.bottom - around.union.top, members: [],
-    };
+    const one = { reach: needed, members: [] };
     for (const node of around.members) {
-      const box = node.getBoundingClientRect();
-      one.members.push({ node, offset: box.top - around.union.top, height: box.height, animation: null });
+      one.members.push({ node, animation: null, by: 0 });
       moved.set(node, one);
     }
     groups.add(one);
@@ -1021,24 +1063,16 @@
       back();
       return true;
     }
-    const group = one || { how: 'page', reach: push, top: 0, height: 0, members: [] };
+    const group = one || { reach: push, members: [] };
     group.reach = one ? Math.min(one.reach, push) : push;
     for (const { nodes } of moving) {
       for (const node of nodes) {
-        group.members.push({ node, offset: 0, height: 0, animation: null });
+        group.members.push({ node, animation: null, by: 0 });
         moved.set(node, group);
         tried.set(node, generation);
       }
     }
-    // The list's top and foot as it stands now: the moves are sideways, so its members' tops are their own.
     group.members = group.members.filter((member) => member.node.isConnected);
-    const tops = group.members.map((member) => member.node.getBoundingClientRect());
-    group.top = Math.min(...tops.map((r) => r.top));
-    group.height = Math.max(...tops.map((r) => r.bottom)) - group.top;
-    group.members.forEach((member, i) => {
-      member.offset = tops[i].top - group.top;
-      member.height = tops[i].height;
-    });
     lists.set(list.parent, group);
     groups.add(group);
     animate(group);
@@ -1068,9 +1102,10 @@
   // padding on the strip's side, its own width kept, so what is in it lays
   // itself out inside the safe area while its ground runs on under the
   // strip's glass. A fixed layer is out of the page's flow, so its padding
-  // moves nothing else; a sticky one is in it, so its padding only while
-  // the page is still coming in. One coming in by an animation of the
-  // page's is looked at again once that ends.
+  // moves nothing else, and what is in it glides to its new place where it
+  // shows; a sticky one is in it, so its padding only while the page is
+  // still coming in, or where its height stays. One coming in by an
+  // animation of the page's is looked at again once that ends.
   function placeLayer({ root, how }) {
     if (layered.get(root) === generation || given.has(root) || refused.has(root) || clashes(root)) return;
     layered.set(root, generation);
@@ -1098,8 +1133,11 @@
       };
       // A bar stuck in the flow of the page, once it has settled, only
       // where its height stays: the page's rows under it would move.
-      if (how !== 'sticky') write();
-      else inPlace(root, write, () => {
+      if (how !== 'sticky') {
+        const inside = settled ? placesIn(root) : [];
+        write();
+        glideInside(inside);
+      } else inPlace(root, write, () => {
         restore(root, room);
         given.delete(root);
         refused.add(root);
@@ -1108,8 +1146,7 @@
     }
     const push = Math.min(width, m.right ? r.left - m.left - GAP : m.left + m.width - GAP - r.right);
     if (push < into(r) - 0.5) return;
-    const one = { how: 'fixed', full: true, reach: push, top: r.top, height: r.height, members: [] };
-    one.members.push({ node: root, offset: 0, height: r.height, animation: null });
+    const one = { reach: push, members: [{ node: root, animation: null, by: 0 }] };
     moved.set(root, one);
     groups.add(one);
     animate(one);
@@ -1179,72 +1216,64 @@
 
   // MARK: Moving
 
-  // A group's members moved, each by an animation of its own: one that
-  // holds where a group the page fixes in the window stands, or one on the
-  // member's own place in the window as the page scrolls, which WebKit runs
-  // with the scrolling.
+  // A group's members shifted aside by the group's reach, each by an
+  // animation of its own on `translate` that holds: the same wherever the
+  // page is scrolled to, as the page lays out nothing for it, and nothing
+  // is worked out again as the page scrolls. Where a member shows, once
+  // the page has come in, it glides there from where it is drawn now (its
+  // place, or a shift of before), slowing as it arrives; elsewhere, while
+  // the page is still coming in, or under Reduce Motion, it is there at
+  // once. A member already shifted by as much keeps its animation.
   function animate(one) {
-    const sign = m.right ? -1 : 1;
+    const by = (m.right ? -1 : 1) * one.reach;
+    const glide = settled && !(lessMotion && lessMotion.matches);
     for (const member of one.members) {
+      const node = member.node;
+      if (!node.isConnected || (member.animation && Math.abs(member.by - by) < 0.5)) continue;
+      // Where it is drawn now: part of the way, while it still glides.
+      const was = drawn.get(node);
+      const from = !member.animation ? (was && was.slice === slices ? was.by : 0)
+        : member.animation.playState === 'running' ? parseFloat(getComputedStyle(node).translate) || 0 : member.by;
+      // The shift is sideways, so where it stands up and down is its own.
+      const r = glide ? node.getBoundingClientRect() : null;
       if (member.animation) member.animation.cancel();
       member.animation = null;
-      let animation = null;
-      if (one.how === 'fixed') {
-        // Where it stands now: the move is sideways, so its top is its own (the window may have changed).
-        if (member === one.members[0] && member.node.isConnected) one.top = member.node.getBoundingClientRect().top - member.offset;
-        const by = sign * one.reach * (one.full ? 1 : cover(one.top, one.top + one.height));
-        if (Math.abs(by) < 0.5) continue;
-        const frame = { translate: `${by.toFixed(1)}px 0` };
-        animation = member.node.animate([frame, frame], { duration: 1000, fill: 'both' });
-        animation.pause();
+      member.by = 0;
+      if (Math.abs(by) < 0.5) continue;
+      const to = { translate: `${by.toFixed(1)}px 0` };
+      let animation;
+      if (r && Math.abs(by - from) >= 1 && r.bottom > 0 && r.top < m.height) {
+        animation = node.animate([{ translate: `${from.toFixed(1)}px 0` }, to], { duration: GLIDE, easing: EASE, fill: 'forwards' });
+        // Held once it has ended, whatever else comes to animate the node.
+        if (animation.persist) animation.persist();
+        glides++;
       } else {
-        const frames = slope(one, member, sign);
-        if (!frames) continue;
-        animation = member.node.animate(frames, { timeline: new ViewTimeline({ subject: member.node, axis: 'block' }), fill: 'both' });
+        animation = node.animate([to, to], { duration: 1000, fill: 'both' });
+        animation.pause();
       }
       ours.add(animation);
       member.animation = animation;
+      member.by = by;
     }
   }
 
-  // A member's keyframes over its view timeline: at each place in the
-  // window where the group's top or foot meets a band or the end of a
-  // band's slant, or where the slants of two bands meet, how far aside it
-  // is, and half way between. The timeline's progress is where the member is in the
-  // window: 0 with its top at the window's foot, 1 with its foot at the
-  // window's top. Nil where it never moves.
-  function slope(one, member, sign) {
-    const H = m.height;
-    const h = Math.max(1, member.height);
-    // The group's top in the window, and the member's progress there.
-    const progress = (top) => (H - (top + member.offset)) / (H + h);
-    const tops = new Set([H - member.offset, -h - member.offset]);
-    for (const [a, b] of m.bands) for (const top of [b + m.ramp, b, a - one.height, a - one.height - m.ramp]) tops.add(top);
-    for (let i = 0; i + 1 < m.bands.length; i++) tops.add((m.bands[i][1] + m.bands[i + 1][0] - one.height) / 2);
-    const sorted = [...tops].filter((top) => {
-      const p = progress(top);
-      return p >= 0 && p <= 1;
-    }).sort((x, y) => x - y);
-    const samples = [];
-    for (let i = 0; i < sorted.length; i++) {
-      samples.push(sorted[i]);
-      if (i + 1 < sorted.length) samples.push((sorted[i] + sorted[i + 1]) / 2);
-    }
-    let moves = false;
-    const frames = samples.map((top) => {
-      const by = sign * one.reach * cover(top, top + one.height);
-      if (Math.abs(by) >= 0.5) moves = true;
-      return { offset: progress(top), translate: `${by.toFixed(1)}px 0` };
-    }).sort((x, y) => x.offset - y.offset);
-    return moves ? frames : null;
-  }
-
+  // A group let go of: its members back in their places. What one showed
+  // is kept until the slice ends, as nothing is drawn before: moved again
+  // meanwhile (a row joining its list), it glides on from there. A list
+  // let go of is met anew, its rows taken in afresh, not twice.
   function drop(one) {
     for (const member of one.members) {
-      if (member.animation) member.animation.cancel();
+      if (member.animation) {
+        const by = member.animation.playState === 'running' ? parseFloat(getComputedStyle(member.node).translate) || 0 : member.by;
+        drawn.set(member.node, { by, slice: slices });
+        member.animation.cancel();
+      }
+      member.animation = null;
+      member.by = 0;
       moved.delete(member.node);
     }
     groups.delete(one);
+    for (const [parent, list] of lists) if (list === one) lists.delete(parent);
   }
 
   // MARK: Finding what to look at
@@ -1279,8 +1308,8 @@
     observeIn(root);
   }
 
-  // The observer looks at the strip's column only, a window above and below
-  // it too, so what scrolls in is looked at before it comes.
+  // The observer looks at the strip's column only, two windows above and
+  // below it too, so what scrolls in is placed before it comes.
   function begin() {
     m = measured();
     observeColumn();
@@ -1322,7 +1351,7 @@
         }
       }
       schedule();
-    }, { rootMargin: `100% -${shyRight}px 100% -${shy}px` });
+    }, { rootMargin: `${AHEAD * 100}% -${shyRight}px ${AHEAD * 100}% -${shy}px` });
   }
 
   // MARK: The work, in slices
@@ -1345,10 +1374,14 @@
       schedule(STILL);
       return;
     }
+    if (performance.now() < glidingUntil) {
+      schedule(glidingUntil - performance.now());
+      return;
+    }
     const start = performance.now();
     m = measured();
-    // Zoomed in, or the keyboard up, the window shows part of the page, and
-    // its timelines aren't the window's: nothing new until it is all back.
+    // Zoomed in, or the keyboard up, the window shows part of the page, the
+    // person looking closely or typing: nothing new until it is all back.
     const view = window.visualViewport;
     if (view && (Math.abs(view.offsetTop) > 1 || Math.abs(view.height - window.innerHeight) > 1)) {
       schedule(1000);
@@ -1387,7 +1420,8 @@
   // as it changed first, then the strip's new bands, the controls found,
   // and the text, which is the longest.
   function work(until) {
-    const due = () => performance.now() < until;
+    // A box laid out anew where it shows ends the slice: what is in it glides.
+    const due = () => performance.now() < until && performance.now() >= glidingUntil;
     checkGiven();
     const scrolling = rootScrolls();
     if (rescan) {
@@ -1415,14 +1449,24 @@
       probeDue = true;
     }
     if (probeDue && performance.now() - probed > 1000 && due()) probeLayers();
+    // What the page took out is let go of; the rest of its group or list
+    // keeps its shift (a feed dropping the rows it scrolled past).
     if (swept) {
       swept = false;
-      for (const one of [...groups]) if (!one.members.every((member) => member.node.isConnected)) drop(one);
+      for (const one of [...groups]) {
+        const gone = one.members.filter((member) => !member.node.isConnected);
+        if (!gone.length) continue;
+        drop({ members: gone });
+        one.members = one.members.filter((member) => member.node.isConnected);
+        if (!one.members.length) groups.delete(one);
+      }
+      for (const [parent, one] of [...lists]) if (!groups.has(one)) lists.delete(parent);
       watchRoots();
     }
+    // New bands: what moved stays, as it moved for the whole column, and
+    // what was left is looked at again (a header beside the status bar).
     if (rebands) {
       rebands = false;
-      for (const one of groups) animate(one);
       for (const control of near) pending.add(control);
     }
     // While the whole page's text is first walked, it comes first: a
@@ -1473,8 +1517,10 @@
       generation++;
       for (const control of near) pending.add(control);
     }
-    // Blocks left for later are looked at again once the page has stopped (touchend).
-    return !!walker || textRoots.length > 0 || pending.size > 0 || [...given.values()].some((room) => room.fresh);
+    // Blocks left for later are looked at again once the page has stopped
+    // (touchend). Controls the page added are still to give the observer.
+    return !!walker || textRoots.length > 0 || pending.size > 0 || observing.length > 0 ||
+      [...given.values()].some((room) => room.fresh);
   }
 
   // MARK: Told where the strip is
@@ -1521,8 +1567,8 @@
       clear();
       generation++;
       if (document.body) begin();
-    } else if (JSON.stringify(was.bands) !== JSON.stringify(strip.bands) || was.ramp !== strip.ramp) {
-      // Its bands alone: the groups move by the new ones, and what was left is looked at again.
+    } else if (JSON.stringify(was.bands) !== JSON.stringify(strip.bands)) {
+      // Its bands alone: what was left is looked at again.
       generation++;
       rebands = true;
     }
@@ -1550,9 +1596,6 @@
   }, { capture: true, passive: true });
   const resized = () => {
     lastMove = performance.now();
-    if (!m || !strip) return;
-    // The window's height is what the moved groups' keyframes are worked out from.
-    if (measured().height !== m.height) rebands = true;
     schedule(STILL);
   };
   addEventListener('resize', resized);
@@ -1587,10 +1630,15 @@
   // How it stands, for Diagnostics and tests.
   const state = () => ({
     strip: !!strip, settled, generation, near: near.size, pending: pending.size, groups: groups.size,
-    given: given.size, deferred: deferred.size, slices, longest: Math.round(longest * 10) / 10, calm: Math.round(calm * 10) / 10, unsteady, failures, failed,
+    given: given.size, deferred: deferred.size, glides, slices, longest: Math.round(longest * 10) / 10, calm: Math.round(calm * 10) / 10, unsteady, failures, failed,
   });
 
-  // What can be pressed and still shows under one of the strip's items,
+  // What is shifted aside now, for tests (StripTour): each shifted node,
+  // whose place from side to side mustn't change as the page scrolls.
+  const shifted = () => [...groups].flatMap((one) => one.members
+    .filter((member) => member.animation && member.node.isConnected).map((member) => member.node));
+
+  // What can be pressed and still shows under the strip, anywhere down it,
   // in the window, for tests (StripTour): each one's tag, name, the test
   // page's pattern round it (data-pattern) and its box, as drawn.
   function leftovers() {
@@ -1606,9 +1654,10 @@
         // A link as wide as a card, its picture under the glass, stays (WIDE).
         if (r.width < 1 || r.height < 1 || r.bottom <= 0 || r.top >= now.height || r.width > WIDE * now.width) continue;
         const reach = now.right ? r.right - now.edge : now.edge - r.left;
-        if (reach < 1 || !now.bands.some(([a, b]) => r.top < b && r.bottom > a)) continue;
-        // Shown there, not behind something else nor cut off.
-        const x = now.right ? Math.min(r.right - 1, now.edge + reach / 2) : Math.max(r.left + 1, now.edge - reach / 2);
+        if (reach < 1) continue;
+        // Shown there, not behind something else nor cut off: looked at in
+        // the middle of what of it is under the strip.
+        const x = now.right ? (Math.max(r.left, now.edge) + r.right) / 2 : (r.left + Math.min(r.right, now.edge)) / 2;
         const y = Math.min(Math.max(r.top + r.height / 2, 1), now.height - 1);
         const hit = roots[i].elementFromPoint ? roots[i].elementFromPoint(x, y) : document.elementFromPoint(x, y);
         if (!hit || (hit !== node && !node.contains(hit))) continue;
@@ -1622,5 +1671,5 @@
     }
     return found;
   }
-  Object.defineProperty(window, '__egluStrip', { value: Object.freeze({ set, state, leftovers }), configurable: false });
+  Object.defineProperty(window, '__egluStrip', { value: Object.freeze({ set, state, shifted, leftovers }), configurable: false });
 })();

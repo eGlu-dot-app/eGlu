@@ -34,11 +34,13 @@ public enum DuoLayout {
         return Sidebar(width: width, gap: fold.width)
     }
 
-    /// What the strip takes of a page that runs on under it, in the page
-    /// view's points, as strip.js is told it (Docs/iPhoneDuoDesign.md §9).
-    /// The strip is taken only in bands: the status bar and the system's
-    /// items at its top, New Tab and Tabs at its foot. Between the bands it
-    /// is empty, and what can be pressed on the page may stand under it.
+    /// The strip over a page that runs on under it, in the page view's
+    /// points, as strip.js is told it (Docs/iPhoneDuoDesign.md §9): its side
+    /// and width, which the script keeps what can be pressed clear of from
+    /// top to bottom, and the bands down it where something stands (the
+    /// status bar and the system's items at its top, New Tab and Tabs at its
+    /// foot), by which the script tells the page's own header beside the
+    /// status bar.
     public struct Strip: Equatable, Sendable, Encodable {
         public enum Side: String, Equatable, Sendable, Encodable {
             case left
@@ -50,18 +52,14 @@ public enum DuoLayout {
         public let width: CGFloat
         /// Top and bottom of each band, top first, none touching another.
         public let bands: [[CGFloat]]
-        /// How far below and above a band the room for what can be pressed
-        /// takes to widen back to the window's edge: a slant rather than a step.
-        public let ramp: CGFloat
         /// Whether the bands are where the strip's items are: false when the
         /// system didn't say where one stands, and the whole strip is one band.
         public let known: Bool
 
-        public init(side: Side, width: CGFloat, bands: [[CGFloat]], ramp: CGFloat, known: Bool = true) {
+        public init(side: Side, width: CGFloat, bands: [[CGFloat]], known: Bool = true) {
             self.side = side
             self.width = width
             self.bands = bands
-            self.ramp = ramp
             self.known = known
         }
     }
