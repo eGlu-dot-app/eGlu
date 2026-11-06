@@ -26,12 +26,17 @@ extension Handoff {
             public var shape: Shape
             /// Some of it is only started: the rest is counted in the file, not given.
             public var started: Bool
+            /// How many characters of it the file counts and does not give.
+            /// Where it is all of it, the opening is empty: the file has its
+            /// heading and the count, and none of its words.
+            public var left: Int
 
-            public init(heading: String, opening: String, shape: Shape = .text, started: Bool = false) {
+            public init(heading: String, opening: String, shape: Shape = .text, started: Bool = false, left: Int = 0) {
                 self.heading = heading
                 self.opening = opening
                 self.shape = shape
                 self.started = started
+                self.left = left
             }
         }
 
@@ -40,7 +45,9 @@ extension Handoff {
         public var asides: [Aside] = []
         /// The person's selection, plain, which goes first.
         public var selection = ""
-        /// What a recording says is in the file: the page's own transcript, or the site's.
+        /// What a recording says is in the file: the page's own transcript, or
+        /// the site's. Its part is not among the sections: the sheet has a
+        /// row of its own for it.
         public var transcript = false
 
         public init() {}
@@ -119,6 +126,14 @@ extension Handoff {
             }
         }
         close()
+        // The transcript's part goes as the transcript: the site's, added under "Transcript" (Transcript.blocks), or the page's own.
+        if outline.transcript {
+            var named: Set<String> = reading?.spoken != nil || reading == nil ? ["transcript"] : []
+            for block in reading?.blocks ?? [] where block.kind == .heading && block.hint == .transcript {
+                named.insert(oneLine(outlinePlain(block.title), upTo: 120).lowercased())
+            }
+            outline.sections.removeAll { named.contains($0.heading.lowercased()) }
+        }
         return outline
     }
 
@@ -138,6 +153,7 @@ extension Handoff {
         var named: String?
         var lower: [String] = []
         var started = false
+        var left = 0
         var position = 0
         while position < indices.count {
             let index = indices[position]
@@ -177,7 +193,10 @@ extension Handoff {
                 position += 1
             }
             if block.count == 1, let note = block.first, isNote(note) {
-                if note.hasSuffix(" more characters here.]") { started = true }
+                if let counted = counted(note) {
+                    started = true
+                    left += counted
+                }
                 continue
             }
             let begins = beginning(of: block)
@@ -198,11 +217,23 @@ extension Handoff {
         let wordsFirst = opening?.shape == .text || opening?.shape == .picture
         if let said = (heading.isEmpty ? named ?? prose : nil) ?? (wordsFirst ? sentence : nil) { opening = (said, .text) }
         if let opening, !opening.words.isEmpty {
-            return Outline.Section(heading: heading, opening: opening.words, shape: opening.shape, started: started)
+            return Outline.Section(heading: heading, opening: opening.words, shape: opening.shape, started: started, left: left)
         }
         // A heading with nothing of its own but lower headings: those say what is in it.
-        guard !lower.isEmpty else { return nil }
-        return Outline.Section(heading: heading, opening: cut(lower.joined(separator: " · "), to: openingRoom), started: started)
+        if !lower.isEmpty {
+            return Outline.Section(heading: heading, opening: cut(lower.joined(separator: " · "), to: openingRoom), started: started,
+                                   left: left)
+        }
+        // A heading with nothing under it but the count of what is left out: in the file, as its heading and the count.
+        guard left > 0, !heading.isEmpty else { return nil }
+        return Outline.Section(heading: heading, opening: "", started: true, left: left)
+    }
+
+    /// The characters a note of the file's counts and leaves out: "[1,200 more characters here.]" (Handoff.compose).
+    private static func counted(_ note: String) -> Int? {
+        let line = note.trimmingCharacters(in: .whitespaces)
+        guard line.hasPrefix("["), line.hasSuffix(" more characters here.]") else { return nil }
+        return Int(line.dropFirst().prefix { $0.isNumber || $0 == "," }.filter(\.isNumber))
     }
 
     /// Whether words end as a sentence does, and not as a label ("Main

@@ -225,3 +225,29 @@ struct HandoffOutlineShapeTests {
         #expect(outline.sections.first?.opening == "The tide comes in.")
     }
 }
+
+struct HandoffOutlineReviewTests {
+    @Test func aPartWhoseWordsAreAllCountedStays() {
+        let body = "## Archive\n\n[1,200 more characters here.]\n\n## Next\n\nWords of the next part."
+        let outline = Handoff.outline(of: Handoff.Composed(kind: .app, body: body))
+        #expect(outline.sections.map(\.heading) == ["Archive", "Next"])
+        #expect(outline.sections[0] == Handoff.Outline.Section(heading: "Archive", opening: "", started: true, left: 1_200))
+        #expect(outline.sections[1].left == 0)
+    }
+
+    @Test func aPartOnlyStartedCountsWhatIsLeftOut() {
+        let body = "## Plans\n\nBasic is free.\n\n[300 more characters here.]\n\n[1,000 more characters here.]"
+        let outline = Handoff.outline(of: Handoff.Composed(kind: .landing, body: body))
+        #expect(outline.sections.first?.started == true)
+        #expect(outline.sections.first?.left == 1_300)
+    }
+
+    @Test func theTranscriptIsNotAlsoAPart() {
+        var composed = Handoff.Composed(kind: .media, body: "## Description\n\nA video about tides.\n\n## Transcript\n\n0:00 Hello there.")
+        composed.transcript = true
+        let reading = PageReading(blocks: [PageBlock(kind: .heading, level: 2, text: "## Transcript", hint: .transcript, start: "Transcript")])
+        let outline = Handoff.outline(of: composed, reading: reading)
+        #expect(outline.sections.map(\.heading) == ["Description"])
+        #expect(outline.transcript)
+    }
+}

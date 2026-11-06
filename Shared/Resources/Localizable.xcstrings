@@ -1,6 +1,17 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Not included, %@ characters" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not included, %@ characters"
+          }
+        }
+      }
+    },
     "Apple Intelligence is writing…" : {
       "extractionState" : "manual",
       "localizations" : {

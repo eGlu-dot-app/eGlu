@@ -1080,6 +1080,12 @@ private struct ContentsView: View {
             let title = !section.heading.isEmpty ? section.heading
                 : alone ? (job.isFile ? String(localized: "The file's text") : String(localized: "The page's text"))
                 : String(localized: "Introduction")
+            // A part none of whose words go, only its heading and what is left out counted: greyed, as what is set aside.
+            if section.opening.isEmpty {
+                rows.append(Row(id: "part-\(index)", symbol: section.shape.symbol, title: title,
+                                detail: String(localized: "Not included, \(section.left.formatted()) characters"), quiet: true))
+                continue
+            }
             rows.append(Row(id: "part-\(index)", symbol: section.shape.symbol, title: title, detail: section.opening,
                             tag: section.started ? String(localized: "Beginning only") : nil))
         }
