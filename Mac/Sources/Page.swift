@@ -1,7 +1,10 @@
 import AppKit
 import PadCore
 import UniformTypeIdentifiers
+import WebEngineAppKit
+import WebEngineCore
 import WebKit
+import WebKitMacPlugin
 
 /// What a page asks of whoever is showing it: a window (WindowModel), a
 /// Peek over a tab (PeekPage), a little window (LittleWindow) or a sign-in
@@ -17,10 +20,9 @@ protocol PageHost: AnyObject {
     func pageDidChange(_ page: Page)
     func isShowing(_ page: Page) -> Bool
     /// A window the page opened (window.open, a link to a new window). The
-    /// returned view must be made with `configuration`, as WebKit requires,
-    /// for the new page to keep its tie to the one that opened it.
-    func page(_ page: Page, open configuration: WKWebViewConfiguration, for action: WKNavigationAction,
-              features: WKWindowFeatures) -> WKWebView?
+    /// returned page must be made from `request`, before this call returns,
+    /// for the new page to keep its tie to the one that opened it. nil rejects it.
+    func page(_ page: Page, openChild request: any WebChildRequest) -> Page?
     /// A ⌘-click's address, for a tab of its own (NewTabClick); false where
     /// there are no tabs, and the page goes there itself.
     func page(_ page: Page, openInNewTab url: URL, inFront: Bool) -> Bool
@@ -143,8 +145,23 @@ final class Page: NSObject {
     let tab: UUID
     let space: UUID
     let view: PageView
+    /// The same view, for hosts to place, move and give the keys.
+    private(set) lazy var surface: any WebEngineSurface = PageWebKitSurface(view: view)
+    private var navigationAdapter: WebKitNavigationAdapter!
     private let controller: WKUserContentController
     weak var host: PageHost?
+
+    /// What WebKit reports now, without the tab's replacement history.
+    var state: PageState {
+        PageState(url: view.url, title: view.title, isLoading: view.isLoading,
+                  estimatedProgress: view.estimatedProgress, canGoBack: view.canGoBack,
+                  canGoForward: view.canGoForward, hasOnlySecureContent: view.hasOnlySecureContent)
+    }
+
+    /// Whether Back can use the page's history or the page it replaced.
+    var canGoBack: Bool {
+        view.canGoBack || Session.shared.canGoBackPastReplacement(tab)
+    }
 
     /// The site's adapter, for what its own reader can add to a handoff (a
     /// video's transcript) and how heavy its pages are; none of its bridges.
@@ -294,15 +311,14 @@ final class Page: NSObject {
         #endif
     }()
 
-    /// `configuration`: WebKit's, for a page opened by another page; a new
-    /// one in the space's store otherwise. Either way the page gets a script
-    /// controller of its own, so the scripts swapped for one page (none at
-    /// all on a hands-off host) never touch another's.
-    init(tab: UUID, space: UUID, configuration: WKWebViewConfiguration? = nil, extensionPage: Bool = false) {
+    /// `configuration`: supplied by the page engine. A page gets a script
+    /// controller of its own unless it is an extension's page, so scripts
+    /// swapped for one page never touch another's.
+    init(tab: UUID, space: UUID, configuration: WKWebViewConfiguration, extensionPage: Bool = false) {
         self.tab = tab
         self.space = space
         isExtensionPage = extensionPage
-        let config = configuration ?? Page.configuration(space: space)
+        let config = configuration
         // An extension's page keeps the controller WebKit made for it.
         let controller = extensionPage ? config.userContentController : WKUserContentController()
         config.userContentController = controller
@@ -310,7 +326,8 @@ final class Page: NSObject {
         view = PageView(frame: .zero, configuration: config)
         super.init()
         view.page = self
-        view.navigationDelegate = self
+        navigationAdapter = WebKitNavigationAdapter(view: view, policy: self, events: self)
+        view.navigationDelegate = navigationAdapter
         // An extension's page has WebKit's question about recording the
         // screen answered by eGlu's recording channel (ExtensionCapture).
         if extensionPage {
@@ -321,40 +338,6 @@ final class Page: NSObject {
             view.uiDelegate = self
         }
         setUp()
-    }
-
-    static func configuration(space: UUID) -> WKWebViewConfiguration {
-        let config = WKWebViewConfiguration()
-        config.websiteDataStore = Stores.store(for: space)
-        // Safari, by name: the end of the user agent that WebKit leaves to
-        // the app (Identity.swift). Without it sites read the app as a web
-        // view inside an app, and Google refuses to sign in.
-        config.applicationNameForUserAgent = Identity.applicationName(for: ProcessInfo.processInfo.operatingSystemVersion)
-        config.mediaTypesRequiringUserActionForPlayback = .audio
-        config.preferences.isElementFullscreenEnabled = true
-        // window.open only from a click or a key, as Safari's pop-up
-        // blocking has it; a sign-in window opened by its button opens.
-        config.preferences.javaScriptCanOpenWindowsAutomatically = false
-        // macOS's own picture in picture for a video (appWentBehind, and a
-        // site's own button): WebKit has it, and turns it off in an app's
-        // web views on macOS, with no public switch. This one is private: a
-        // DMG has no App Review, and a macOS that takes it away leaves
-        // picture in picture off, as it was. With the underscore the key
-        // finds no setter and throws; without it, `_setAllows…:` is found.
-        if config.preferences.responds(to: Selector(("_setAllowsPictureInPictureMediaPlayback:"))) {
-            config.preferences.setValue(true, forKey: "allowsPictureInPictureMediaPlayback")
-        }
-        // Right-click Inspect Element and console logging to the page's own
-        // inspector: the same private switch Safari has, found the same way.
-        // The developer tools need the _inspector object, not this; it only
-        // opens WebKit's own inspector for a page that asks to be inspected.
-        if config.preferences.responds(to: Selector(("_setDeveloperExtrasEnabled:"))) {
-            config.preferences.setValue(true, forKey: "developerExtrasEnabled")
-        }
-        // The space's extensions (Extensions): WebKit takes a page's
-        // controller only before the page's view is made.
-        config.webExtensionController = Extensions.shared.controller(for: space)
-        return config
     }
 
     private func setUp() {
@@ -442,6 +425,7 @@ final class Page: NSObject {
         blocking.remove(from: controller)
         if isExtensionPage { ExtensionCapture.shared.release(view) }
         view.stopLoading()
+        navigationAdapter.tearDown()
         view.navigationDelegate = nil
         view.uiDelegate = nil
         view.page = nil
@@ -450,6 +434,27 @@ final class Page: NSObject {
     }
 
     // MARK: Loading
+
+    /// Back in WebKit, or past a replaced page when its history is empty.
+    func goBack() {
+        if !view.canGoBack, Session.shared.wentBackPastReplacement(tab) { return }
+        view.goBack()
+    }
+
+    /// Forward in the page's own history.
+    func goForward() {
+        view.goForward()
+    }
+
+    /// Stop the load under way.
+    func stopLoading() {
+        view.stopLoading()
+    }
+
+    /// Reload from origin without the page's retry or crash reset.
+    func reloadFromOrigin() {
+        view.reloadFromOrigin()
+    }
 
     func load(_ url: URL) {
         beginNavigation(url)
@@ -472,7 +477,7 @@ final class Page: NSObject {
     /// go: one eGlu asked for here, or one the extension shows the https
     /// site that sent it (web_accessible_resources), as Chrome. Any other
     /// is refused: no website opens a password manager's vault. (Search)
-    private func opensExtensionPage(_ url: URL, for action: WKNavigationAction) -> Bool {
+    private func opensExtensionPage(_ url: URL, for action: WebNavigation) -> Bool {
         if let asked = askedHere, asked == url { askedHere = nil; return true }
         guard let source = Self.site(sending: action, loadingFrom: loadingFrom, to: url) else { return false }
         return Extensions.shared.webAccessible(url, from: source, in: space)
@@ -484,20 +489,19 @@ final class Page: NSObject {
     /// says which only privately (_isRedirect), asked first; without it,
     /// the frame, and a redirect from a blank tab reads as the site that
     /// redirected. nil for anything else.
-    static func site(sending action: WKNavigationAction, loadingFrom: URL?, to url: URL) -> URL? {
-        let redirect = action.responds(to: NSSelectorFromString("_isRedirect")) && (action.value(forKey: "_isRedirect") as? Bool) == true
-        let origin = action.sourceFrame.securityOrigin
+    static func site(sending action: WebNavigation, loadingFrom: URL?, to url: URL) -> URL? {
         let frame: URL? = {
-            guard origin.protocol.lowercased() == "https", !origin.host.isEmpty else { return nil }
+            guard case let .tuple(scheme, host, port) = action.sourceOrigin,
+                  scheme.lowercased() == "https", !host.isEmpty else { return nil }
             var parts = URLComponents()
             parts.scheme = "https"
-            parts.host = origin.host
-            if origin.port > 0 { parts.port = origin.port }
+            parts.host = host
+            if port > 0 { parts.port = port }
             parts.path = "/"
             return parts.url
         }()
         let redirecting = loadingFrom.flatMap { $0.scheme?.lowercased() == "https" && $0 != url ? $0 : nil }
-        return redirect ? redirecting : frame ?? redirecting
+        return action.isServerRedirect ? redirecting : frame ?? redirecting
     }
 
     /// The tab whose page opened this one, for a Peek's or a pop-up's page.
@@ -557,27 +561,6 @@ final class Page: NSObject {
     /// it with nothing behind it to name the site.
     private var goingTo: URL?
 
-    /// Whether a navigation to an extension's page is a content rule's
-    /// redirect, which no page can make; WebKit says so only privately,
-    /// each asked first. It makes one two ways (seen on macOS 27.0.1): a
-    /// navigation of its own, marked, once the site's is dropped (nil
-    /// here: the site is the one the tab was going to); or, for a load
-    /// eGlu asked for in a view that has a page, the request rewritten
-    /// before it is decided, the address asked for kept as its original:
-    /// that address's site. `.none` for anything else, a server's
-    /// redirect included.
-    private static func ruleRedirect(_ action: WKNavigationAction) -> URL?? {
-        func flag(_ key: String) -> Bool {
-            action.responds(to: NSSelectorFromString(key)) && (action.value(forKey: key) as? Bool) == true
-        }
-        if flag("_isContentExtensionRedirect") || flag("isContentRuleListRedirect") { return .some(nil) }
-        guard !flag("_isRedirect"), action.responds(to: NSSelectorFromString("_originalURL")),
-              let original = action.value(forKey: "_originalURL") as? URL, original != action.request.url,
-              let site = site(of: original)
-        else { return .none }
-        return .some(site)
-    }
-
     /// An http or https address's site, as a web_accessible_resources
     /// check reads one.
     static func site(of url: URL?) -> URL? {
@@ -624,9 +607,9 @@ final class Page: NSObject {
     private func request(_ url: URL) {
         if url.isFileURL {
             FileAccess.open(url)
-            view.loadFileURL(url, allowingReadAccessTo: url)
+            navigationAdapter.loadFile(url, allowingReadAccessTo: url)
         } else {
-            view.load(URLRequest(url: url))
+            navigationAdapter.load(URLRequest(url: url))
         }
     }
 
@@ -841,10 +824,18 @@ final class Page: NSObject {
 
     /// Whether a navigation is a ⌘-click (or ⌘⇧, or a middle click) to open
     /// in a new tab (NewTabClick), from the keys and the button WebKit says made it.
-    private func newTabChoice(for action: WKNavigationAction) -> NewTabClick.Choice {
-        let flags = action.modifierFlags
-        return NewTabClick.choice(for: action, command: flags.contains(.command), shift: flags.contains(.shift),
-                                  middleButton: action.buttonNumber == 2)
+    private func newTabChoice(for action: WebNavigation) -> NewTabClick.Choice {
+        let kind: NewTabClick.Kind
+        switch action.kind {
+        case .link: kind = .link
+        case .form: kind = .form
+        case .other: kind = .script
+        default: kind = .history
+        }
+        return NewTabClick.choice(kind: kind, command: action.modifiers.contains(.command),
+                                  shift: action.modifiers.contains(.shift), middleButton: action.buttonNumber == 2,
+                                  method: action.request.httpMethod, scheme: action.request.url?.scheme,
+                                  mainFrame: action.targetIsMainFrame ?? true)
     }
 
     // MARK: Find, zoom, print
@@ -1271,16 +1262,16 @@ final class Page: NSObject {
         host is WindowModel
     }
 
-    /// A Peek over the page, in place of the one open. `configuration`:
-    /// WebKit's, for a window the page opened, which WebKit loads itself;
+    /// A Peek over the page, in place of the one open. `child`:
+    /// the request for a window the page opened, which the engine loads itself;
     /// nil for a link, loaded here.
     @discardableResult
-    func openPeek(_ url: URL?, configuration: WKWebViewConfiguration? = nil, width: Double? = nil,
+    func openPeek(_ url: URL?, child: (any WebChildRequest)? = nil, width: Double? = nil,
                   height: Double? = nil) -> PeekPage {
         peek?.close()
-        let made = PeekPage(opener: self, configuration: configuration, url: url, width: width, height: height)
+        let made = PeekPage(opener: self, child: child, url: url, width: width, height: height)
         peek = made
-        if configuration != nil {
+        if child != nil {
             made.page.wasOpened = true
         } else if let url {
             made.page.load(url)
@@ -1305,19 +1296,19 @@ final class Page: NSObject {
 
     /// Whether a navigation leaves a pinned tab's site, for a Peek over the
     /// tab (Peek.opensFromPinned), as Arc keeps a pinned tab on its own site.
-    private func peeksFromPinned(_ action: WKNavigationAction) -> Bool {
+    private func peeksFromPinned(_ action: WebNavigation) -> Bool {
         let session = Session.shared
         guard canPeek, session.preferences.peekFromPinnedTabs, session.workspace.tab(tab)?.isPinned == true,
               host?.isShowing(self) == true else { return false }
         let kind: NewTabClick.Kind
-        switch action.navigationType {
-        case .linkActivated: kind = .link
-        case .formSubmitted: kind = .form
+        switch action.kind {
+        case .link: kind = .link
+        case .form: kind = .form
         case .other: kind = .script
         default: kind = .history
         }
         return Peek.opensFromPinned(from: committed ?? view.url, to: action.request.url, kind: kind,
-                                    method: action.request.httpMethod, mainFrame: action.targetFrame?.isMainFrame ?? true)
+                                    method: action.request.httpMethod, mainFrame: action.targetIsMainFrame ?? true)
     }
 
     // MARK: Picture in picture
@@ -1328,10 +1319,10 @@ final class Page: NSObject {
     }
 
     /// The window picture.js asked for, in place of the one open: one at a time, as in Chrome.
-    private func openPicture(_ configuration: WKWebViewConfiguration, features: WKWindowFeatures,
+    private func openPicture(_ child: WebKitChildRequest,
                              request: DocumentPicture.Request) -> WKWebView {
         picture?.close()
-        let window = PictureWindow(opener: self, configuration: configuration, features: features, request: request)
+        let window = PictureWindow(opener: self, configuration: child.configuration, features: child.features, request: request)
         window.automatic = enteringPicture
         picture = window
         return window.view
@@ -1441,7 +1432,7 @@ final class Page: NSObject {
 
 // MARK: - WebKit's questions
 
-extension Page: WKNavigationDelegate, WKUIDelegate {
+extension Page: WKUIDelegate {
     /// WebKit's private way to hear which element a context menu is for:
     /// its link is kept for "Handoff Linked File", the menu itself shown
     /// as proposed, so willOpenMenu sees it all.
@@ -1469,249 +1460,36 @@ extension Page: WKNavigationDelegate, WKUIDelegate {
         swipe?.leftAlone(event)
     }
 
-    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
-                 decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void) {
-        let mainFrame = navigationAction.targetFrame?.isMainFrame ?? true
-        if let url = navigationAction.request.url, AppLink.isOne(scheme: url.scheme), !Extensions.shared.isExtensionPage(url) {
-            decisionHandler(.cancel)
-            openElsewhere(url, clicked: navigationAction.navigationType == .linkActivated, mainFrame: mainFrame)
-            return
-        }
-        if navigationAction.shouldPerformDownload {
-            return decisionHandler(.download)
-        }
-        // An extension's sign-in coming back to its own chromiumapp.org
-        // address: the answer its flow waits for, or, with none waiting,
-        // the address the extension watches its tab for. Never loaded.
-        if mainFrame, let url = navigationAction.request.url, ExtensionAuth.owner(of: url) != nil,
-           ExtensionAuth.intercept(url, page: self) || ExtensionAuth.handOver(url, page: self) {
-            return decisionHandler(.cancel)
-        }
-        // An extension's rule sending a site to one of its pages (Norma's
-        // block page, uBlock Origin Lite's warning): WebKit drops the site's
-        // load and starts one to the page here, in a view that can't load
-        // extension pages. The page takes this one's place in the tab, if
-        // the extension shows it to the site the tab was going to. (Search)
-        if mainFrame, !isExtensionPage, let url = navigationAction.request.url,
-           url.scheme?.lowercased() == Extensions.scheme, let rule = Self.ruleRedirect(navigationAction) {
-            let target = ExtensionPolicy.ruleTarget(url)
-            let source = rule ?? goingTo
-            goingTo = nil
-            if let source, Extensions.shared.webAccessible(target, from: source, in: space, fromRule: true) {
-                showInstead(target)
-            }
-            return decisionHandler(.cancel)
-        }
-        if mainFrame { goingTo = Self.site(of: navigationAction.request.url) }
-        // Between a website and an extension's own page: WebKit needs a view
-        // of the other kind, so the page opens in a new tab. From a website,
-        // only to a page the extension shows it.
-        if mainFrame, let url = navigationAction.request.url,
-           ["http", "https", Extensions.scheme].contains(url.scheme?.lowercased() ?? ""),
-           Extensions.shared.isExtensionPage(url) != isExtensionPage {
-            if !isExtensionPage, !opensExtensionPage(url, for: navigationAction) { return decisionHandler(.cancel) }
-            if host?.page(self, openInNewTab: url, inFront: true) == true { return decisionHandler(.cancel) }
-        }
-        let choice = newTabChoice(for: navigationAction)
-        if choice != .here, let url = navigationAction.request.url,
-           host?.page(self, openInNewTab: url, inFront: choice == .inFront) == true {
-            return decisionHandler(.cancel)
-        }
-        if let url = navigationAction.request.url, peeksFromPinned(navigationAction) {
-            decisionHandler(.cancel)
-            openPeek(url)
-            return
-        }
-        if mainFrame {
-            beginNavigation(navigationAction.request.url)
-            history.decided(navigationAction.navigationType, url: navigationAction.request.url)
-        }
-        if mainFrame, let request = askingInLightOrDark(navigationAction) {
-            decisionHandler(.cancel)
-            webView.load(request)
-            return
-        }
-        if mainFrame {
-            prepare(for: navigationAction.request.url)
-            askingForPage = (navigationAction.request.httpMethod ?? "GET").uppercased() == "GET"
-        }
-        decisionHandler(.allow)
-    }
-
-    /// The request again with the screen's light or dark, for a host that
-    /// asks for it as a header and a request without it; nil otherwise. A
-    /// step back or a reload goes as it was made, and a hands-off page is
-    /// never asked for twice. Notes what the request was, for its answer.
-    private func askingInLightOrDark(_ action: WKNavigationAction) -> URLRequest? {
-        let request = action.request
-        let repeatable = ![.backForward, .reload, .formResubmitted].contains(action.navigationType)
-            && (request.httpMethod ?? "GET").uppercased() == "GET" && !HandsOff.covers(request.url)
-        hintCarried = ColorSchemeHint.carries(request.allHTTPHeaderFields)
-        hintRepeatable = repeatable
-        guard repeatable, let value = Self.colorHint.missing(url: request.url, method: request.httpMethod,
-                                                             headers: request.allHTTPHeaderFields, dark: isDark)
-        else { return nil }
-        var again = request
-        again.setValue(value, forHTTPHeaderField: ColorSchemeHint.header)
-        return again
-    }
-
     private var isDark: Bool {
         view.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
     }
 
-    func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,
-                 decisionHandler: @escaping @MainActor (WKNavigationResponsePolicy) -> Void) {
-        // A page from a host that asks for the screen's light or dark, which came light on a dark screen: again, dark.
-        if navigationResponse.isForMainFrame, let response = navigationResponse.response as? HTTPURLResponse,
-           let url = response.url, !HandsOff.covers(url),
-           let value = Self.colorHint.answered(url: url, acceptCH: response.value(forHTTPHeaderField: "Accept-CH"),
-                                               criticalCH: response.value(forHTTPHeaderField: "Critical-CH"),
-                                               requestCarried: hintCarried, repeatable: hintRepeatable, dark: isDark) {
-            decisionHandler(.cancel)
-            var again = URLRequest(url: url)
-            again.setValue(value, forHTTPHeaderField: ColorSchemeHint.header)
-            webView.load(again)
-            return
-        }
-        // What WebKit can't show (a ZIP, an installer) and what the server says to save is a download.
-        let attachment = (navigationResponse.response as? HTTPURLResponse)?
-            .value(forHTTPHeaderField: "Content-Disposition")?.lowercased().hasPrefix("attachment") == true
-        let shows = navigationResponse.canShowMIMEType && !attachment
-        // The kind of what the tab shows, which Handoff reads it by: a download leaves the page as it was.
-        if navigationResponse.isForMainFrame, shows {
-            mimeType = navigationResponse.response.mimeType
-            // What the document is, known only now, before it commits: a PDF
-            // or a picture gets no writing script, and a page after one gets
-            // it back; a JSON page gets its view's script.
-            prepare(for: preparedFor)
-        }
-        if navigationResponse.isForMainFrame {
-            if shows { status.answered(navigationResponse.response) } else { status.dropped() }
-        }
-        decisionHandler(shows ? .allow : .download)
-    }
-
-    func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {
-        downloading(download)
-    }
-
-    func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) {
-        downloading(download)
-    }
-
-    /// A tab that was only ever the file's way in, with no page of its own
-    /// to show, goes once the download has begun, as Safari's does.
-    private func downloading(_ download: WKDownload) {
-        Downloads.shared.adopt(download, from: self)
-        if committed == nil, !view.canGoBack { host?.pageDidClose(self) }
-    }
-
-    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
-        loadingFrom = webView.url
-    }
-
-    func webView(_ webView: WKWebView, didReceiveServerRedirectForProvisionalNavigation navigation: WKNavigation!) {
-        loadingFrom = webView.url
-    }
-
-    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
-        loadingFrom = nil
-        askedHere = nil
-        Session.shared.pages.navigationChanged(self, committed: true)
-        cancelPendingDialog()
-        loadState.commit()
-        refusedAppLink = nil
-        // A new document: the old one's picture-in-picture window goes with it,
-        // as in Chrome, and WebKit takes the old document's video out of its own.
-        picture?.close()
-        videoWanted = false
-        videoFloated = false
-        committed = webView.url
-        status.committed(webView.backForwardList.currentItem)
-        googleRefused = SignIn.googleRefused(webView.url)
-        failure = nil
-        sendingFailed = false
-        jsonView = nil
-        refusedElsewhere = 0
-        history.committed(url: webView.url, title: webView.title, entry: webView.backForwardList.currentItem,
-                          space: space, tab: tab)
-        passwordField = false
-        // The old document's card went with it, unannounced.
-        writingCardOpen = false
-        changed()
-    }
-
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        learnIcons()
-        learnAbout()
-        learnJSONView()
-        host?.pageDidChange(self)
-        #if DEBUG
-        testPictureIfAsked()
-        #endif
-    }
-
-    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        failed(error)
-    }
-
-    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        loadingFrom = nil
-        failed(error)
-    }
-
-    /// A load that failed for a reason worth telling: not one that was
-    /// stopped, nor one that became a download.
-    private func failed(_ error: Error) {
-        let error = error as NSError
-        let quiet = (error.domain == NSURLErrorDomain && error.code == NSURLErrorCancelled)
-            || (error.domain == "WebKitErrorDomain" && [102, 204].contains(error.code))
-        guard !quiet else { return }
-        history.failed()
-        let failedURL = error.userInfo[NSURLErrorFailingURLErrorKey] as? URL
-        if askingForPage {
-            loadState.fail(failedURL)
-            status.failed()
-        } else {
-            // A form's sending: the form is still there, filled in, and the
-            // address stays its page's; Try Again goes back to it (retry).
-            loadState.commit()
-        }
-        sendingFailed = !askingForPage
-        let reason = PageLoadFailure.message(domain: error.domain, code: error.code)
-        failure = loadState.failed?.host.map { "\($0): \(reason)" } ?? reason
-        host?.pageDidChange(self)
-        if askingForPage { ExtensionAuth.loadFailed(self) }
-    }
-
-    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
-        processEnded()
-    }
-
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
                  for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+        let request = WebKitChildRequest(configuration: configuration, action: navigationAction, features: windowFeatures)
+        let navigation = request.navigation
         // A website's window opened on an extension's page: only a page the
         // extension shows that site, as a navigation to one is held to
         // (opensExtensionPage); checked here too, before any view is made.
-        if !isExtensionPage, let url = navigationAction.request.url, Extensions.shared.isExtensionPage(url),
-           !(Self.site(sending: navigationAction, loadingFrom: nil, to: url).map { Extensions.shared.webAccessible(url, from: $0, in: space) } ?? false) {
+        if !isExtensionPage, let url = navigation.request.url, Extensions.shared.isExtensionPage(url),
+           !(Self.site(sending: navigation, loadingFrom: nil, to: url).map { Extensions.shared.webAccessible(url, from: $0, in: space) } ?? false) {
             return nil
         }
         // Another app's link asked for in a window of its own: theirs to
         // open, with no tab made for a page that will never be.
-        if let url = navigationAction.request.url, AppLink.isOne(scheme: url.scheme), !Extensions.shared.isExtensionPage(url) {
-            openElsewhere(url, clicked: navigationAction.navigationType == .linkActivated,
-                          mainFrame: navigationAction.targetFrame?.isMainFrame ?? true)
+        if let url = navigation.request.url, AppLink.isOne(scheme: url.scheme), !Extensions.shared.isExtensionPage(url) {
+            openElsewhere(url, clicked: navigation.kind == .link,
+                          mainFrame: navigation.targetIsMainFrame ?? true)
             return nil
         }
         // picture.js's window, from the page itself and not a frame in it: it floats (PictureWindow).
         // Anywhere else, the same address is an ordinary pop-up.
-        if let request = DocumentPicture.Request(url: navigationAction.request.url), navigationAction.sourceFrame.isMainFrame,
+        // The source can be absent; the old non-optional sourceFrame read would crash then.
+        if let pictureRequest = DocumentPicture.Request(url: navigation.request.url), navigation.sourceIsMainFrame == true,
            Self.offersPicture(committed ?? view.url) {
             // Asked for on leaving the tab, but the tab is back on screen, with eGlu in front, by now: no window.
             if enteringPicture, !videoWanted || !Session.shared.preferences.automaticPictureInPicture { return nil }
-            return openPicture(configuration, features: windowFeatures, request: request)
+            return openPicture(request, request: pictureRequest)
         }
         // While the app calls the site's handler for leaving the tab, the
         // click WebKit grants the call opens the site's picture window only.
@@ -1720,14 +1498,14 @@ extension Page: WKNavigationDelegate, WKUIDelegate {
         if let asked = peekAsked {
             peekAsked = nil
             if Date().timeIntervalSince(asked) < 5, canPeek {
-                return openPeek(navigationAction.request.url, configuration: configuration).page.view
+                return openPeek(navigation.request.url, child: request).page.view
             }
         }
-        let made = host?.page(self, open: configuration, for: navigationAction, features: windowFeatures)
-        if let child = (made as? PageView)?.page, child !== self {
+        let made = host?.page(self, openChild: request)
+        if let child = made, child !== self {
             child.wasOpened = true
         }
-        return made
+        return made?.view
     }
 
     func webViewDidClose(_ webView: WKWebView) {
@@ -1794,5 +1572,222 @@ extension Page: WKNavigationDelegate, WKUIDelegate {
         } else {
             done(panel.runModal())
         }
+    }
+}
+
+// MARK: Navigation events
+
+extension Page: WebNavigationEvents {
+    /// A tab that was only ever the file's way in, with no page of its own
+    /// to show, goes once the download has begun, as Safari's does.
+    func navigationBecameDownload(_ download: any WebEngineCore.WebDownload) {
+        guard let download = (download as? WebKitDownload)?.download else {
+            assertionFailure("Expected a WebKitDownload")
+            return
+        }
+        Downloads.shared.adopt(download, from: self)
+        if committed == nil, !view.canGoBack { host?.pageDidClose(self) }
+    }
+
+    func navigationStarted(url: URL?) {
+        loadingFrom = url
+    }
+
+    func navigationRedirected(url: URL?) {
+        loadingFrom = url
+    }
+
+    func navigationCommitted(url: URL?) {
+        loadingFrom = nil
+        askedHere = nil
+        Session.shared.pages.navigationChanged(self, committed: true)
+        cancelPendingDialog()
+        loadState.commit()
+        refusedAppLink = nil
+        // A new document: the old one's picture-in-picture window goes with it,
+        // as in Chrome, and WebKit takes the old document's video out of its own.
+        picture?.close()
+        videoWanted = false
+        videoFloated = false
+        committed = url
+        status.committed(view.backForwardList.currentItem)
+        googleRefused = SignIn.googleRefused(url)
+        failure = nil
+        sendingFailed = false
+        jsonView = nil
+        refusedElsewhere = 0
+        history.committed(url: url, title: view.title, entry: view.backForwardList.currentItem,
+                          space: space, tab: tab)
+        passwordField = false
+        // The old document's card went with it, unannounced.
+        writingCardOpen = false
+        changed()
+    }
+
+    func navigationFinished() {
+        learnIcons()
+        learnAbout()
+        learnJSONView()
+        host?.pageDidChange(self)
+        #if DEBUG
+        testPictureIfAsked()
+        #endif
+    }
+
+    func navigationFailed(_ error: WebLoadError, provisional: Bool) {
+        if provisional { loadingFrom = nil }
+        guard error.kind == .other else { return }
+        history.failed()
+        let failedURL = error.failingURL
+        if askingForPage {
+            loadState.fail(failedURL)
+            status.failed()
+        } else {
+            // A form's sending: the form is still there, filled in, and the
+            // address stays its page's; Try Again goes back to it (retry).
+            loadState.commit()
+        }
+        sendingFailed = !askingForPage
+        let reason = PageLoadFailure.message(domain: error.domain, code: error.code)
+        failure = loadState.failed?.host.map { "\($0): \(reason)" } ?? reason
+        host?.pageDidChange(self)
+        if askingForPage { ExtensionAuth.loadFailed(self) }
+    }
+
+    func contentProcessEnded() {
+        processEnded()
+    }
+}
+
+// MARK: Navigation policy
+
+extension Page: WebNavigationPolicy {
+    func decideNavigation(_ navigation: WebNavigation,
+                          reply: @MainActor (WebNavigationDecision) -> Void) {
+        let mainFrame = navigation.targetIsMainFrame ?? true
+        if let url = navigation.request.url, AppLink.isOne(scheme: url.scheme), !Extensions.shared.isExtensionPage(url) {
+            reply(.cancel)
+            openElsewhere(url, clicked: navigation.kind == .link, mainFrame: mainFrame)
+            return
+        }
+        if navigation.requestsDownload {
+            return reply(.download)
+        }
+        // An extension's sign-in coming back to its own chromiumapp.org
+        // address: the answer its flow waits for, or, with none waiting,
+        // the address the extension watches its tab for. Never loaded.
+        if mainFrame, let url = navigation.request.url, ExtensionAuth.owner(of: url) != nil,
+           ExtensionAuth.intercept(url, page: self) || ExtensionAuth.handOver(url, page: self) {
+            return reply(.cancel)
+        }
+        // An extension's rule sending a site to one of its pages (Norma's
+        // block page, uBlock Origin Lite's warning): WebKit drops the site's
+        // load and starts one to the page here, in a view that can't load
+        // extension pages. The page takes this one's place in the tab, if
+        // the extension shows it to the site the tab was going to. (Search)
+        if mainFrame, !isExtensionPage, let url = navigation.request.url,
+           url.scheme?.lowercased() == Extensions.scheme, let rule = navigation.contentRuleRedirect {
+            let target = ExtensionPolicy.ruleTarget(url)
+            let source = rule.originalSite ?? goingTo
+            goingTo = nil
+            if let source, Extensions.shared.webAccessible(target, from: source, in: space, fromRule: true) {
+                showInstead(target)
+            }
+            return reply(.cancel)
+        }
+        if mainFrame { goingTo = Self.site(of: navigation.request.url) }
+        // Between a website and an extension's own page: WebKit needs a view
+        // of the other kind, so the page opens in a new tab. From a website,
+        // only to a page the extension shows it.
+        if mainFrame, let url = navigation.request.url,
+           ["http", "https", Extensions.scheme].contains(url.scheme?.lowercased() ?? ""),
+           Extensions.shared.isExtensionPage(url) != isExtensionPage {
+            if !isExtensionPage, !opensExtensionPage(url, for: navigation) { return reply(.cancel) }
+            if host?.page(self, openInNewTab: url, inFront: true) == true { return reply(.cancel) }
+        }
+        let choice = newTabChoice(for: navigation)
+        if choice != .here, let url = navigation.request.url,
+           host?.page(self, openInNewTab: url, inFront: choice == .inFront) == true {
+            return reply(.cancel)
+        }
+        if let url = navigation.request.url, peeksFromPinned(navigation) {
+            reply(.cancel)
+            openPeek(url)
+            return
+        }
+        if mainFrame {
+            beginNavigation(navigation.request.url)
+            let kind: PageHistory.NavigationKind
+            switch navigation.kind {
+            case .link: kind = .link
+            case .form: kind = .form
+            case .formResubmission: kind = .formResubmission
+            case .history: kind = .history
+            case .reload: kind = .reload
+            case .other: kind = .other
+            case .unknown(let raw): kind = .unknown(raw)
+            }
+            history.decided(kind, url: navigation.request.url)
+        }
+        if mainFrame, let request = askingInLightOrDark(navigation) {
+            reply(.cancel)
+            navigationAdapter.load(request)
+            return
+        }
+        if mainFrame {
+            prepare(for: navigation.request.url)
+            askingForPage = (navigation.request.httpMethod ?? "GET").uppercased() == "GET"
+        }
+        reply(.allow)
+    }
+
+    func decideResponse(_ response: WebResponse,
+                        reply: @MainActor (WebResponseDecision) -> Void) {
+        // A page from a host that asks for the screen's light or dark, which came light on a dark screen: again, dark.
+        if response.isForMainFrame, let http = response.response as? HTTPURLResponse,
+           let url = http.url, !HandsOff.covers(url),
+           let value = Self.colorHint.answered(url: url, acceptCH: http.value(forHTTPHeaderField: "Accept-CH"),
+                                               criticalCH: http.value(forHTTPHeaderField: "Critical-CH"),
+                                               requestCarried: hintCarried, repeatable: hintRepeatable, dark: isDark) {
+            reply(.cancel)
+            var again = URLRequest(url: url)
+            again.setValue(value, forHTTPHeaderField: ColorSchemeHint.header)
+            navigationAdapter.load(again)
+            return
+        }
+        // What WebKit can't show (a ZIP, an installer) and what the server says to save is a download.
+        let attachment = (response.response as? HTTPURLResponse)?
+            .value(forHTTPHeaderField: "Content-Disposition")?.lowercased().hasPrefix("attachment") == true
+        let shows = response.canShowMIMEType && !attachment
+        // The kind of what the tab shows, which Handoff reads it by: a download leaves the page as it was.
+        if response.isForMainFrame, shows {
+            mimeType = response.response.mimeType
+            // What the document is, known only now, before it commits: a PDF
+            // or a picture gets no writing script, and a page after one gets
+            // it back; a JSON page gets its view's script.
+            prepare(for: preparedFor)
+        }
+        if response.isForMainFrame {
+            if shows { status.answered(response.response) } else { status.dropped() }
+        }
+        reply(shows ? .allow : .download)
+    }
+
+    /// The request again with the screen's light or dark, for a host that
+    /// asks for it as a header and a request without it; nil otherwise. A
+    /// step back or a reload goes as it was made, and a hands-off page is
+    /// never asked for twice. Notes what the request was, for its answer.
+    private func askingInLightOrDark(_ action: WebNavigation) -> URLRequest? {
+        let request = action.request
+        let repeatable = ![.history, .reload, .formResubmission].contains(action.kind)
+            && (request.httpMethod ?? "GET").uppercased() == "GET" && !HandsOff.covers(request.url)
+        hintCarried = ColorSchemeHint.carries(request.allHTTPHeaderFields)
+        hintRepeatable = repeatable
+        guard repeatable, let value = Self.colorHint.missing(url: request.url, method: request.httpMethod,
+                                                             headers: request.allHTTPHeaderFields, dark: isDark)
+        else { return nil }
+        var again = request
+        again.setValue(value, forHTTPHeaderField: ColorSchemeHint.header)
+        return again
     }
 }

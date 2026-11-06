@@ -1,6 +1,7 @@
 import AppKit
 import PadCore
 import SwiftUI
+import WebEngineCore
 import WebKit
 
 /// A site's picture-in-picture window (DocumentPicture.swift): the blank
@@ -41,7 +42,7 @@ final class PictureWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, WKU
 
     /// The web view for the window picture.js opens, made with WebKit's
     /// `configuration` so the site keeps its hold on the page in it.
-    init(opener: Page, configuration: WKWebViewConfiguration, features: WKWindowFeatures, request: DocumentPicture.Request) {
+    init(opener: Page, configuration: WKWebViewConfiguration, features: WebWindowFeatures, request: DocumentPicture.Request) {
         self.opener = opener
         // None of the opener's scripts: the page in it is the site's to fill.
         configuration.userContentController = WKUserContentController()
@@ -55,7 +56,7 @@ final class PictureWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, WKU
         let room = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1280, height: 800)
         // The page at the size the site asked for, the pane round it. At that
         // size from the start: a site reads the window's size as soon as it has it.
-        let page = DocumentPicture.size(width: features.width?.doubleValue, height: features.height?.doubleValue, within: room.size)
+        let page = DocumentPicture.size(width: features.width, height: features.height, within: room.size)
         view = PictureView(frame: NSRect(origin: .zero, size: page), configuration: configuration)
         panel = PicturePanel(contentRect: NSRect(origin: .zero, size: PicturePane.window(around: page)),
                              styleMask: [.borderless, .resizable, .nonactivatingPanel],

@@ -2,7 +2,7 @@ import AppKit
 import Engines
 import PadCore
 import SwiftUI
-import WebKit
+import WebEngineCore
 
 /// What the command bar was opened for.
 enum CommandBarPurpose: Equatable {
@@ -323,13 +323,14 @@ final class WindowModel: ObservableObject, PageHost {
     func refresh() {
         let record = tab
         let view = page?.view
+        let state = page?.state
         url = page?.displayURL ?? record?.url
-        title = view?.title.flatMap { $0.isEmpty ? nil : $0 } ?? record?.label ?? ""
-        loading = view?.isLoading ?? false
-        progress = view?.estimatedProgress ?? 0
-        canGoBack = view?.canGoBack ?? false || record.map { Session.shared.canGoBackPastReplacement($0.id) } ?? false
-        canGoForward = view?.canGoForward ?? false
-        secure = page?.failure == nil && url?.scheme == "https" && (view?.hasOnlySecureContent ?? true)
+        title = state?.title.flatMap { $0.isEmpty ? nil : $0 } ?? record?.label ?? ""
+        loading = state?.isLoading ?? false
+        progress = state?.estimatedProgress ?? 0
+        canGoBack = (state?.canGoBack ?? false) || record.map { Session.shared.canGoBackPastReplacement($0.id) } ?? false
+        canGoForward = state?.canGoForward ?? false
+        secure = page?.failure == nil && url?.scheme == "https" && (state?.hasOnlySecureContent ?? true)
         failure = page?.failure
         statusCode = page?.statusCode
         zoom = Double(view?.pageZoom ?? 1)
@@ -349,7 +350,7 @@ final class WindowModel: ObservableObject, PageHost {
     /// The keys go to the page, as they do after a click on it; to the
     /// Peek's while one is up, since the page under it is out of reach.
     func focusPage() {
-        guard let view = peek?.page.view ?? page?.view else { return }
+        guard let view = peek?.page.surface.view ?? page?.surface.view else { return }
         DispatchQueue.main.async { [weak self] in self?.window?.makeFirstResponder(view) }
     }
 
@@ -565,8 +566,8 @@ final class WindowModel: ObservableObject, PageHost {
     }
 
     private func clicked(_ event: NSEvent) {
-        guard let partner, let window, event.window === window, partner.view.window === window else { return }
-        let view = partner.view
+        guard let partner, let window, event.window === window, partner.surface.view.window === window else { return }
+        let view = partner.surface.view
         guard view.bounds.contains(view.convert(event.locationInWindow, from: nil)) else { return }
         // What lies over the page (the command bar, the find bar) is not the page: a click there moves nothing.
         if let hit = window.contentView?.hitTest(event.locationInWindow), hit !== view, !hit.isDescendant(of: view) { return }
@@ -608,12 +609,11 @@ final class WindowModel: ObservableObject, PageHost {
     }
 
     func back() {
-        if let page, !page.view.canGoBack, Session.shared.wentBackPastReplacement(page.tab) { return }
-        page?.view.goBack()
+        page?.goBack()
     }
 
     func forward() {
-        page?.view.goForward()
+        page?.goForward()
     }
 
     func reload() {
@@ -625,7 +625,7 @@ final class WindowModel: ObservableObject, PageHost {
     }
 
     func stop() {
-        page?.view.stopLoading()
+        page?.stopLoading()
     }
 
     // MARK: Tabs
@@ -1295,7 +1295,7 @@ final class WindowModel: ObservableObject, PageHost {
         case .console: showInspector(.console)
         case .selectElement: showInspector(.elements)
         case .elementPicture: elementPicture()
-        case .reloadOrigin: toolsPage?.view.reloadFromOrigin()
+        case .reloadOrigin: toolsPage?.reloadFromOrigin()
         case .measure: page?.toggleMeasuring()
         case .developerMode: toggleDeveloperMode()
         case .diagnostics, .siteMode, .linkMenu: break
@@ -1392,28 +1392,27 @@ final class WindowModel: ObservableObject, PageHost {
 
     func isShowing(_ page: Page) -> Bool {
         (page === self.page || page === partner) && window?.isVisible == true
-            && page.view.window === window && !page.view.isHiddenOrHasHiddenAncestor
+            && page.surface.view.window === window && !page.surface.view.isHiddenOrHasHiddenAncestor
     }
 
-    func page(_ page: Page, open configuration: WKWebViewConfiguration, for action: WKNavigationAction,
-              features: WKWindowFeatures) -> WKWebView? {
+    func page(_ page: Page, openChild request: any WebChildRequest) -> Page? {
         // A window with a size asked for is a pop-up: a sign-in, a share
         // dialog. It opens in a Peek over its page, and closes by itself
         // when done; from a page not on screen here, over this window.
-        if features.width != nil || features.height != nil {
+        if request.features.width != nil || request.features.height != nil {
             if page.canPeek, page === self.page || page === partner {
-                return page.openPeek(action.request.url, configuration: configuration,
-                                     width: features.width?.doubleValue, height: features.height?.doubleValue).page.view
+                return page.openPeek(request.navigation.request.url, child: request,
+                                     width: request.features.width, height: request.features.height).page
             }
-            return Popup.open(from: page, configuration: configuration, features: features, over: window)
+            return Popup.open(from: page, child: request, over: window)
         }
         // Anything else is a tab, right after the one it came from; behind
         // this one when a ⌘-click asked for it, live there with its tie to this page.
         let session = Session.shared
-        let behind = action.modifierFlags.contains(.command) && !action.modifierFlags.contains(.shift)
-        guard let id = session.change({ $0.openTab(action.request.url, in: page.space, after: behind ? behindAfter(page) : page.tab) })
+        let behind = request.navigation.modifiers.contains(.command) && !request.navigation.modifiers.contains(.shift)
+        guard let id = session.change({ $0.openTab(request.navigation.request.url, in: page.space, after: behind ? behindAfter(page) : page.tab) })
         else { return nil }
-        let child = session.pages.adopt(tab: id, space: page.space, configuration: configuration)
+        let child = session.pages.adopt(tab: id, space: page.space, child: request)
         // Its tie to the page that opened it, as a pop-up's: a sign-in's
         // window, opened as a tab, may finish that page's flow (ExtensionAuth).
         child.openedFrom = page.tab
@@ -1421,7 +1420,7 @@ final class WindowModel: ObservableObject, PageHost {
             session.change { $0.select(page.tab) }
             openedBehind = (page.tab, id)
             session.pages.enforce()
-            return child.view
+            return child
         }
         openedBehind = nil
         withAnimation(.bar) {
@@ -1432,7 +1431,7 @@ final class WindowModel: ObservableObject, PageHost {
         }
         focusPage()
         session.pages.enforce()
-        return child.view
+        return child
     }
 
     func page(_ page: Page, openInNewTab url: URL, inFront: Bool) -> Bool {

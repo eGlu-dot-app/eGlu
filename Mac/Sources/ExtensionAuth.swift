@@ -200,7 +200,7 @@ enum ExtensionAuth {
             // The space's sign-ins and user agent, as its tabs have; no
             // extension, and no script of eGlu's: such a flow often goes
             // through Google's sign-in, which eGlu never touches (HandsOff).
-            let config = Page.configuration(space: space)
+            let config = Session.shared.engine.configuration(space: space)
             config.webExtensionController = nil
             // Nobody can click here: nothing plays.
             config.mediaTypesRequiringUserActionForPlayback = .all

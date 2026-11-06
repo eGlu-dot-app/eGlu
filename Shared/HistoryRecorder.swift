@@ -465,6 +465,12 @@ final class HistoryRecorder: ObservableObject {
 /// forward, and never for a pop-up, which is no tab of the workspace's.
 @MainActor
 struct PageHistory {
+    /// Action kind without an engine dependency; unknown values retain their own semantics.
+    enum NavigationKind: Sendable, Equatable {
+        case link, form, formResubmission, history, reload, other
+        case unknown(Int)
+    }
+
     /// What the main-frame navigation decided and not committed yet is:
     /// nothing yet, no visit (a reload, a step back), or a visit and how it
     /// was come to (HistoryRecorder.expect knows when it was typed or a bookmark).
@@ -518,12 +524,27 @@ struct PageHistory {
     /// A main-frame navigation WebKit is about to make. A redirect, or a
     /// request sent again (with another user agent, or the screen's light
     /// or dark), comes back here as `.other`, and keeps what the first said.
+    // Kept for the iOS app while the Mac supplies the contract's kind.
     mutating func decided(_ type: WKNavigationType, url: URL?) {
+        let kind: NavigationKind
+        switch type {
+        case .linkActivated: kind = .link
+        case .formSubmitted: kind = .form
+        case .formResubmitted: kind = .formResubmission
+        case .backForward: kind = .history
+        case .reload: kind = .reload
+        case .other: kind = .other
+        @unknown default: kind = .unknown(type.rawValue)
+        }
+        decided(kind, url: url)
+    }
+
+    mutating func decided(_ type: NavigationKind, url: URL?) {
         // Coming back, through any redirect, until its document is
         // committed; unless this is a page asked for meanwhile: a link, a
         // form, an address typed or a bookmark.
         if restored {
-            let asked = type == .linkActivated || type == .formSubmitted || url.map(HistoryRecorder.shared.isExpected) == true
+            let asked = type == .link || type == .form || url.map(HistoryRecorder.shared.isExpected) == true
             guard asked else {
                 next = .ignored
                 return
@@ -531,7 +552,7 @@ struct PageHistory {
             restored = false
         }
         switch type {
-        case .backForward, .reload, .formResubmitted:
+        case .history, .reload, .formResubmission:
             next = .ignored
         default:
             if let url, let asked = HistoryRecorder.shared.takeExpectation(url) {
@@ -539,7 +560,7 @@ struct PageHistory {
             } else if type == .other, next != .none {
                 return
             } else {
-                next = .visit(type == .linkActivated || type == .formSubmitted ? .link : .other)
+                next = .visit(type == .link || type == .form ? .link : .other)
             }
         }
     }

@@ -1,7 +1,7 @@
 import AppKit
 import PadCore
 import SwiftUI
-import WebKit
+import WebEngineCore
 
 /// A little window, as Arc's Little Arc: a link from another app (unless
 /// Settings › General › Links says a tab), or one asked for with ⌃⌥N, in a
@@ -43,20 +43,21 @@ final class LittleWindow: NSObject, ObservableObject, PageHost, NSWindowDelegate
 
     /// A little window for `url`, in `space` or the space of the window in
     /// front; with no address, empty, its address field taking the keys.
-    /// `configuration`: WebKit's, for a window a little window's page opened.
+    /// `child`: the request for a window a little window's page opened.
     @discardableResult
-    static func open(_ url: URL?, in space: UUID? = nil, configuration: WKWebViewConfiguration? = nil) -> LittleWindow {
+    static func open(_ url: URL?, in space: UUID? = nil, child: (any WebChildRequest)? = nil) -> LittleWindow {
         let session = Session.shared
         let space = space.flatMap { session.workspace.space($0)?.id }
             ?? session.frontWindow?.spaceID ?? session.workspace.firstSpace.id
-        let made = LittleWindow(url: url, space: space, configuration: configuration)
+        let made = LittleWindow(url: url, space: space, child: child)
         LittleWindows.shared.opened(made)
         return made
     }
 
-    private init(url: URL?, space: UUID, configuration: WKWebViewConfiguration?) {
+    private init(url: URL?, space: UUID, child: (any WebChildRequest)?) {
         self.space = space
-        page = Page(tab: UUID(), space: space, configuration: configuration)
+        let source: MacPageSource = child.map { .child($0) } ?? .space
+        page = Session.shared.engine.makePage(tab: UUID(), space: space, source: source)
         let screen = NSApp.keyWindow?.screen ?? NSScreen.main
         let room = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1280, height: 800)
         let size = CGSize(width: min(Self.standard.width, room.width * 0.9), height: min(Self.standard.height, room.height * 0.9))
@@ -88,7 +89,7 @@ final class LittleWindow: NSObject, ObservableObject, PageHost, NSWindowDelegate
             window.standardWindowButton(kind)?.isHidden = true
         }
         place(in: room)
-        if configuration == nil {
+        if child == nil {
             if let url { page.load(url) } else { typingRequests += 1 }
         }
         NSApp.activate()
@@ -117,11 +118,11 @@ final class LittleWindow: NSObject, ObservableObject, PageHost, NSWindowDelegate
     // MARK: What the header does
 
     func back() {
-        page.view.goBack()
+        page.goBack()
     }
 
     func forward() {
-        page.view.goForward()
+        page.goForward()
     }
 
     /// ⌘R, and Try Again over a page that couldn't load: the address that failed.
@@ -132,7 +133,7 @@ final class LittleWindow: NSObject, ObservableObject, PageHost, NSWindowDelegate
     func focusPage() {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            self.window.makeFirstResponder(self.page.view)
+            self.window.makeFirstResponder(self.page.surface.view)
         }
     }
 
@@ -149,7 +150,7 @@ final class LittleWindow: NSObject, ObservableObject, PageHost, NSWindowDelegate
     }
 
     func copyLink() {
-        guard let url = page.view.url ?? url else { return }
+        guard let url = page.state.url ?? url else { return }
         WindowModel.copy(url)
     }
 
@@ -161,7 +162,7 @@ final class LittleWindow: NSObject, ObservableObject, PageHost, NSWindowDelegate
         guard !over, leaving == nil else { return }
         let session = Session.shared
         let target = other ?? space
-        let address = page.view.url ?? url
+        let address = page.state.url ?? url
         let id: UUID?
         if target == space {
             over = true
@@ -169,7 +170,7 @@ final class LittleWindow: NSObject, ObservableObject, PageHost, NSWindowDelegate
             session.pages.adopt(page)
             id = session.change { workspace -> UUID? in
                 guard let id = workspace.openTab(address, in: target, id: page.tab) else { return nil }
-                workspace.record(id, url: nil, title: page.view.title)
+                workspace.record(id, url: nil, title: page.state.title)
                 return id
             }
             if id == nil { session.pages.close(page.tab) } else { page.becameTab() }
@@ -261,14 +262,14 @@ final class LittleWindow: NSObject, ObservableObject, PageHost, NSWindowDelegate
 
     func pageDidChange(_ page: Page) {
         guard !over else { return }
-        let view = page.view
-        url = view.url ?? page.committed ?? url
-        canGoBack = view.canGoBack
-        canGoForward = view.canGoForward
-        loading = view.isLoading
-        progress = view.estimatedProgress
+        let state = page.state
+        url = state.url ?? page.committed ?? url
+        canGoBack = state.canGoBack
+        canGoForward = state.canGoForward
+        loading = state.isLoading
+        progress = state.estimatedProgress
         failure = page.failure
-        let title = view.title ?? ""
+        let title = state.title ?? ""
         window.title = title.isEmpty ? (url?.host() ?? String(localized: "Little Window")) : title
     }
 
@@ -278,12 +279,11 @@ final class LittleWindow: NSObject, ObservableObject, PageHost, NSWindowDelegate
 
     /// A pop-up stands over the little window; a link that asks for a
     /// window of its own gets a little window of its own, tied to this page.
-    func page(_ page: Page, open configuration: WKWebViewConfiguration, for action: WKNavigationAction,
-              features: WKWindowFeatures) -> WKWebView? {
-        if features.width != nil || features.height != nil {
-            return Popup.open(from: page, configuration: configuration, features: features, over: window)
+    func page(_ page: Page, openChild request: any WebChildRequest) -> Page? {
+        if request.features.width != nil || request.features.height != nil {
+            return Popup.open(from: page, child: request, over: window)
         }
-        return LittleWindow.open(action.request.url, in: space, configuration: configuration).page.view
+        return LittleWindow.open(request.navigation.request.url, in: space, child: request).page
     }
 
     /// A ⌘-click: a tab of the space, in a browser window, which comes

@@ -329,10 +329,10 @@ final class ApplePasswordsCard: ObservableObject {
                 // given up is never sent to the helper.
                 let names = await ApplePasswords.session.logins(for: host, tab: tab) {
                     !Task.isCancelled && self?.page === page && self?.host == host
-                        && page.host?.isShowing(page) == true && page.view.window != nil
+                        && page.host?.isShowing(page) == true && page.surface.view.window != nil
                 }
                 guard let self, !Task.isCancelled, self.page === page, self.host == host,
-                      page.host?.isShowing(page) == true, page.view.window != nil,
+                      page.host?.isShowing(page) == true, page.surface.view.window != nil,
                       ApplePasswords.host(of: page.view.url) == host
                 else { return }
                 let mine = names.filter { ApplePasswordsSession.belongs($0.sites.isEmpty ? [host] : $0.sites, to: host, wide: true) }
@@ -397,7 +397,7 @@ final class ApplePasswordsCard: ObservableObject {
             guard let self, let resigned = self.resigned else { return }
             self.resigned = nil
             guard self.showing == .none, let page = resigned.page,
-                  page.host?.isShowing(page) == true, page.view.window != nil,
+                  page.host?.isShowing(page) == true, page.surface.view.window != nil,
                   ApplePasswords.host(of: page.view.url) == resigned.host
             else { return }
             self.focused(page, field: resigned.field.rect, password: resigned.field.password)
@@ -496,9 +496,9 @@ final class ApplePasswordsCard: ObservableObject {
     /// accounts up once paired.
     private func finishPairing() {
         show(.none)
-        guard let page, let window = page.view.window else { return }
+        guard let page, let window = page.surface.view.window else { return }
         window.makeKeyAndOrderFront(nil)
-        window.makeFirstResponder(page.view)
+        page.surface.focus()
         if session.state == .paired, let field { focused(page, field: field.rect, password: field.password) }
     }
 

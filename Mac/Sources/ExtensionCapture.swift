@@ -462,9 +462,9 @@ final class ExtensionCapture: NSObject, WKScriptMessageHandlerWithReply, Observa
 /// Everything else goes on to the page, as for any tab. Websites' pages
 /// don't have one, and keep WebKit's own way.
 final class ExtensionPageDelegate: NSObject, WKUIDelegate {
-    weak var next: (WKNavigationDelegate & WKUIDelegate)?
+    weak var next: (any WKUIDelegate)?
 
-    init(next: WKNavigationDelegate & WKUIDelegate) {
+    init(next: any WKUIDelegate) {
         self.next = next
     }
 

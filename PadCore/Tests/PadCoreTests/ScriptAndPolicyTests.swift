@@ -221,15 +221,32 @@ final class PolicyTests: XCTestCase {
     }
 
     func testNothingReadsCookies() throws {
-        let swift = try sources(in: "App", ending: ".swift") + sources(in: "Mac", ending: ".swift")
+        var swift = try sources(in: "App", ending: ".swift") + sources(in: "Mac", ending: ".swift")
             + sources(in: "Shared", ending: ".swift") + sources(in: "PadCore/Sources", ending: ".swift")
         XCTAssertFalse(swift.isEmpty)
+        // Future engine and service packages from the split plan (Docs/EngineSplitPlan.md, step 0).
+        let futureFolders = [
+            "WebEngineKit/Sources",
+            "WebKitEngine/Sources",
+            "WritingServiceKit/Sources",
+            "DocumentServiceKit/Sources",
+            "HarperPlugin/Sources",
+            "DocumentsPlugin/Sources",
+        ]
+        var js = try sources(in: "PadCore/Sources", ending: ".js")
+        for folder in futureFolders {
+            let path = root.appendingPathComponent(folder).path
+            if FileManager.default.fileExists(atPath: path) {
+                swift += try sources(in: folder, ending: ".swift")
+                js += try sources(in: folder, ending: ".js")
+            }
+        }
         for (name, text) in swift {
             for banned in ["getAllCookies", "httpCookieStore", "HTTPCookieStorage", "document.cookie"] {
                 XCTAssertFalse(text.contains(banned), "\(name) uses \(banned)")
             }
         }
-        for (name, text) in try sources(in: "PadCore/Sources", ending: ".js") {
+        for (name, text) in js {
             XCTAssertFalse(text.contains("document.cookie"), "\(name) reads cookies")
         }
     }

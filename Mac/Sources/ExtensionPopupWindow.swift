@@ -45,9 +45,9 @@ final class ExtensionPopupWindow: NSObject, WKWebExtensionWindow {
         let page: Page
         if own {
             guard let configuration = context.webViewConfiguration else { return nil }
-            page = Page(tab: UUID(), space: space, configuration: configuration, extensionPage: true)
+            page = Session.shared.engine.makePage(tab: UUID(), space: space, source: .supplied(configuration, extensionPage: true))
         } else {
-            page = Page(tab: UUID(), space: space)
+            page = Session.shared.engine.makePage(tab: UUID(), space: space, source: .space)
         }
         let made = ExtensionPopupWindow(space: space, extensionID: context.uniqueIdentifier, controller: controller)
         let screen = (Session.shared.frontWindow?.window?.screen ?? NSScreen.main)?.visibleFrame
