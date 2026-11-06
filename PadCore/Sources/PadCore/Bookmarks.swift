@@ -257,52 +257,37 @@ public enum Bookmarks {
     /// `asWritten` is for eGlu's own export, which holds what a space held:
     /// its empty folders were made so on purpose, and it may hold the same
     /// address twice or two folders of one name, as the manager allows. Each
-    /// of those is matched with one already at its level, the first with the
-    /// first, and only what is left over is added: the file comes back as it
+    /// of those is paired with one already at its level, each one there only
+    /// once, and only what is left over is added: the file comes back as it
     /// was written, and importing it twice still adds nothing. Returns how
     /// many links it added.
     @discardableResult
     public static func merge(_ imported: [Bookmark], into existing: inout [Bookmark], asWritten: Bool = false) -> Int {
         var added = 0
-        // What this level holds already, worked out once: how many links of
-        // each key and its folders by name, in order. Looking through the level
-        // for each link coming in made a folder of a thousand links a million
-        // comparisons.
-        var links: [String: Int] = [:]
-        for item in existing { if let link = item.url { links[key(link), default: 0] += 1 } }
         // The bar by any spelling of its name is the one bar.
         func name(_ folder: Bookmark) -> String { isBar(folder) ? barName : folder.title }
+        // Worked out once a level: looking through the level for each item
+        // coming in made a folder of a thousand links a million comparisons.
         var folders: [String: [Int]] = [:]
         for (index, item) in existing.enumerated() where item.isFolder {
             folders[name(item), default: []].append(index)
         }
-        // How many folders of each name the file has had at this level.
-        var seen: [String: Int] = [:]
-        for item in imported {
+        let present = asWritten ? linksHere(imported, pairedWith: existing) : linksHere(imported, onceIn: existing)
+        var paired = Set<Int>()
+        for (offset, item) in imported.enumerated() {
             if let link = item.url {
-                let k = key(link)
-                if asWritten {
-                    // One already there for each of the file's, the rest added.
-                    if let left = links[k], left > 0 {
-                        links[k] = left - 1
-                        continue
-                    }
-                } else {
-                    // One of each at a level: the file's own repeats too.
-                    guard links[k] == nil else { continue }
-                    links[k] = 1
-                }
+                guard !present.contains(offset) else { continue }
                 existing.append(Bookmark(title: item.title, url: link))
                 added += 1
                 continue
             }
             let children = item.children ?? []
             let named = name(item)
-            // The file's nth folder of a name goes into the level's nth; without asWritten, every one into the first.
-            let nth = asWritten ? seen[named, default: 0] : 0
-            seen[named] = nth + 1
-            if let match = folders[named], nth < match.count {
-                let index = match[nth]
+            let match = asWritten
+                ? closest(item, among: (folders[named] ?? []).filter { !paired.contains($0) }, in: existing)
+                : folders[named]?.first
+            if let index = match {
+                paired.insert(index)
                 var inside = existing[index].children ?? []
                 added += merge(children, into: &inside, asWritten: asWritten)
                 existing[index].children = inside
@@ -311,12 +296,70 @@ public enum Bookmarks {
                 added += merge(children, into: &inside, asWritten: asWritten)
                 if !inside.isEmpty || asWritten {
                     existing.append(Bookmark(folder: item.title, children: inside))
-                    // A later one of the name goes into this one, as before; as written, it is a folder of its own.
+                    // Another browser's folders of one name come in as one,
+                    // as they always have here; eGlu's own two of a name were
+                    // two in the space, and stay two.
                     if !asWritten { folders[named, default: []].append(existing.count - 1) }
                 }
             }
         }
         return added
+    }
+
+    /// Which of `imported`'s links are already at the level, by their place
+    /// in `imported`: one of each address, the file's own repeats too, as
+    /// another browser's file is merged.
+    private static func linksHere(_ imported: [Bookmark], onceIn existing: [Bookmark]) -> Set<Int> {
+        var keys = Set(existing.compactMap { $0.url.map(key) })
+        var present = Set<Int>()
+        for (offset, item) in imported.enumerated() {
+            if let link = item.url, !keys.insert(key(link)).inserted { present.insert(offset) }
+        }
+        return present
+    }
+
+    /// Which of `imported`'s links are already at the level, each one there
+    /// standing for one of the file's. Its name first: the same address kept
+    /// under two names is two bookmarks, and the one with the other name is
+    /// not this one. Then its address alone, so a bookmark renamed since the
+    /// file was written is still found and not added again.
+    private static func linksHere(_ imported: [Bookmark], pairedWith existing: [Bookmark]) -> Set<Int> {
+        func named(_ link: URL, _ title: String) -> String { key(link) + "\n" + title }
+        var byName: [String: Int] = [:]
+        var byAddress: [String: Int] = [:]
+        for item in existing {
+            guard let link = item.url else { continue }
+            byName[named(link, item.title), default: 0] += 1
+            byAddress[key(link), default: 0] += 1
+        }
+        var present = Set<Int>()
+        for (offset, item) in imported.enumerated() {
+            guard let link = item.url, let left = byName[named(link, item.title)], left > 0 else { continue }
+            byName[named(link, item.title)] = left - 1
+            byAddress[key(link), default: 0] -= 1
+            present.insert(offset)
+        }
+        for (offset, item) in imported.enumerated() where !present.contains(offset) {
+            guard let link = item.url, let left = byAddress[key(link)], left > 0 else { continue }
+            byAddress[key(link)] = left - 1
+            present.insert(offset)
+        }
+        return present
+    }
+
+    /// Of the level's folders of one name not yet paired, the one sharing
+    /// most addresses with `folder`: two folders of a name may stand in
+    /// another order in the space than in the file, and what is in them says
+    /// which is which. With nothing to tell them apart (empty, or nothing in
+    /// common), the first.
+    private static func closest(_ folder: Bookmark, among candidates: [Int], in existing: [Bookmark]) -> Int? {
+        let wanted = Set(folder.links.compactMap { $0.url.map(key) })
+        var best: (index: Int, shared: Int)?
+        for index in candidates {
+            let shared = existing[index].links.reduce(0) { $0 + ($1.url.map { wanted.contains(key($0)) } == true ? 1 : 0) }
+            if shared > (best?.shared ?? -1) { best = (index, shared) }
+        }
+        return best?.index
     }
 }
 

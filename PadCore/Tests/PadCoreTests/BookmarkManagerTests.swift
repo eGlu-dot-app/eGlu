@@ -214,6 +214,39 @@ final class BookmarkManagerTests: XCTestCase {
         XCTAssertEqual(Self.shape(try XCTUnwrap(w.space(fresh)).bookmarks), Self.shape(items))
     }
 
+    func testOneAddressUnderTwoNamesPairsByNameFirstThenByAddress() {
+        let site = URL(string: "https://example.com/")!
+        var w = Workspace.onFigma()
+        let space = w.spaces[0].id
+        w.spaces[0].bookmarks = [Bookmark(title: "Personal", url: site)]
+        let file = BookmarkImport(items: [Bookmark(title: "Research", url: site), Bookmark(title: "Personal", url: site)],
+                                  icons: [:], asWritten: true)
+        _ = w.importBookmarks(file, into: space)
+        XCTAssertEqual(w.spaces[0].bookmarks.map(\.title), ["Personal", "Research"])
+        XCTAssertEqual(w.importBookmarks(file, into: space), .duplicates(total: 2, space: w.spaces[0].name))
+
+        // One renamed since the file was written is still that one: not added again.
+        w.spaces[0].bookmarks = [Bookmark(title: "Renamed", url: site)]
+        _ = w.importBookmarks(BookmarkImport(items: [Bookmark(title: "Old name", url: site)], icons: [:], asWritten: true),
+                              into: space)
+        XCTAssertEqual(w.spaces[0].bookmarks.map(\.title), ["Renamed"])
+    }
+
+    func testTwoFoldersOfOneNameArePairedByWhatIsInThem() {
+        let a = URL(string: "https://a.example/")!
+        let b = URL(string: "https://b.example/")!
+        var w = Workspace.onFigma()
+        let space = w.spaces[0].id
+        let there = [Bookmark(folder: "Docs", children: [Bookmark(title: "B", url: b)]),
+                     Bookmark(folder: "Docs", children: [Bookmark(title: "A", url: a)])]
+        w.spaces[0].bookmarks = there
+        let file = BookmarkImport(items: [Bookmark(folder: "Docs", children: [Bookmark(title: "A", url: a)]),
+                                          Bookmark(folder: "Docs", children: [Bookmark(title: "B", url: b)])],
+                                  icons: [:], asWritten: true)
+        XCTAssertEqual(w.importBookmarks(file, into: space), .duplicates(total: 2, space: w.spaces[0].name))
+        XCTAssertEqual(Self.shape(w.spaces[0].bookmarks), Self.shape(there))
+    }
+
     func testAnotherBrowsersRepeatsStillComeInOnce() {
         var w = Workspace.onFigma()
         let space = w.spaces[0].id
