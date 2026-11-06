@@ -119,9 +119,12 @@ extension Handoff {
             found.removeAll { $0 == level }
         }
         // The parts are under the highest headings the page has more than one of; one above them all is a part too.
-        // Where no level comes twice, each heading is a part: the highest alone would take what comes before
-        // it ("### Intro" before "## Appendix") into a part with no name.
-        let top = Set(found).sorted().first { level in found.count(where: { $0 == level }) > 1 } ?? found.max()
+        // Where no level comes twice, under the highest: what is under it goes with it ("### macOS" is a part
+        // of "## Installation"), and a heading before the first of them, with none above it to be in, is a part
+        // of its own ("### Intro" before "## Appendix"), where it would make a part with no name.
+        let repeated = Set(found).sorted().first { level in found.count(where: { $0 == level }) > 1 }
+        let top = repeated ?? found.min()
+        let firstTop = repeated == nil ? top.flatMap { level in levels.indices.first { levels[$0] == level && $0 != spoken } } : nil
         var heading = ""
         var headed: Int?
         var under: [Int] = []
@@ -138,7 +141,8 @@ extension Handoff {
         var inSpoken = false
         for index in lines.indices where index != skipped {
             guard let level = levels[index],
-                  level <= (top ?? 0) || index == spoken || (inSpoken && level <= transcriptLevel) else {
+                  level <= (top ?? 0) || index == spoken || (inSpoken && level <= transcriptLevel)
+                    || (firstTop.map { index < $0 } ?? false) else {
                 under.append(index)
                 continue
             }
