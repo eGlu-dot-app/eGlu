@@ -58,6 +58,16 @@ final class HandoffJob {
     /// to read (Handoff.leastToSum), which is known once the page is read.
     private(set) var asksModel: Bool
     private(set) var modelNote: String?
+    /// What the file holds, for the sheet to list as it is made (Handoff.Outline):
+    /// nil until the page is read, and told again when the file is written again.
+    private(set) var outline: Handoff.Outline?
+    /// The model's summary as the sheet shows it, word by word as it is written.
+    private(set) var summary: HandoffSummary
+    /// How many of the page's pictures were read on the device so far.
+    private(set) var picturesRead = 0
+    /// The page as it showed when it was handed off, small, for the sheet's
+    /// card. Nil for a file, and until the picture comes.
+    private(set) var preview: CGImage?
     @ObservationIgnored private var source: (any HandoffSource)?
     @ObservationIgnored private var sourceMind: PageMind?
     @ObservationIgnored private var drafting: Task<Void, Never>?
@@ -103,6 +113,7 @@ final class HandoffJob {
                 : Handoff.fileName(title: title, url: address ?? Self.fileAddress))
         // A file's kind is told by its format, never asked of the model.
         asksModel = mind != nil && !source.isFile
+        summary = mind != nil && !source.isFile ? .waiting : .none
         self.source = source
         sourceMind = source.isFile ? nil : mind
         if !asksModel, !source.isFile {
@@ -115,13 +126,26 @@ final class HandoffJob {
         drafting = Task { [weak source] in
             await self.draft(of: source)
         }
+        // The page's picture for the card, beside the reading: one look, while the page is still.
+        if !source.isFile {
+            Task { [weak self, weak source] in
+                let picture = await source?.picture(pixels: Self.previewPixels)
+                self?.preview = picture
+            }
+        }
     }
+
+    /// How wide the card's picture of the page is, in pixels.
+    private static let previewPixels = 240
 
     /// Where no address is to be had: a file on the device has none.
     private static let fileAddress = URL(fileURLWithPath: "/")
 
     func retry() {
         guard case .failed = stage else { return }
+        // Asked again once the page is read, as the first time (draft).
+        asksModel = sourceMind != nil
+        summary = sourceMind != nil ? .waiting : .none
         stage = .reading
         drafting = Task { [weak source] in
             await self.draft(of: source)
@@ -129,6 +153,7 @@ final class HandoffJob {
     }
     func shareAddressOnly() {
         asksModel = false
+        summary = .none
         modelNote = !isFile ? String(localized: "You chose to share only the page's address. Its content is not included.")
             : named ? String(localized: "You chose to share only the file's name. Its content is not included.")
             : String(localized: "You chose to share only the file's address. Its content is not included.")
@@ -156,6 +181,9 @@ final class HandoffJob {
         organising?.cancel()
         deadline?.cancel()
         if !stage.isSettled { stage = .stopped }
+        // Nothing is written any more: no place is held for it.
+        if summary == .waiting { summary = .none }
+        if case .writing = summary { summary = .none }
         if keeps {
             // Kept as it went: nothing writes it again from now on.
             give()
@@ -202,14 +230,16 @@ final class HandoffJob {
         let reading: PageReading
         switch outcome {
         case .content(let content): reading = content
-        case .noReadableContent: asksModel = false; stage = .wordsOnly; return
+        case .noReadableContent: asksModel = false; summary = .none; stage = .wordsOnly; return
         case .protectedPage(let reason):
             asksModel = false
+            summary = .none
             modelNote = reason ?? String(localized: "This page is protected from reading. Only its address can be shared.")
             stage = .addressOnly
             return
         case .failed(let reason):
             asksModel = false
+            summary = .none
             modelNote = reason
             stage = .failed(.reading)
             return
@@ -221,19 +251,23 @@ final class HandoffJob {
         let title = pageTitle
         let facts = source?.file
         let counted = facts?.format.kind ?? Handoff.kind(of: reading, url: url)
-        let text = Handoff.document(title: title, url: address, composed: Handoff.compose(reading, kind: counted), reading: reading,
+        let composed = Handoff.compose(reading, kind: counted)
+        let text = Handoff.document(title: title, url: address, composed: composed, reading: reading,
                                     file: facts, read: read)
         let written = await Self.write(text, to: file, in: folder, emptying: Self.shelf, but: Self.live)
         guard stage.isReading else { return }
         guard written else {
             asksModel = false
+            summary = .none
             stage = .failed(.writing)
             return
         }
+        outline = Handoff.outline(of: composed, reading: reading)
         // With next to nothing read the model has nothing to go by: what it wrote of such a page was the
         // page's description over again, or a guess, and it took its seconds over it.
         let mind = reading.facts.characters >= Handoff.leastToSum ? sourceMind : nil
         asksModel = mind != nil
+        summary = mind != nil ? .waiting : .none
         if mind == nil, sourceMind != nil { modelNote = String(localized: "This page has too little text for Apple Intelligence. eGlu formatted it locally.") }
         // What is still to come: the model's answer, what the site's own reader can add (a video's transcript),
         // and the page's large pictures with nothing said of them, whose text is read with or without the model.
@@ -256,14 +290,18 @@ final class HandoffJob {
             try? await Task.sleep(for: patience)
             guard !Task.isCancelled, self.stage.isOrganising else { return }
             self.organising?.cancel()
+            if self.asksModel { self.summary = .dropped }
             self.asksModel = false
             self.modelNote = String(localized: "Apple Intelligence or the site's reader did not finish in time. The file uses eGlu's local format without a model summary.")
             // What the page's pictures gave in their time goes, though the model's answer did not come.
             if let looked = self.looked, looked.count > 0 {
-                let text = Handoff.document(title: title, url: address, composed: Handoff.compose(looked.reading, kind: counted),
+                let composed = Handoff.compose(looked.reading, kind: counted)
+                let text = Handoff.document(title: title, url: address, composed: composed,
                                             reading: looked.reading, file: facts, pictures: looked.count,
                                             described: looked.described, read: self.read)
-                _ = await Self.rewrite(text, at: self.file, unless: self.given)
+                if await Self.rewrite(text, at: self.file, unless: self.given) {
+                    self.outline = Handoff.outline(of: composed, reading: looked.reading)
+                }
             }
             self.stage = .ready(counted)
         }
@@ -296,9 +334,14 @@ final class HandoffJob {
         if let mind {
             let briefs = Handoff.briefs(title: title, url: url, reading: reading, candidates: candidates)
             let question = PageQuestion(briefs: briefs, picks: !candidates.isEmpty)
-            answer = await mind.read(question, looks: reading.facts.characters < Self.littleText) { [weak source] in
+            answer = await mind.read(question, looks: reading.facts.characters < Self.littleText, picture: { [weak source] in
                 await source?.picture(pixels: 512)
-            }
+            }, writing: { [weak self] said in
+                // As it would go: plain words on one line. Not once the job is out of time or called off.
+                guard let self, self.stage.isOrganising, self.asksModel else { return }
+                let line = Handoff.hardened(said)
+                self.summary = line.isEmpty ? .waiting : .writing(line)
+            })
         }
         let transcript = await said
         let (shown, picturesRead, described) = await seen
@@ -307,6 +350,7 @@ final class HandoffJob {
         deadline?.cancel()
         if mind != nil, answer == nil {
             asksModel = false
+            summary = .dropped
             modelNote = String(localized: "Apple Intelligence did not return a result. The file uses eGlu's local format without a model summary.")
         }
         guard answer != nil || transcript != nil || picturesRead > 0 else {
@@ -322,6 +366,12 @@ final class HandoffJob {
         // Asked again after the wait: it may have been called off while the file was written.
         guard stage.isOrganising else { return }
         transcribed = written && whole.spoken != nil
+        if written { outline = Handoff.outline(of: composed, reading: whole) }
+        // As the file has it, where the file has it: what the page bears out of what the model wrote.
+        if let about = answer?.about {
+            let made = written ? Handoff.fileSummary(about, reading: whole, title: title) : ""
+            summary = made.isEmpty ? .dropped : .written(made)
+        }
         if !written {
             asksModel = false
             modelNote = String(localized: "Additional context could not be saved. The original context file is still ready to share.")
@@ -354,6 +404,7 @@ final class HandoffJob {
         // Only a picture something was read of counts as read: one with no text and no description adds nothing to the file.
         func read() -> Int { found.filter { !$0.read.text.isEmpty || !$0.read.description.isEmpty }.count }
         looked = (reading.shown(found.map(\.read)), read(), 0)
+        picturesRead = read()
         for index in found.indices {
             guard !Task.isCancelled, ContinuousClock.now < time else { break }
             let image = found[index].image
@@ -364,6 +415,7 @@ final class HandoffJob {
             found[index].read.description = said
             described += 1
             looked = (reading.shown(found.map(\.read)), read(), described)
+            picturesRead = read()
         }
         return (reading.shown(found.map(\.read)), read(), described)
     }
@@ -463,26 +515,40 @@ nonisolated final class HandoffFile: UIActivityItemProvider, @unchecked Sendable
 }
 #endif
 
+/// The model's summary as the sheet shows it (HandoffGuide): the words as
+/// the model writes them, then as they go in the file.
+enum HandoffSummary: Equatable {
+    /// The model is not asked: the sheet has no place for a summary.
+    case none
+    /// Asked, and nothing written yet.
+    case waiting
+    /// What the model has written so far, as it would go: plain, on one line.
+    case writing(String)
+    /// As it goes in the file (Handoff.fileSummary).
+    case written(String)
+    /// None goes: the model did not answer, or not in time, or nothing it
+    /// wrote was borne out by the page. The job's note says which.
+    case dropped
+}
+
 /// What Handoff does, said while it does it: a sheet over the page while
 /// the page is read and, where Apple Intelligence's model is there, while
-/// the model reads it (HandoffJob), which is seconds, so the wait is spent
-/// on something worth reading.
+/// the model reads it (HandoffJob), which is seconds. The wait is spent on
+/// what is handed off, shown as it is made, the way Arc Search shows a page
+/// it sums up: the page on a card that says how far the handoff is, the
+/// model's summary as the model writes it, then what the file holds, part
+/// by part, in the page's own words (Handoff.Outline).
 ///
-/// The sheet's three points are the handoff's three steps (Handoff.Step),
-/// and how far the handoff is shows on them: a step done has a tick, the
-/// one at work its own symbol in colour and moving, and a line down the
-/// side fills as they go. Under the step that organises, a card says what is
-/// going on with this page and how long it takes, then what the page turned
-/// out to be and what of it will be shared.
-///
+/// Every place is held from the start, a part not there yet drawn as a
+/// shape where it will be, so what comes fills it and the rest stays put.
 /// The share sheet comes at the sheet's button and not by itself: what is
-/// shared is the person's to send. The button is to be had once the file
-/// is as it will go, which the card says; until then it is there and
-/// dimmed, so that nothing moves when it can be pressed. Where the model is
-/// not asked (Low Power Mode, a hot device, a page with next to nothing to
-/// read) the second step says the app organises the page, and the button
-/// is to be had as soon as the page is read. A device without Apple
-/// Intelligence has no Handoff at all (Session.hasIntelligence).
+/// shared is the person's to send. The button stands at the sheet's foot,
+/// under what scrolls, to be had once the file is as it will go; until
+/// then it is there and dimmed. Where the model is not asked (Low Power
+/// Mode, a hot device, a page with next to nothing to read) there is no
+/// summary, and the button is to be had as soon as the page is read. A
+/// device without Apple Intelligence has no Handoff at all
+/// (Session.hasIntelligence).
 struct HandoffGuide: View {
     /// Nil while a file is only being chosen: the guide then offers
     /// "Choose File…" and, on the Mac, a file dropped on it.
@@ -515,7 +581,10 @@ struct HandoffGuide: View {
     static let corner = Corners.sheet.outer
     static let edge = Corners.sheet.edge
     /// Words stand further in than surfaces do.
-    private static let indent: CGFloat = 8
+    fileprivate static let indent: CGFloat = 8
+    /// How high the Mac's pane is while a handoff is shown: what the
+    /// handoff holds scrolls in it, so the pane stays the size it came up.
+    private static let paneHeight: CGFloat = 540
 
     /// Whether the sheet has come up: its parts arrive one after another.
     @State private var arrived = false
@@ -528,17 +597,23 @@ struct HandoffGuide: View {
     }
 
     var body: some View {
-        // As high as what it says. Where that is more than the screen has
-        // (large text), it scrolls, the button with it.
-        ViewThatFits(in: .vertical) {
-            content
-            ScrollView {
-                content
+        Group {
+            if let job {
+                jobContent(job)
+            } else {
+                // As high as what it says. Where that is more than the screen has (large text), it scrolls.
+                ViewThatFits(in: .vertical) {
+                    chooseContent
+                    ScrollView {
+                        chooseContent
+                    }
+                    .scrollBounceBehavior(.basedOnSize)
+                }
             }
-            .scrollBounceBehavior(.basedOnSize)
         }
         .tint(colour.color)
         .animation(.bar, value: job?.stage)
+        .animation(.bar, value: job?.outline)
         .sensoryFeedback(.success, trigger: job?.stage) { _, now in
             if case .ready = now { true } else { false }
         }
@@ -551,10 +626,6 @@ struct HandoffGuide: View {
             AccessibilityNotification.Announcement(job.stage.headline(ofFile: job.isFile, named: job.named) + ". "
                 + job.stage.detail(selected: job.selected, transcribed: job.transcribed, ofFile: job.isFile, named: job.named)).post()
         }
-    }
-
-    @ViewBuilder private var content: some View {
-        if let job { jobContent(job) } else { chooseContent }
     }
 
     /// The chooser, while no job is shown: a file to hand off instead.
@@ -588,249 +659,245 @@ struct HandoffGuide: View {
     }
 
     private func jobContent(_ job: HandoffJob) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(job.isFile ? String(localized: "Handoff File") : String(localized: "Handoff"))
-                    .font(.title2.bold())
-                    .tracking(-0.3)
-                Text(job.isFile ? String(localized: "Give an assistant this file's context.")
-                     : String(localized: "Give an assistant this page's context."))
-                    .font(.body)
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(job.isFile ? String(localized: "Handoff File") : String(localized: "Handoff"))
+                            .font(.title2.bold())
+                            .tracking(-0.3)
+                        Text(job.isFile ? String(localized: "Give an assistant this file's context.")
+                             : String(localized: "Give an assistant this page's context."))
+                            .font(.body)
+                            .foregroundStyle(Palette.muted)
+                    }
+                    .padding(.horizontal, Self.indent)
+                    .padding(.bottom, 20)
+                    .arriving(0, arrived, plainly: reduceMotion)
+                    SourceCard(job: job, colour: colour, corner: corners.inner, lively: !reduceMotion)
+                        .arriving(1, arrived, plainly: reduceMotion)
+                    if job.summary != .none {
+                        SummaryView(summary: job.summary, note: job.modelNote, colour: colour, lively: !reduceMotion)
+                            .padding(.horizontal, Self.indent)
+                            .padding(.top, 24)
+                            .transition(.opacity)
+                            .arriving(2, arrived, plainly: reduceMotion)
+                    }
+                    if job.outline != nil || job.stage.isReading {
+                        ContentsView(job: job, colour: colour, lively: !reduceMotion)
+                            .padding(.top, 28)
+                            .transition(.opacity)
+                            .arriving(3, arrived, plainly: reduceMotion)
+                    }
+                    if case .failed(let failure) = job.stage {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(failure.message(ofFile: job.isFile)).foregroundStyle(.red)
+                            Button("Try Again") { job.retry() }
+                            // A file on the device goes with its name, there being no address to share.
+                            Button(job.named ? String(localized: "Share Name Only") : String(localized: "Share Address Only")) {
+                                job.shareAddressOnly()
+                            }
+                        }
+                        .padding(.horizontal, Self.indent)
+                        .padding(.top, 20)
+                    }
+                    // Where there is a summary, its place says why none came (SummaryView).
+                    if let note = job.modelNote, job.summary == .none {
+                        Text(note)
+                            .font(.callout)
+                            .foregroundStyle(Palette.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal, Self.indent)
+                            .padding(.top, 20)
+                    }
+                }
+                .padding(.horizontal, corners.edge)
+                .padding(.top, 30)
+                .padding(.bottom, 20)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            // What scrolls on under the button fades out there rather than being cut off.
+            .mask {
+                VStack(spacing: 0) {
+                    Rectangle()
+                    LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                        .frame(height: 20)
+                }
+            }
+            VStack(spacing: 10) {
+                Button(action: go) {
+                    Text("Handoff")
+                        .font(.headline)
+                        .foregroundStyle(colour.ink)
+                        .frame(maxWidth: .infinity, minHeight: 50)
+                        .background(colour.color, in: RoundedRectangle(cornerRadius: corners.inner, style: .continuous))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(PressScale())
+                .keyboardShortcut(.defaultAction)
+                .disabled(!canShare)
+                // Dimmed until there is something to share: in its place from the start, so nothing moves when it is.
+                .opacity(canShare ? 1 : 0.35)
+                Text("Nothing is sent until you pick an app.")
+                    .font(.footnote)
                     .foregroundStyle(Palette.muted)
+                    .frame(maxWidth: .infinity)
             }
-            .padding(.horizontal, Self.indent)
-            .padding(.bottom, 24)
-            .arriving(0, arrived, plainly: reduceMotion)
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(Handoff.Step.allCases, id: \.self) { step in
-                    StepRow(step: step, asksModel: job.asksModel, progress: job.stage.progress(of: step),
-                            stage: step == .organise ? job.stage : nil, selected: job.selected, transcribed: job.transcribed,
-                            file: job.isFile, named: job.named, colour: colour, lively: !reduceMotion)
-                        .arriving(step.rawValue + 1, arrived, plainly: reduceMotion)
-                }
-            }
-            .padding(.horizontal, Self.indent)
-            .padding(.bottom, 22)
-            if case .failed(let failure) = job.stage {
-                Text(failure.message(ofFile: job.isFile)).foregroundStyle(.red).padding(.bottom, 8)
-                Button("Try Again") { job.retry() }.padding(.bottom, 8)
-                // A file on the device goes with its name, there being no address to share.
-                Button(job.named ? String(localized: "Share Name Only") : String(localized: "Share Address Only")) {
-                    job.shareAddressOnly()
-                }
-                .padding(.bottom, 12)
-            }
-            if let note = job.modelNote {
-                Text(note).font(.callout).foregroundStyle(Palette.muted).padding(.bottom, 12)
-            }
-            Button(action: go) {
-                Text("Handoff")
-                    .font(.headline)
-                    .foregroundStyle(colour.ink)
-                    .frame(maxWidth: .infinity, minHeight: 50)
-                    .background(colour.color, in: RoundedRectangle(cornerRadius: corners.inner, style: .continuous))
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(PressScale())
-            .keyboardShortcut(.defaultAction)
-            .disabled(!canShare)
-            // Dimmed until there is something to share: in its place from the start, so nothing moves when it is.
-            .opacity(canShare ? 1 : 0.35)
+            .padding(.horizontal, corners.edge)
+            .padding(.top, 4)
+            .padding(.bottom, foot)
             .arriving(4, arrived, plainly: reduceMotion)
-            Text("Nothing is sent until you pick an app.")
-                .font(.footnote)
-                .foregroundStyle(Palette.muted)
-                .frame(maxWidth: .infinity)
-                .padding(.top, 10)
-                .arriving(5, arrived, plainly: reduceMotion)
         }
-        .padding(.horizontal, corners.edge)
-        .padding(.top, 30)
-        .padding(.bottom, foot)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        #if os(macOS)
+        .frame(height: Self.paneHeight)
+        #endif
     }
 }
 
-/// What the sheet says of each step. Every line is long enough to fill its
-/// last line on every iPhone's width, so none ends on a word alone.
-private extension Handoff.Step {
-    /// `asksModel`: whether Apple Intelligence's model is asked about the
-    /// page (HandoffJob.asksModel). Its sparkles are Apple Intelligence's
-    /// own mark, and stand only where it is at work.
-    func symbol(asksModel: Bool) -> String {
-        switch self {
-        case .file: "doc.text"
-        case .organise: asksModel ? "sparkles" : "list.bullet.indent"
-        case .choose: "square.and.arrow.up"
-        }
-    }
+// MARK: The page, and how far it is
 
-    /// How far up the symbol is moved on its round mark, as a part of the
-    /// mark's size. A symbol is set by its outline's middle, and the share
-    /// symbol's weight is its box, under a thin arrow: set that way it
-    /// sits a point and a half low to the eye, where the tick and the
-    /// sparkles sit half a point low (measured on the screen). A point up
-    /// puts its weight where theirs is.
-    var lift: CGFloat {
-        switch self {
-        case .choose: 1.0 / 28
-        case .file, .organise: 0
-        }
-    }
-
-    func title(asksModel: Bool) -> String {
-        switch self {
-        case .file: String(localized: "The context is one file")
-        // Who works out what the page is: the model where it is there, the app's own counting where it is not.
-        case .organise: asksModel ? String(localized: "Apple Intelligence organises it") : String(localized: "eGlu organises it")
-        case .choose: String(localized: "You ask in the app you choose")
-        }
-    }
-
-    /// `file`: whether what is handed off is a file and not a page,
-    /// which the words say.
-    func text(file: Bool) -> String {
-        switch self {
-        case .file:
-            file ? String(localized: "eGlu writes the file's text into a Markdown file.")
-                : String(localized: "eGlu writes the page's text and its address into a Markdown file.")
-        // So with the model and without it: both are on the device.
-        case .organise:
-            file ? String(localized: "On this device, it works out what kind of file this is and how much of it to send.")
-                : String(localized: "On this device, it works out what kind of page this is and how much of it to send.")
-        // The question is the person's to ask, there: what goes with the file is the address and a line for it (Handoff.prompt).
-        // A Mac shares from a menu, not a sheet.
-        case .choose:
-            #if os(macOS)
-            String(localized: "Pick an assistant in the share menu and ask your question there.")
-            #else
-            String(localized: "Pick an assistant in the share sheet and ask your question there.")
-            #endif
-        }
-    }
-}
-
-/// One step of the handoff: how far it is, on a mark at its side with a
-/// line down to the next step, and what the sheet says of it.
-private struct StepRow: View {
-    let step: Handoff.Step
-    /// Whether Apple Intelligence's model is asked, which the step that organises says.
-    let asksModel: Bool
-    let progress: Handoff.Progress
-    /// How far the handoff is, for the step that says so of the page at
-    /// hand (StageCard), under what it says of every page.
-    let stage: Handoff.Stage?
-    /// Whether the person has something selected on the page (Handoff.Stage.detail).
-    let selected: Bool
-    /// Whether a recording's transcript is in the file (Handoff.Stage.detail).
-    let transcribed: Bool
-    /// Whether what is handed off is a file and not a page.
-    let file: Bool
-    /// Whether it goes with its name and no address (HandoffJob.named).
-    let named: Bool
+/// The page handed off, as Arc Search shows the page it sums up: a small
+/// picture of it beside where it is from and what it is called, and under
+/// those how far the handoff is (StatusLine). A file has its kind's mark
+/// where a page has its picture.
+private struct SourceCard: View {
+    let job: HandoffJob
     let colour: SpaceColor
-    /// Whether the step at work moves (not under Reduce Motion).
+    let corner: CGFloat
     let lively: Bool
-
-    private var isLast: Bool {
-        step == Handoff.Step.allCases.last
-    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
-            VStack(spacing: 4) {
-                StepMark(symbol: step.symbol(asksModel: asksModel), lift: step.lift, progress: progress, colour: colour, lively: lively)
-                if !isLast {
-                    // In the colour once this step is done: the way to the next is open.
-                    Capsule()
-                        .fill(progress == .done ? colour.color : Palette.faint)
-                        .frame(width: 2)
-                        .frame(maxHeight: .infinity)
-                }
-            }
+            PageThumbnail(preview: job.preview, file: job.isFile)
             VStack(alignment: .leading, spacing: 2) {
-                Text(step.title(asksModel: asksModel))
-                    .font(.headline)
-                Text(step.text(file: file))
-                    .font(.subheadline)
-                    .foregroundStyle(Palette.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-                if let stage {
-                    StageCard(stage: stage, selected: selected, transcribed: transcribed, file: file, named: named, colour: colour)
-                        .padding(.top, 8)
+                HStack(spacing: 6) {
+                    if job.page != nil {
+                        SiteIconView(url: job.page, size: 14)
+                            .accessibilityHidden(true)
+                    }
+                    Text(whereFrom)
+                        .font(.footnote)
+                        .foregroundStyle(Palette.muted)
+                        .lineLimit(1)
                 }
+                Text(job.pageTitle)
+                    .font(.headline)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                StatusLine(job: job, colour: colour, lively: lively)
+                    .padding(.top, 8)
             }
-            // The title's line stands at the middle of the mark, which is the higher of the two.
-            .padding(.top, 3)
-            .padding(.bottom, isLast ? 0 : 18)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        // As high as its words, which is what the line down the side takes its length from.
-        .fixedSize(horizontal: false, vertical: true)
-        .accessibilityElement(children: .combine)
-        .accessibilityValue(spoken)
+        .padding(12)
+        .background(Palette.wash, in: RoundedRectangle(cornerRadius: corner, style: .continuous))
     }
 
-    private var spoken: String {
-        switch progress {
-        case .done: String(localized: "Done")
-        case .working: String(localized: "In progress")
-        case .waiting: String(localized: "Next")
+    /// The site, without its "www.", or for a file on the device, that it is on the device.
+    private var whereFrom: String {
+        guard let page = job.page, let host = page.host(percentEncoded: false), !host.isEmpty else {
+            return String(localized: "On this device")
         }
+        return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
     }
 }
 
-/// What is going on with the page at hand, or what it turned out to be, and
-/// what that means for what is shared (Handoff.Stage.headline, detail): the
-/// part of the sheet that changes, set apart on a ground of its own so the
-/// eye finds it. A symbol says the same at a glance: a page being looked
-/// through, then the kind of page it is, in the space's colour.
-private struct StageCard: View {
-    let stage: Handoff.Stage
-    let selected: Bool
-    let transcribed: Bool
-    /// Whether what is handed off is a file and not a page.
+/// A small picture of the page, its top: the part a person knows it by.
+/// Outlined by a hairline of black or white, so a white page keeps its
+/// edge on the card. Until the picture comes, or for a file, a mark.
+private struct PageThumbnail: View {
+    let preview: CGImage?
     let file: Bool
-    /// Whether it goes with its name and no address (HandoffJob.named).
-    let named: Bool
-    let colour: SpaceColor
 
-    private var found: Bool {
-        if case .ready = stage { true } else { false }
-    }
+    private static let size = CGSize(width: 56, height: 74)
 
     var body: some View {
-        HStack(spacing: 10) {
+        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
+        ZStack {
+            Color.primary.opacity(0.06)
+            if let preview {
+                Image(decorative: preview, scale: 1)
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFill()
+                    .frame(width: Self.size.width, height: Self.size.height, alignment: .top)
+                    .transition(.opacity)
+            } else {
+                Image(systemName: file ? "doc.text" : "globe")
+                    .font(.title3)
+                    .foregroundStyle(Palette.muted)
+            }
+        }
+        .frame(width: Self.size.width, height: Self.size.height)
+        .clipShape(shape)
+        .overlay(shape.strokeBorder(Color.primary.opacity(0.1), lineWidth: 1))
+        .animation(.easeOut(duration: 0.3), value: preview != nil)
+        .accessibilityHidden(true)
+    }
+}
+
+/// How far the handoff is, in a line and a second line under it: what is
+/// going on, then what the page turned out to be and what of it is shared
+/// (Handoff.Stage.headline, detail). The mark beside them is the step at
+/// work, in the space's colour and moving, then the kind of page.
+private struct StatusLine: View {
+    let job: HandoffJob
+    let colour: SpaceColor
+    let lively: Bool
+
+    var body: some View {
+        let stage = job.stage
+        let working = !stage.isSettled
+        let found = if case .ready = stage { true } else { false }
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
             ZStack {
-                Image(systemName: stage.symbol)
-                    .font(.body.weight(.medium))
-                    .foregroundStyle(found ? colour.color : Palette.muted)
-                    .id(stage.symbol)
+                Image(systemName: symbol)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(working || found ? colour.color : Palette.muted)
+                    .symbolEffect(.variableColor.iterative, options: .repeating, isActive: working && lively)
+                    .id(symbol)
                     .transition(.swap)
             }
-            .frame(minWidth: 24)
+            .frame(minWidth: 18)
             .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 1) {
-                Text(stage.headline(ofFile: file, named: named))
+                Text(headline)
                     .font(.subheadline.weight(.semibold))
                     .contentTransition(.opacity)
-                Text(stage.detail(selected: selected, transcribed: transcribed, ofFile: file, named: named))
+                Text(stage.detail(selected: job.selected, transcribed: job.transcribed, ofFile: job.isFile, named: job.named))
                     .font(.footnote)
                     .foregroundStyle(Palette.muted)
                     .contentTransition(.opacity)
             }
+            .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.vertical, 9)
-        .padding(.horizontal, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Palette.wash, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.updatesFrequently)
+    }
+
+    /// While the model reads the page, who is at it, and once its words
+    /// come, that it is writing; else what the stage says.
+    private var headline: String {
+        guard job.stage.isOrganising else { return job.stage.headline(ofFile: job.isFile, named: job.named) }
+        guard job.asksModel else { return String(localized: "eGlu is organising it…") }
+        if case .writing = job.summary { return String(localized: "Apple Intelligence is writing…") }
+        return String(localized: "Apple Intelligence is reading it…")
+    }
+
+    /// The step at work, then the kind of page it turned out to be. Its
+    /// sparkles are Apple Intelligence's own mark, and stand only where it is at work.
+    private var symbol: String {
+        switch job.stage {
+        case .organising: job.asksModel ? "sparkles" : "list.bullet.indent"
+        case .reading, .speechModel, .transcribing, .stopped: "doc.text"
+        default: job.stage.symbol
+        }
     }
 }
 
 private extension Handoff.Stage {
-    /// A symbol for what the card says: a page looked through while it is
-    /// read, then the kind of page it turned out to be.
+    /// What the page turned out to be, by a symbol.
     var symbol: String {
         switch self {
         case .reading, .organising, .stopped, .speechModel, .transcribing: "doc.text.magnifyingglass"
@@ -856,49 +923,301 @@ private extension Handoff.Stage {
     }
 }
 
-/// A step's mark: its symbol on a round ground while it waits, in the
-/// space's colour and moving while it is at work, a tick on the colour once
-/// it is done.
-private struct StepMark: View {
-    let symbol: String
-    /// How far up the symbol is moved to look centred, as a part of the mark's size (Handoff.Step.lift).
-    let lift: CGFloat
-    let progress: Handoff.Progress
+// MARK: The summary
+
+/// The model's summary as it is written, as Arc Search writes the summary
+/// of a page under it: three lines' room held from the start, shapes in it
+/// until the first words come, the words as they come with a sparkle where
+/// the next will go, then the summary as the file has it. Where none goes,
+/// why, in its place.
+private struct SummaryView: View {
+    let summary: HandoffSummary
+    let note: String?
     let colour: SpaceColor
     let lively: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 5) {
+                Image(systemName: "sparkles")
+                    .foregroundStyle(colour.color)
+                Text("Summary by Apple Intelligence")
+                    .foregroundStyle(Palette.muted)
+            }
+            .font(.footnote.weight(.semibold))
+            ZStack(alignment: .topLeading) {
+                if holdsRoom {
+                    // Three lines of the summary's own size, so that what is written fills them and nothing under them moves.
+                    Text(verbatim: "\n\n")
+                        .font(.body)
+                        .hidden()
+                }
+                switch summary {
+                case .waiting:
+                    SkeletonLines(lively: lively)
+                        .transition(.opacity)
+                case .writing(let said):
+                    Text("\(said) \(Text(Image(systemName: "sparkle")).foregroundStyle(colour.color))")
+                        .font(.body)
+                        .fixedSize(horizontal: false, vertical: true)
+                case .written(let said):
+                    Text(said)
+                        .font(.body)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                        .transition(.opacity)
+                case .dropped:
+                    Text(note ?? String(localized: "No summary goes with this file."))
+                        .font(.callout)
+                        .foregroundStyle(Palette.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .transition(.opacity)
+                case .none:
+                    EmptyView()
+                }
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("Summary by Apple Intelligence"))
+        .accessibilityValue(spoken)
+    }
+
+    private var holdsRoom: Bool {
+        switch summary {
+        case .waiting, .writing: true
+        case .none, .written, .dropped: false
+        }
+    }
+
+    /// Not read out word by word while it is written: that it is, then the whole of it.
+    private var spoken: String {
+        switch summary {
+        case .waiting, .writing: String(localized: "Being written")
+        case .written(let said): said
+        case .dropped: note ?? String(localized: "No summary goes with this file.")
+        case .none: ""
+        }
+    }
+}
+
+/// Where words will be, as shapes: three lines of a paragraph, the last short.
+private struct SkeletonLines: View {
+    let lively: Bool
+    @ScaledMetric(relativeTo: .body) private var line: CGFloat = 22
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: line - 12) {
+            Capsule().frame(maxWidth: .infinity)
+            Capsule().frame(maxWidth: .infinity).padding(.trailing, 24)
+            Capsule().frame(maxWidth: .infinity).padding(.trailing, 120)
+        }
+        .frame(height: line * 3 - (line - 12), alignment: .top)
+        .foregroundStyle(Palette.wash)
+        .padding(.top, (line - 12) / 2)
+        .modifier(Pulsing(lively: lively))
+        .accessibilityHidden(true)
+    }
+}
+
+// MARK: What the file holds
+
+/// What goes in the file, part by part, as Arc Search lists the points of
+/// a page it sums up: a mark in the space's colour, the part's heading,
+/// and the words it begins with. The person's selection first, then the
+/// page's parts in their order, what was read of its pictures and its
+/// transcript, and last, greyed, what was set aside: named in the file
+/// with its size, and not in it. Shapes stand where the parts will be
+/// while the page is read.
+private struct ContentsView: View {
+    let job: HandoffJob
+    let colour: SpaceColor
+    let lively: Bool
+
+    /// How many of the page's parts are listed; the rest are counted.
+    private static let listed = 5
+    /// How many of what was set aside are named.
+    private static let asides = 3
+
+    struct Row: Identifiable, Equatable {
+        let id: String
+        let symbol: String
+        let title: String
+        var detail = ""
+        var tag: String?
+        /// Greyed: set aside, named in the file and not in it, or parts only counted.
+        var quiet = false
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("In the file")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(Palette.muted)
+                .padding(.horizontal, HandoffGuide.indent)
+            if let outline = job.outline {
+                ForEach(Array(rows(of: outline).enumerated()), id: \.element.id) { order, row in
+                    OutlineRow(row: row, colour: colour)
+                        .transition(.rising(order: order, lively: lively))
+                }
+            } else {
+                ForEach(0..<3, id: \.self) { _ in
+                    SkeletonRow(lively: lively)
+                        .transition(.opacity)
+                }
+            }
+        }
+    }
+
+    private func rows(of outline: Handoff.Outline) -> [Row] {
+        var rows: [Row] = []
+        if !outline.selection.isEmpty {
+            rows.append(Row(id: "selection", symbol: "text.quote", title: String(localized: "Your selection"),
+                            detail: outline.selection, tag: String(localized: "Goes first")))
+        }
+        let sections = outline.sections
+        let alone = sections.count == 1 && sections[0].heading.isEmpty
+        for (index, section) in sections.prefix(Self.listed).enumerated() {
+            let title = !section.heading.isEmpty ? section.heading
+                : alone ? (job.isFile ? String(localized: "The file's text") : String(localized: "The page's text"))
+                : String(localized: "Introduction")
+            rows.append(Row(id: "part-\(index)", symbol: section.shape.symbol, title: title, detail: section.opening,
+                            tag: section.started ? String(localized: "Beginning only") : nil))
+        }
+        if sections.count > Self.listed {
+            rows.append(Row(id: "more", symbol: "ellipsis", title: String(localized: "\(sections.count - Self.listed) more parts"), quiet: true))
+        }
+        if job.picturesRead > 0 {
+            rows.append(Row(id: "pictures", symbol: "photo", title: String(localized: "Pictures"),
+                            detail: String(localized: "\(job.picturesRead) read on this device")))
+        }
+        if outline.transcript || job.transcribed {
+            rows.append(Row(id: "transcript", symbol: "captions.bubble", title: String(localized: "Transcript"),
+                            detail: String(localized: "What the recording says, at the end of the file")))
+        }
+        for (index, aside) in outline.asides.prefix(Self.asides).enumerated() {
+            rows.append(Row(id: "aside-\(index)", symbol: "eye.slash", title: Self.name(of: aside),
+                            detail: String(localized: "Set aside, \(aside.characters.formatted()) characters"), quiet: true))
+        }
+        return rows
+    }
+
+    /// What the reader calls a part it set aside, in the person's language;
+    /// a heading of the page's own as the page has it.
+    private static func name(of aside: Handoff.Aside) -> String {
+        switch aside.name {
+        case "Comments": String(localized: "Comments")
+        case "Related": String(localized: "Related")
+        case "Legal": String(localized: "Legal")
+        case "Footer": String(localized: "Footer")
+        case "A list of links": String(localized: "A list of links")
+        default: aside.name
+        }
+    }
+}
+
+private extension Handoff.Outline.Shape {
+    var symbol: String {
+        switch self {
+        case .text: "text.alignleft"
+        case .list: "list.bullet"
+        case .table: "tablecells"
+        case .code: "chevron.left.forwardslash.chevron.right"
+        case .quote: "quote.opening"
+        case .picture: "photo"
+        }
+    }
+}
+
+/// One part of what the file holds: its mark, its heading with what is
+/// said of it at the side, and the words it begins with.
+private struct OutlineRow: View {
+    let row: ContentsView.Row
+    let colour: SpaceColor
 
     @ScaledMetric(relativeTo: .headline) private var size: CGFloat = 28
 
     var body: some View {
-        ZStack {
-            Circle()
-                .fill(ground)
-            if progress == .done {
-                Image(systemName: "checkmark")
-                    .font(.system(size: size * 0.46, weight: .bold))
-                    .foregroundStyle(colour.ink)
-                    .transition(.swap)
-            } else {
-                Image(systemName: symbol)
-                    .font(.system(size: size * 0.5, weight: .semibold))
-                    .foregroundStyle(progress == .working ? colour.color : Palette.muted)
-                    .symbolEffect(.variableColor.iterative, options: .repeating, isActive: progress == .working && lively)
-                    .offset(y: -size * lift)
-                    .transition(.swap)
+        HStack(alignment: .top, spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(row.quiet ? Palette.wash : colour.color)
+                Image(systemName: row.symbol)
+                    .font(.system(size: size * 0.44, weight: .semibold))
+                    .foregroundStyle(row.quiet ? Palette.muted : colour.ink)
             }
+            .frame(width: size, height: size)
+            .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(row.title)
+                        .font(.headline)
+                        .foregroundStyle(row.quiet ? Palette.muted : Color.primary)
+                        .lineLimit(2)
+                    Spacer(minLength: 0)
+                    if let tag = row.tag {
+                        Text(tag)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(Palette.muted)
+                            .fixedSize()
+                            .transition(.opacity)
+                    }
+                }
+                if !row.detail.isEmpty {
+                    Text(row.detail)
+                        .font(.subheadline)
+                        .foregroundStyle(Palette.muted)
+                        .lineLimit(2)
+                }
+            }
+            // The title's line stands at the middle of the mark.
+            .padding(.top, (size - 22) / 2)
         }
-        .frame(width: size, height: size)
+        .padding(.horizontal, HandoffGuide.indent)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// Where a part will be listed, as shapes, while the page is read.
+private struct SkeletonRow: View {
+    let lively: Bool
+    @ScaledMetric(relativeTo: .headline) private var size: CGFloat = 28
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Circle()
+                .frame(width: size, height: size)
+            VStack(alignment: .leading, spacing: 9) {
+                Capsule().frame(width: 120, height: 13)
+                Capsule().frame(maxWidth: .infinity).frame(height: 11)
+            }
+            .padding(.top, 6)
+        }
+        .foregroundStyle(Palette.wash)
+        .padding(.horizontal, HandoffGuide.indent)
+        .modifier(Pulsing(lively: lively))
         .accessibilityHidden(true)
     }
+}
 
-    private var ground: Color {
-        switch progress {
-        case .done: colour.color
-        case .working: colour.color.opacity(0.16)
-        case .waiting: Palette.wash
+/// Shapes standing for what is still to come, breathing: lighter and back.
+/// Still under Reduce Motion.
+private struct Pulsing: ViewModifier {
+    let lively: Bool
+
+    func body(content: Content) -> some View {
+        if lively {
+            content.phaseAnimator([1.0, 0.45]) { shown, opacity in
+                shown.opacity(opacity)
+            } animation: { _ in
+                .easeInOut(duration: 0.9)
+            }
+        } else {
+            content
         }
     }
 }
+
+// MARK: Motion
 
 /// A part of the sheet as it arrives: a little lower, clear and soft, then
 /// in place, each part a moment after the one above it. Only a fade under
@@ -923,6 +1242,19 @@ private extension View {
     }
 }
 
+/// A row of what the file holds as it comes: as the sheet's parts arrive,
+/// a little lower, clear and soft, each a moment after the one above.
+private struct Rising: ViewModifier {
+    let away: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(away ? 0 : 1)
+            .offset(y: away ? 10 : 0)
+            .blur(radius: away ? 4 : 0)
+    }
+}
+
 /// A symbol as it takes another's place: from small, clear and soft.
 private struct Swapping: ViewModifier {
     let away: Bool
@@ -938,5 +1270,13 @@ private struct Swapping: ViewModifier {
 private extension AnyTransition {
     static var swap: AnyTransition {
         .modifier(active: Swapping(away: true), identity: Swapping(away: false))
+    }
+
+    /// In by `order`, 60 milliseconds apart; out at once, by a quick fade.
+    /// Only a fade under Reduce Motion.
+    static func rising(order: Int, lively: Bool) -> AnyTransition {
+        let coming: AnyTransition = lively ? .modifier(active: Rising(away: true), identity: Rising(away: false)) : .opacity
+        return .asymmetric(insertion: coming.animation(.spring(duration: 0.35, bounce: 0).delay(Double(order) * 0.06)),
+                           removal: .opacity.animation(.easeOut(duration: 0.15)))
     }
 }

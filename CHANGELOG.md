@@ -4,6 +4,8 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+- On iPhone, iPad and the Mac, the Handoff sheet shows what is handed off while it is made, as Arc Search shows a page it sums up: the page on a card with a small picture of it and how far the handoff is, Apple Intelligence's summary word by word as it is written, then as the file has it, and what the file holds, part by part, by the page's headings and the words each begins with, what was set aside greyed. On iPhone the sheet takes the whole height; what is more than that scrolls over the Handoff button.
+
 ## 1.1.2
 
 - On the Mac, the build stops at any file of the interface that imports WebKit or the Rust engines, or the WebKit plugin's modules outside its one composition point, and `Docs/WebEngine.md` explains the contracts to whoever writes a plugin for another engine: the first part of step 13 of keeping eGlu's interface apart from its engines (`Docs/EngineSplitPlan.md`). Nothing changes in use.

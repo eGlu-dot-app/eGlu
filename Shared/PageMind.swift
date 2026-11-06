@@ -34,7 +34,12 @@ protocol PageMind: AnyObject {
     /// model looks at pictures (iOS 27) and `looks` says this page is worth
     /// one. Nil when it couldn't say: a refusal, a language it doesn't
     /// have, a handoff called off.
-    func read(_ question: PageQuestion, looks: Bool, picture: @MainActor () async -> CGImage?) async -> PageAnswer?
+    ///
+    /// `writing` hears the summary as the model writes it, word by word,
+    /// for the sheet to show (HandoffGuide); empty again where a try is
+    /// given up and the next begins.
+    func read(_ question: PageQuestion, looks: Bool, picture: @MainActor () async -> CGImage?,
+              writing: @escaping @MainActor (String) -> Void) async -> PageAnswer?
 
     /// What the model sees in a picture handed off, for someone who can't
     /// see it. Nil where the model doesn't look at pictures (before iOS
@@ -142,7 +147,8 @@ private final class OnDevicePageMind: PageMind {
         await found() != nil
     }
 
-    func read(_ question: PageQuestion, looks: Bool, picture: @MainActor () async -> CGImage?) async -> PageAnswer? {
+    func read(_ question: PageQuestion, looks: Bool, picture: @MainActor () async -> CGImage?,
+              writing: @escaping @MainActor (String) -> Void) async -> PageAnswer? {
         guard let model = await found() else { return nil }
         var briefs = question.briefs
         // Counted where the system counts, so that no try is spent on
@@ -167,40 +173,69 @@ private final class OnDevicePageMind: PageMind {
         tries += briefs.map { ($0, nil) }
         for attempt in tries {
             guard !Task.isCancelled else { return nil }
-            if let answer = await ask(model, attempt.brief, picture: attempt.picture, picks: question.picks) { return answer }
+            writing("")
+            if let answer = await ask(model, attempt.brief, picture: attempt.picture, picks: question.picks, writing: writing) {
+                return answer
+            }
         }
+        writing("")
         return nil
     }
 
-    private func ask(_ model: SystemLanguageModel, _ brief: String, picture: CGImage?, picks: Bool) async -> PageAnswer? {
+    /// Streamed, so the summary can be shown as it is written: the answer
+    /// is the same as the whole of it at once, the sampling being greedy.
+    /// The summary comes first in the answer's shape, ahead of the kind
+    /// and the picks, so it is what is written first.
+    private func ask(_ model: SystemLanguageModel, _ brief: String, picture: CGImage?, picks: Bool,
+                     writing: @escaping @MainActor (String) -> Void) async -> PageAnswer? {
         let instructions = Handoff.kindInstructions + (picks ? Handoff.pickInstructions : "")
         let session = LanguageModelSession(model: model, instructions: instructions)
         let options = GenerationOptions(samplingMode: .greedy)
         if picks {
-            let reply: PageReadWithPicks?
+            let stream: LanguageModelSession.ResponseStream<PageReadWithPicks>
             if #available(iOS 27.0, macOS 27.0, *), let picture {
-                reply = try? await session.respond(generating: PageReadWithPicks.self, options: options) {
+                stream = session.streamResponse(generating: PageReadWithPicks.self, options: options) {
                     brief
                     Attachment(picture)
-                }.content
+                }
             } else {
-                reply = try? await session.respond(to: brief, generating: PageReadWithPicks.self, options: options).content
+                stream = session.streamResponse(to: brief, generating: PageReadWithPicks.self, options: options)
             }
-            guard let reply, !Task.isCancelled else { return nil }
+            guard let reply = await Self.follow(stream, saying: { $0.about }, to: writing), !Task.isCancelled else { return nil }
             return PageAnswer(kind: reply.kind.kind, about: reply.about,
                               picks: reply.picks.map { PageAnswer.Pick(number: $0.number, name: $0.name) })
         }
-        let reply: PageRead?
+        let stream: LanguageModelSession.ResponseStream<PageRead>
         if #available(iOS 27.0, macOS 27.0, *), let picture {
-            reply = try? await session.respond(generating: PageRead.self, options: options) {
+            stream = session.streamResponse(generating: PageRead.self, options: options) {
                 brief
                 Attachment(picture)
-            }.content
+            }
         } else {
-            reply = try? await session.respond(to: brief, generating: PageRead.self, options: options).content
+            stream = session.streamResponse(to: brief, generating: PageRead.self, options: options)
         }
-        guard let reply, !Task.isCancelled else { return nil }
+        guard let reply = await Self.follow(stream, saying: { $0.about }, to: writing), !Task.isCancelled else { return nil }
         return PageAnswer(kind: reply.kind.kind, about: reply.about)
+    }
+
+    /// An answer as it is written: what it says so far of the page to
+    /// `writing`, as each part of it comes, and the whole of it at the
+    /// end. Nil where it stops short: a refusal, a handoff called off.
+    private static func follow<Content: Generable>(_ stream: LanguageModelSession.ResponseStream<Content>,
+                                                   saying about: (Content.PartiallyGenerated) -> String?,
+                                                   to writing: @MainActor (String) -> Void) async -> Content? {
+        var last: GeneratedContent?
+        do {
+            for try await snapshot in stream {
+                guard !Task.isCancelled else { return nil }
+                last = snapshot.rawContent
+                if let said = about(snapshot.content) { writing(said) }
+            }
+        } catch {
+            return nil
+        }
+        guard let last else { return nil }
+        return try? Content(last)
     }
 
     func describe(_ picture: CGImage) async -> String? {
