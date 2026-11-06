@@ -832,6 +832,9 @@ public enum BookmarkFile {
             while at < bytes.count, !matches(end, at: at) { at += 1 }
             var raw = String(decoding: bytes[start..<min(at, bytes.count)], as: UTF8.self)
             skip(past: ">")
+            // eGlu's own export wrote the name as it is, its < and > escaped:
+            // read back just so, two spaces and all, it is the same folder.
+            if ownExport { return Reader.decode(raw) }
             raw = raw.replacingOccurrences(of: "<[^>]*>", with: "", options: .regularExpression)
             let words = Reader.decode(raw).split(whereSeparator: { $0.isWhitespace })
             return words.joined(separator: " ")

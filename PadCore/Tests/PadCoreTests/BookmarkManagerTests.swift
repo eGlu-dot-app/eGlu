@@ -344,6 +344,21 @@ final class BookmarkManagerTests: XCTestCase {
         XCTAssertEqual(w.spaces[0].bookmarks.map(\.title), ["Figma"])
     }
 
+    func testNamesComeBackFromEglusOwnExportSpacesAndAll() throws {
+        var w = Workspace.onFigma()
+        let space = w.spaces[0].id
+        let there = [Bookmark(folder: "My  Docs", children: [Bookmark(title: " Figma  files ", url: figma)]),
+                     Bookmark(title: "Tom & \"Jerry\" <3", url: notion)]
+        w.spaces[0].bookmarks = there
+        let read = BookmarkFile.parse(BookmarkFile.export(there))
+        XCTAssertEqual(Self.shape(read.items), Self.shape(there))
+        XCTAssertEqual(w.importBookmarks(read, into: space), .duplicates(total: 2, space: w.spaces[0].name))
+        XCTAssertEqual(Self.shape(w.spaces[0].bookmarks), Self.shape(there))
+        // Another browser's names are still tidied.
+        XCTAssertEqual(BookmarkFile.parse(Data("<DL><p><DT><A HREF=\"https://a.example/\">My  <b>A</b>\n site</A></DL><p>".utf8))
+                        .items.map(\.title), ["My A site"])
+    }
+
     func testTheBarIsWrittenFirstWhereverItStands() {
         let bar = Bookmark(folder: Bookmarks.barName, children: [Bookmark(title: "Slack", url: slack)])
         let items = [Bookmark(title: "Figma", url: figma), bar]
