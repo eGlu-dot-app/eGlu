@@ -6,6 +6,7 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 - The Engineer icon in satin chrome: a terminal window bevelled along every edge on a green dot-matrix screen, with a mint neon line just inside the screen's edge. The e globe and the I-beam keep their pixel drawings, the beam's cells in chrome, and the window's three lights are Liquid Glass.
 - eGlu's icon in dark: the system's own dark ground shows through under the fluted glass, with no milky veil on the glass.
+- On the Mac, iPhone and iPad, a new tab, or a tab loading again after a launch, no longer flashes white in dark mode while its page is on the way: until the page arrives the page area shows the window's own ground, dark in dark mode, where WebKit painted an empty white page. On iPhone and iPad the black that showed for a moment as a page arrived goes too. Pages look as they did once they show, one with no background of its own still white, and light mode is unchanged.
 
 ## 1.1.3
 
