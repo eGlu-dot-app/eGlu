@@ -4,6 +4,9 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+- The Engineer icon in satin chrome: a terminal window bevelled along every edge on a green dot-matrix screen, with a mint neon line just inside the screen's edge. The e globe and the I-beam keep their pixel drawings, the beam's cells in chrome, and the window's three lights are Liquid Glass.
+- eGlu's icon in dark: the system's own dark ground shows through under the fluted glass, with no milky veil on the glass.
+
 ## 1.1.3
 
 - On iPhone, iPad and the Mac, the Handoff sheet shows what is handed off while it is made, as Arc Search shows a page it sums up: the page on a card with a small picture of it and how far the handoff is, Apple Intelligence's summary word by word as it is written, then as the file has it, and what the file holds, part by part, by the page's headings and the words each begins with, what was set aside greyed. On iPhone the sheet takes the whole height; what is more than that scrolls over the Handoff button.
