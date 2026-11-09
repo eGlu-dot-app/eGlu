@@ -425,6 +425,17 @@ public struct Workspace: Codable, Equatable, Sendable {
         return spaces[((index + offset) % count + count) % count].id
     }
 
+    /// The side of `from` that `to` is on along the row of spaces: 1 after
+    /// it, toward the row's end, -1 before it, 0 where it is the same space
+    /// or either is gone. What a space's coming in slides from, when it is
+    /// chosen by its button; one stepped to says its own way, since going
+    /// round from the last to the first is still going on.
+    public func side(of to: UUID, from: UUID) -> Int {
+        guard let start = spaces.firstIndex(where: { $0.id == from }),
+              let end = spaces.firstIndex(where: { $0.id == to }) else { return 0 }
+        return end > start ? 1 : end < start ? -1 : 0
+    }
+
     // MARK: Changing
 
     /// A new tab in `space`, right after `after` when that tab is in the same

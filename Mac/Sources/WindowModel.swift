@@ -17,10 +17,23 @@ enum CommandBarPurpose: Equatable {
 @MainActor
 final class WindowModel: ObservableObject, PageHost {
     @Published private(set) var spaceID: UUID {
-        // Another space's bookmarks are not the ones asked for: they go. The
-        // panel's own watch is in the sidebar's space, which goes with it.
-        didSet { if spaceID != oldValue, bookmarksOpen { bookmarksOpen = false } }
+        didSet {
+            defer { stepping = nil }
+            guard spaceID != oldValue else { return }
+            // Another space's bookmarks are not the ones asked for: they go. The
+            // panel's own watch is in the sidebar's space, which goes with it.
+            if bookmarksOpen { bookmarksOpen = false }
+            spaceSide = stepping ?? Session.shared.workspace.side(of: spaceID, from: oldValue)
+        }
     }
+    /// The way along the row of spaces the last change of space went, for
+    /// the sidebar's tabs to come in from that side (Sidebar): 1 toward the
+    /// row's end, -1 toward its start, 0 where there was no way between
+    /// (the space left is gone).
+    @Published private(set) var spaceSide = 0
+    /// A step to the space beside (`showSpace(by:)`) says its way before it
+    /// goes: from the last space round to the first is still on toward the end.
+    private var stepping: Int?
     @Published private(set) var tabID: UUID?
     /// The tab's page on screen; nil for a tab that has gone nowhere yet,
     /// and for a window whose space has no tab to show.
@@ -379,7 +392,9 @@ final class WindowModel: ObservableObject, PageHost {
 
     func showSpace(by offset: Int) {
         guard let next = Session.shared.workspace.spaceNeighbour(of: spaceID, by: offset) else { return }
+        stepping = offset
         showSpace(next)
+        stepping = nil
     }
 
     func showSpace(number: Int) {

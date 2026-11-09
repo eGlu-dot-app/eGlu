@@ -4,6 +4,9 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+- On iPad, and on the iPhone Duo with the sidebar, two fingers on the trackpad or one finger swept sideways across the sidebar go to the next or the previous space, as on the Mac; a sweep that sets out up or down still scrolls the tabs. With more spaces than the sidebar has room for, the row of spaces scrolls and keeps the one you are in at its middle.
+- On iPad and Mac, a space's tabs come in from its side of the row of spaces: from the right going to a space on the right, from the left going back, whether it is chosen by its button, a sweep or Next and Previous Space. Before, on the Mac they always came in from the right, and on iPad they didn't slide at all. Under Reduce Motion they only fade.
+
 ## 1.1.2
 
 - On the Mac, the build stops at any file of the interface that imports WebKit or the Rust engines, or the WebKit plugin's modules outside its one composition point, and `Docs/WebEngine.md` explains the contracts to whoever writes a plugin for another engine: the first part of step 13 of keeping eGlu's interface apart from its engines (`Docs/EngineSplitPlan.md`). Nothing changes in use.

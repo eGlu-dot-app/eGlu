@@ -22,6 +22,7 @@ struct Sidebar: View {
     /// under the resize edge on the right, which stays on top for the pointer.
     private static let sideBleed: CGFloat = 8
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.layoutDirection) private var layoutDirection
 
     var body: some View {
         let space = session.workspace.space(model.spaceID)
@@ -81,7 +82,7 @@ struct Sidebar: View {
                     }
                     // The space's tabs come in from the side they are on, as in Arc.
                     .id(space.id)
-                    .transition(.asymmetric(insertion: .opacity.combined(with: .offset(x: 24)), removal: .opacity))
+                    .transition(spaceTurn)
                 }
                 .frame(maxHeight: .infinity, alignment: .top)
                 .animation(.bar, value: space.id)
@@ -95,6 +96,19 @@ struct Sidebar: View {
         .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(BrowserView.place)).maxX } action: { model.sidebarEdge = $0 }
         // Gone, it holds no card away from what it stood beside.
         .onDisappear { model.sidebarEdge = 0 }
+    }
+
+    /// From the right going to a space on the right, from the left going
+    /// back, a little way, as the space left fades where it is. Not out the
+    /// other way: a view gone keeps the transition it was last drawn with,
+    /// which is the way of the switch before this one. Fading alone under
+    /// Reduce Motion, and where there is no way between the two (the space
+    /// left is gone). As the iPad's (SideTabs).
+    private var spaceTurn: AnyTransition {
+        // Offsets aren't mirrored: from the left, right to left, is toward the row's end.
+        let side = CGFloat(model.spaceSide) * (layoutDirection == .rightToLeft ? -1 : 1)
+        guard !reduceMotion, side != 0 else { return .opacity }
+        return .asymmetric(insertion: .opacity.combined(with: .offset(x: 24 * side)), removal: .opacity)
     }
 }
 

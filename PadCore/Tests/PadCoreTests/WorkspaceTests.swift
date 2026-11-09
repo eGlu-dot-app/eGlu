@@ -111,6 +111,19 @@ final class WorkspaceTests: XCTestCase {
         XCTAssertEqual(w.spaceNeighbour(of: other, by: 1), space)
     }
 
+    func testASpaceChosenComesInFromItsSideOfTheRow() {
+        var w = Workspace.onFigma()
+        let first = w.spaces[0].id
+        let second = w.addSpace(named: "Client")
+        let third = w.addSpace(named: "Home")
+        XCTAssertEqual(w.side(of: third, from: first), 1, "after it, toward the row's end")
+        XCTAssertEqual(w.side(of: second, from: third), -1)
+        XCTAssertEqual(w.side(of: first, from: third), -1, "chosen, the first is before the last; only a step goes round")
+        XCTAssertEqual(w.side(of: second, from: second), 0)
+        XCTAssertEqual(w.side(of: UUID(), from: first), 0, "a space gone has no side")
+        XCTAssertEqual(w.side(of: first, from: UUID()), 0)
+    }
+
     func testSpacesComeWithAnEmptyTabAndTheLastOneStays() {
         var w = Workspace.onFigma()
         let first = w.spaces[0].id
