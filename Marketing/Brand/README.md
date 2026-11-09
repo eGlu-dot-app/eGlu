@@ -11,6 +11,7 @@ The brand symbol: a globe that is also an "e", with a cursor in the e's opening 
 | `eglu-icon.svg`, `eglu-icon-white.svg` | The symbol in the sketch's 800-point frame, the e's bowl centred top to bottom |
 | `eglu-icon-e.svg`, `eglu-icon-cursor.svg` | The letter (with its crescents) and the cursor apart, in that frame, white; the cursor is the app icon's layer |
 | `fluted-glass/` | The app icon's globe behind fluted glass: `fluted.py` and what it draws from (below) |
+| `engineer/` | The Engineer icon (`App/Engineer.icon`): `engineer.py` and what it draws from (below) |
 | `*-preview-light.png`, `*-preview-dark.png` | Each at 640, 128, 64, 32 and 16 px |
 | `symbol.swift` | Draws all of the above |
 | `mac-icons.swift` | Draws the Mac's pictures of the app icons, light and dark, from the Icon Composer files (`Mac/Assets.xcassets/AppIcons`, for Settings › General › App Icon and the Dock); run it after changing an icon |
@@ -51,7 +52,7 @@ It writes `Shared/eGlu.icon/Assets/cursor-fill.svg`.
 
 ## The fluted glass
 
-`fluted-glass/fluted.py` lays vertical fluted glass over the globe, as a photograph of reeded glass would show it: each flute a shallow rod that bends what is behind it, strongest on the left, where the rim breaks into the crescents, and fading to nearly clear by the cursor. The globe is a little out of focus, more so on the left. Behind it, light mode is a warm ivory, as an old CRT's white case yellows in the sun, with the dark globe's blues blurred behind the globe; the two are mixed in OKLab and lightened where they would cancel to grey, so the blue fades through white to the ivory. Dark mode is near-black, lifted towards a milky white at the corners. Every measure is a named constant at the top of the file, and each can be set when running it (`python3 fluted.py --help`).
+`fluted-glass/fluted.py` lays vertical fluted glass over the globe, as a photograph of reeded glass would show it: each flute a shallow rod that bends what is behind it, strongest on the left, where the rim breaks into the crescents, and fading to nearly clear by the cursor. The globe is a little out of focus, more so on the left. Behind it, light mode is a warm ivory, as an old CRT's white case yellows in the sun, with the dark globe's blues blurred behind the globe; the two are mixed in OKLab and lightened where they would cancel to grey, so the blue fades through white to the ivory. Dark mode has no ground of its own: the dark picture is see-through, drawn over the darkest and the lightest grey of Icon Composer's own dark ground and separated from them, so the system's dark background shows through under the flutes, with no milky veil on the glass. Every measure is a named constant at the top of the file, and each can be set when running it (`python3 fluted.py --help`).
 
 What it draws from, in the same folder: `globe-layer-Default.png` and `globe-layer-Dark.png`, the globe without its crescents as Icon Composer drew it, apart from its ground (drawn over black and over white, the difference giving its transparency); `squircle-mask.png`, the icon's outline; `cursor-Default.png` and `cursor-Dark.png`, the cursor alone, for the previews. It needs NumPy, SciPy and Pillow. To draw the app icon's two pictures, from the repository's folder:
 
@@ -60,3 +61,13 @@ python3 Marketing/Brand/fluted-glass/fluted.py --plates Shared/eGlu.icon/Assets
 ```
 
 `--all` draws the previews instead (the whole icon with its cursor, light and dark, and at 180 and 60 px) into the folder. Then redraw the icon's pictures, as for any icon (`mac-icons.swift`, and the Settings previews).
+
+## The Engineer icon
+
+`engineer/engineer.py` draws the Engineer alternate icon as two pictures, `metal-light.png` and `metal-dark.png` in `App/Engineer.icon/Assets`: a terminal window in satin chrome, lit from the top left and bevelled along every edge, its reflection light on the left and steel blue on the right (graphite in dark mode). The screen is a green dot-matrix display, black in the middle, with a neon line just inside its edge and a green glow round it. The e globe and its crescents are the old pixel drawing (`e-pixels.svg`), each cell four dots, larger and paler on the e, small and dim off it. The I-beam is the old pixel drawing too (`beam-body.svg`), its cells in chrome, silver in dark mode as well. The window's lights are Liquid Glass layers on the chrome (`close.svg`, `minimise.svg` and `zoom.svg`, which `--plates` also writes; their colours are in `icon.json`). The screen's outline is the hole in `frame.svg`. Every measure is a named constant at the top of the file. It needs NumPy, SciPy and Pillow. From the repository's folder:
+
+```bash
+python3 Marketing/Brand/engineer/engineer.py --plates App/Engineer.icon/Assets
+```
+
+`--preview <folder>` writes `preview.png` instead: light and dark, cut to the tile, at 512, 180 and 60 px, without the glass lights, which only Icon Composer draws. Then redraw the icon's pictures, as for any icon (`mac-icons.swift`, and the Settings previews).

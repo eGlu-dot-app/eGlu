@@ -864,10 +864,47 @@ public struct Workspace: Codable, Equatable, Sendable {
         return bookmark.id
     }
 
+    /// Takes a bookmark or a folder away, at any depth. Asked of the
+    /// bookmarks bar itself, it does nothing: the bar is where the bar's
+    /// bookmarks go, and only what is in it is ever deleted, as Chromium's.
     public mutating func removeBookmark(_ id: UUID, in space: UUID) {
-        guard let s = spaces.firstIndex(where: { $0.id == space }) else { return }
+        guard let s = spaces.firstIndex(where: { $0.id == space }), spaces[s].bar?.id != id else { return }
         Bookmarks.remove(id, from: &spaces[s].bookmarks)
         spaces[s].forgetGoneBookmarks()
+    }
+
+    /// A bookmark at the end of `folder` (nil: the top level), or before
+    /// `before` in it, as the bookmark manager adds one. Unlike
+    /// addBookmark(_:title:in:) the address may be bookmarked elsewhere in
+    /// the space already, as Chromium allows. Returns its id; nil when the
+    /// space or the folder is not there.
+    @discardableResult
+    public mutating func addBookmark(_ url: URL, title: String, into folder: UUID?, before: UUID? = nil,
+                                     in space: UUID) -> UUID? {
+        guard let s = spaces.firstIndex(where: { $0.id == space }) else { return nil }
+        let named = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let bookmark = Bookmark(title: named.isEmpty ? Address.pretty(url) : named, url: url)
+        return Bookmarks.insert(bookmark, into: folder, before: before, of: &spaces[s].bookmarks) ? bookmark.id : nil
+    }
+
+    /// A link's address changed in place; a folder has none. A tab open from
+    /// the bar for it stays where it is, and goes back to the new address.
+    public mutating func changeBookmarkAddress(_ id: UUID, to url: URL, in space: UUID) {
+        guard let s = spaces.firstIndex(where: { $0.id == space }) else { return }
+        Bookmarks.update(id, in: &spaces[s].bookmarks) { item in
+            if !item.isFolder { item.url = url }
+        }
+    }
+
+    /// The space's bookmarks bar, made at the top of its bookmarks when it
+    /// has none yet. Nil for no such space.
+    @discardableResult
+    public mutating func makeBar(in space: UUID) -> UUID? {
+        guard let s = spaces.firstIndex(where: { $0.id == space }) else { return nil }
+        if let bar = spaces[s].bar { return bar.id }
+        let made = Bookmark(folder: Bookmarks.barName, children: [])
+        spaces[s].bookmarks.insert(made, at: 0)
+        return made.id
     }
 
     /// A new folder at the end of `parent` (nil: the top level), named as
@@ -918,6 +955,26 @@ public struct Workspace: Codable, Equatable, Sendable {
         tidySplits(s)
     }
 
+    /// What `folder` holds in the order of their names, as Chromium's Sort
+    /// by Name: folders and links together, in this language's order of
+    /// what each shows (Bookmark.label). For the top level (nil), the
+    /// bookmarks bar stays first and the rest, Other Bookmarks, are sorted.
+    /// Nothing leaves its folder, so tabs open from the bar stay its own.
+    public mutating func sortBookmarks(in folder: UUID?, of space: UUID) {
+        guard let s = spaces.firstIndex(where: { $0.id == space }) else { return }
+        func sorted(_ items: [Bookmark]) -> [Bookmark] {
+            items.sorted { $0.label.localizedStandardCompare($1.label) == .orderedAscending }
+        }
+        if let folder {
+            Bookmarks.update(folder, in: &spaces[s].bookmarks) { item in
+                if item.isFolder { item.children = sorted(item.children ?? []) }
+            }
+        } else {
+            let all = spaces[s].bookmarks
+            spaces[s].bookmarks = (Bookmarks.bar(in: all).map { [$0] } ?? []) + sorted(Bookmarks.others(in: all))
+        }
+    }
+
     /// A bookmark or folder and everything in it, at any depth.
     private static func everything(_ item: Bookmark) -> [Bookmark] {
         [item] + (item.children ?? []).flatMap(everything)
@@ -955,14 +1012,7 @@ public struct Workspace: Codable, Equatable, Sendable {
         guard let s = spaces.firstIndex(where: { $0.tabs.contains { $0.id == tab } }),
               let index = spaces[s].tabs.firstIndex(where: { $0.id == tab }),
               let url = spaces[s].tabs[index].url else { return nil }
-        let bar: UUID
-        if let made = spaces[s].bar?.id {
-            bar = made
-        } else {
-            let made = Bookmark(folder: Bookmarks.barName, children: [])
-            spaces[s].bookmarks.insert(made, at: 0)
-            bar = made.id
-        }
+        guard let bar = makeBar(in: spaces[s].id) else { return nil }
         if let folder, folder != bar, !Bookmarks.barIDs(in: spaces[s].bookmarks).contains(folder) { return nil }
         let record = spaces[s].tabs[index]
         let bookmark: UUID
@@ -1004,11 +1054,19 @@ public struct Workspace: Codable, Equatable, Sendable {
     @discardableResult
     public mutating func importBookmarks(_ bookmarks: BookmarkImport, into space: UUID) -> BookmarkImportOutcome {
         guard let s = spaces.firstIndex(where: { $0.id == space }) else { return .destinationMissing(bookmarks) }
-        guard bookmarks.count > 0 else { return .empty }
-        let added = Bookmarks.merge(bookmarks.items, into: &spaces[s].bookmarks)
+        guard !bookmarks.bringsNothing else { return .empty }
+        let before = Self.folderCount(spaces[s].bookmarks)
+        let added = Bookmarks.merge(bookmarks.items, into: &spaces[s].bookmarks, asWritten: bookmarks.asWritten)
+        // Folders it brought with no new links in them (eGlu's own export
+        // keeps its empty ones) change the space too: no duplicate, that.
+        let folders = Self.folderCount(spaces[s].bookmarks) - before
         let name = spaces[s].name
-        return added > 0 ? .imported(added: added, total: bookmarks.count, space: name)
+        return added > 0 || folders > 0 ? .imported(added: added, total: bookmarks.count, space: name, folders: folders)
             : .duplicates(total: bookmarks.count, space: name)
+    }
+
+    private static func folderCount(_ items: [Bookmark]) -> Int {
+        items.reduce(0) { $0 + ($1.isFolder ? 1 + folderCount($1.children ?? []) : 0) }
     }
 
     /// Puts right what a damaged or hand-edited file got wrong: no spaces, a

@@ -134,6 +134,8 @@ final class WindowModel: ObservableObject, PageHost {
     /// The space's history (HistoryView), and Clear History, as sheets over the window.
     @Published var historyShown = false
     @Published var historyClearing = false
+    /// The space's bookmarks to sort out (BookmarkManagerView), as a sheet over the window.
+    @Published var bookmarkManagerShown = false
     /// The puzzle button's list of extensions (ExtensionBar.swift).
     @Published var extensionsShown = false
     /// The handoff being made ready, its sheet over the window while it is (HandoffSheet).
@@ -619,6 +621,21 @@ final class WindowModel: ObservableObject, PageHost {
         }
         guard let id = session.change({ $0.openTab(url, in: spaceID) }) else { return }
         withAnimation(.bar) { show(tab: id, inSpace: spaceID) }
+        focusPage()
+    }
+
+    /// Several pages at once (the Bookmark Manager's Open All): the first as
+    /// `open` puts it, into a blank tab on screen if there is one, and each
+    /// of the rest in a tab of its own. Opened one by one, they would all
+    /// load into that blank tab, which stays blank till its page commits.
+    func open(_ urls: [URL], newTab: Bool) {
+        guard let first = urls.first else { return }
+        open(first, newTab: newTab)
+        let session = Session.shared
+        for url in urls.dropFirst() {
+            guard let id = session.change({ $0.openTab(url, in: spaceID) }) else { continue }
+            withAnimation(.bar) { show(tab: id, inSpace: spaceID) }
+        }
         focusPage()
     }
 
@@ -1292,6 +1309,7 @@ final class WindowModel: ObservableObject, PageHost {
         case .settings: Session.shared.openSettings?()
         case .pinTab: togglePin()
         case .bookmark: toggleBookmark()
+        case .bookmarkManager: bookmarkManagerShown = true
         case .spaceSettings: spacesPanel = .edit(spaceID)
         case .contentBlocking: toggleBlocking()
         case .find: startFinding()
@@ -1320,7 +1338,8 @@ final class WindowModel: ObservableObject, PageHost {
     static let commands: [Command] = [
         .newTab, .closeTab, .reopenTab, .reload, .stop, .back, .forward, .nextTab, .previousTab,
         .nextSpace, .previousSpace, .newSpace, .newWindow, .closeWindow, .tabBar, .settings, .pinTab,
-        .bookmark, .spaceSettings, .contentBlocking, .find, .handoff, .handoffFile, .splitTab, .history, .copyLink,
+        .bookmark, .bookmarkManager, .spaceSettings, .contentBlocking, .find, .handoff, .handoffFile, .splitTab, .history,
+        .copyLink,
         .acceptWritingSuggestion,
         .inspector, .console, .selectElement, .elementPicture, .reloadOrigin, .measure, .developerMode,
     ]
@@ -1346,6 +1365,7 @@ final class WindowModel: ObservableObject, PageHost {
         case .settings: return "⌘,"
         case .pinTab: return "⇧⌘D"
         case .bookmark: return "⌘D"
+        case .bookmarkManager: return "⌥⌘B"
         case .find: return "⌘F"
         case .history: return "⌘Y"
         case .copyLink: return "⇧⌘C"

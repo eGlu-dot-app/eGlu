@@ -515,6 +515,25 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         if let pendingBookmarkImport { showBookmarkImport(pendingBookmarkImport) }
         #if DEBUG
         StripTour.start(in: self)
+        // `-bookmarkManagerTest YES`: as on a Mac (BrowserView), a space
+        // without bookmarks given a few and the manager open on them.
+        if UserDefaults.standard.bool(forKey: "bookmarkManagerTest") {
+            let space = model.spaceID
+            if Session.shared.workspace.space(space)?.bookmarks.isEmpty == true {
+                Session.shared.change { w in
+                    guard let bar = w.makeBar(in: space),
+                          let docs = w.addFolder(named: "Docs", in: bar, of: space),
+                          let slack = URL(string: "https://app.slack.com/client"),
+                          let notion = URL(string: "https://www.notion.so/"),
+                          let figma = URL(string: "https://www.figma.com/files") else { return }
+                    w.addBookmark(slack, title: "Slack", into: bar, in: space)
+                    w.addBookmark(notion, title: "Notion", into: docs, in: space)
+                    w.addBookmark(figma, title: "Figma", into: nil, in: space)
+                    w.addFolder(named: "Reading", in: nil, of: space)
+                }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.openBookmarkManager() }
+        }
         #endif
     }
 
@@ -2421,6 +2440,7 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         case .handoff: handoff()
         case .handoffFile: chooseHandoffFile()
         case .history: openHistory()
+        case .bookmarkManager: openBookmarkManager()
         case .spaceSettings: openSpaceSettings(model.spaceID)
         case .importBookmarks: chooseBookmarksFile()
         // ⌃⌥G takes the open card's first suggestion, and does nothing
@@ -3275,12 +3295,16 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         })
         guide.view.backgroundColor = Palette.UI.ground
         guide.modalPresentationStyle = .formSheet
-        // As high as what it says, on a phone from the bottom edge.
+        // Room for what the handoff holds, which comes as it is made: the whole height on a phone, from the
+        // bottom edge, and a tall sheet elsewhere. What is more than that scrolls, over the button at its foot.
         let width = min(view.bounds.width, 480)
-        let height = guide.sizeThatFits(in: CGSize(width: width, height: .greatestFiniteMagnitude)).height
+        let height = min(max(view.bounds.height - 120, 480), 720)
         guide.preferredContentSize = CGSize(width: width, height: height)
         if let sheet = guide.sheetPresentationController {
-            sheet.detents = [.custom(identifier: .init("guide")) { context in min(height, context.maximumDetentValue) }]
+            // On a phone the handoff's parts come over seconds and need the room. Elsewhere a large detent, should the
+            // sheet keep to detents there, would undo the height cap above; a custom one keeps to it.
+            sheet.detents = traitCollection.horizontalSizeClass == .compact ? [.large()]
+                : [.custom(identifier: .init("guide")) { context in min(height, context.maximumDetentValue) }]
             sheet.prefersGrabberVisible = true
             sheet.preferredCornerRadius = HandoffGuide.corner
         }
@@ -3419,6 +3443,27 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         history.modalPresentationStyle = .formSheet
         history.presentationController?.delegate = self
         present(history, animated: true)
+    }
+
+    /// The space's bookmarks to sort out (BookmarkManagerView), as a sheet
+    /// wide enough for its folders beside them; a page chosen there opens here.
+    func openBookmarkManager() {
+        guard presentedViewController == nil else { return }
+        let manager = UIHostingController(rootView: BookmarkManagerView(spaceID: model.spaceID) { [weak self] urls, newTab in
+            guard let self else { return }
+            for url in urls {
+                if newTab, let tab = Session.shared.change({ $0.openTab(url, in: self.model.spaceID) }) {
+                    self.show(tab: tab, inSpace: self.model.spaceID)
+                } else {
+                    self.open(url)
+                }
+            }
+        } done: { [weak self] in
+            self?.dismiss(animated: true) { self?.focusPage() }
+        })
+        manager.modalPresentationStyle = .pageSheet
+        manager.presentationController?.delegate = self
+        present(manager, animated: true)
     }
 
     func openSpaceSettings(_ space: UUID) {
