@@ -49,6 +49,11 @@ public final class WebKitPageView: WKWebView, WebContextMenu {
         needsDisplay = true
     }
 
+    /// The first page has taken the empty document's place, so WebKit paints
+    /// its page ground again: without it, a page with no background of its
+    /// own would show the view's layer colour under its text instead of
+    /// white. The navigation adapter calls it as each page commits; only the
+    /// first changes anything.
     func pageCommitted() {
         guard holdsBlank else { return }
         holdsBlank = false

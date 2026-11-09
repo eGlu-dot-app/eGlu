@@ -73,7 +73,11 @@ final class PageView: WKWebView {
         isOpaque = false
     }
 
-    /// Page's navigation delegate, as each page commits.
+    /// The first page has taken the empty document's place, so WebKit paints
+    /// its page ground again: left see-through, a page with no background of
+    /// its own would show the app's ground under its text instead of white.
+    /// Page's navigation delegate calls it as each page commits; only the
+    /// first changes anything.
     func pageCommitted() {
         guard holdsBlank else { return }
         holdsBlank = false
