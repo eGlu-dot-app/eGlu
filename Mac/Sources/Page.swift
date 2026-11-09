@@ -270,6 +270,10 @@ final class Page: NSObject {
             if ApplePasswords.entitled {
                 channels.open(ApplePasswordsForm.name, in: .app) { [apple = ApplePasswordsHandler(page: self)] in apple.received($0) }
             }
+            // Passkeys, only in a build with Apple's entitlement for them (Passkeys.relayed).
+            if Passkeys.relayed {
+                channels.open(PasskeyRelay.name, in: .app, replying: { [relay = PasskeyRelay(page: self)] in relay.handle($0, reply: $1) })
+            }
         }
     }
 
@@ -306,6 +310,7 @@ final class Page: NSObject {
         enginePage.stopObserving()
         swipe?.stop()
         swipe = nil
+        Passkeys.shared.forget(self)
         enginePage.scripting.removeAllUserScripts()
         blocking.remove(from: ruleListTarget)
         if isExtensionPage { releaseExtensionCapture() }
@@ -575,6 +580,17 @@ final class Page: NSObject {
                                                       forMainFrameOnly: true, world: .app)
             }
         }
+        // eGlu's passkeys (Passkeys.swift), in every frame before the site's
+        // scripts: passkeys.js in the page's own world, where it stands in for
+        // navigator.credentials, and its bridge in the app's, with egluBridge
+        // in front of it. Only in a build with Apple's entitlement for them;
+        // any other leaves the engine's own.
+        if Passkeys.relayed, !isExtensionPage {
+            enginePage.scripting.addUserScript(source: Scripts.passkeys, injectionTime: .atDocumentStart,
+                                               forMainFrameOnly: false, world: .page)
+            enginePage.scripting.addUserScript(source: Self.bridged(Scripts.passkeysBridge, using: channels),
+                                               injectionTime: .atDocumentStart, forMainFrameOnly: false, world: .app)
+        }
         // Document Picture-in-Picture, in the page's own world before its
         // scripts look for it, on the sites given it.
         if picture {
@@ -628,6 +644,32 @@ final class Page: NSObject {
 
     private static func bridged(_ script: String, using channels: any WebMessageChannels) -> String {
         channels.bridgeScript + "\n" + script
+    }
+
+    /// Where the page's field for passkeys is, if it has the keyboard, in the
+    /// page's points (passkeys-bridge.js): asked when the Mac's passkeys for
+    /// the site come in after the field took the keyboard (Passkeys.settle).
+    func passkeyField() async -> CGRect? {
+        guard Passkeys.relayed, !isHandsOff,
+              let value = try? await enginePage.scripting.callAsyncJavaScript(
+                "return window.__egluPasskeys ? window.__egluPasskeys.field() : null", world: .app) as? [String: Any],
+              let x = value["x"] as? Double, let y = value["y"] as? Double,
+              let width = value["width"] as? Double, let height = value["height"] as? Double, width > 0, height > 0
+        else { return nil }
+        return CGRect(x: x, y: y, width: width, height: height)
+    }
+
+    /// The page's frame elements with an allow attribute, and the origins of
+    /// their src (passkeys-bridge.js): whether the page lets a frame of it ask
+    /// for passkeys (PasskeyCheck.delegates), asked when one does.
+    func passkeyDelegations() async -> [PasskeyFrame.Delegation]? {
+        guard Passkeys.relayed, !isHandsOff,
+              let list = try? await enginePage.scripting.callAsyncJavaScript(
+                "return window.__egluPasskeys ? window.__egluPasskeys.frames() : null", world: .app) as? [[String: Any]]
+        else { return nil }
+        return list.compactMap { item in
+            (item["allow"] as? String).map { PasskeyFrame.Delegation(allow: $0, src: item["src"] as? String) }
+        }
     }
 
     /// ⌃⌥G takes the open card's first suggestion: the fix goes in the way
@@ -1278,6 +1320,8 @@ final class Page: NSObject {
         picture?.close()
         videoWanted = false
         videoFloated = false
+        // The document's request for a passkey went with its process.
+        Passkeys.shared.forget(self)
         if crashes.shouldReload(at: Date()) {
             reload(byHand: false)
         } else {
@@ -1443,6 +1487,8 @@ extension Page: WebNavigationEvents {
         picture?.close()
         videoWanted = false
         videoFloated = false
+        // Whatever the old document waited for under its sign-in field went with it.
+        Passkeys.shared.forget(self)
         committed = url
         status.committed(services.currentEntry)
         googleRefused = SignIn.googleRefused(url)
@@ -1476,6 +1522,8 @@ extension Page: WebNavigationEvents {
         if askingForPage {
             loadState.fail(failedURL)
             status.failed()
+            // The failure is shown in place of the page: no passkey list over it.
+            Passkeys.shared.forget(self)
         } else {
             // A form's sending: the form is still there, filled in, and the
             // address stays its page's; Try Again goes back to it (retry).
