@@ -4,6 +4,8 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+- On the Mac, iPhone and iPad, a new tab, or a tab loading again after a launch, no longer flashes white in dark mode while its page is on the way: until the page arrives the page area shows the window's own ground, dark in dark mode, where WebKit painted an empty white page. On iPhone and iPad the black that showed for a moment as a page arrived goes too. Pages look as they did once they show, one with no background of its own still white, and light mode is unchanged.
+
 ## 1.1.2
 
 - On the Mac, the build stops at any file of the interface that imports WebKit or the Rust engines, or the WebKit plugin's modules outside its one composition point, and `Docs/WebEngine.md` explains the contracts to whoever writes a plugin for another engine: the first part of step 13 of keeping eGlu's interface apart from its engines (`Docs/EngineSplitPlan.md`). Nothing changes in use.
