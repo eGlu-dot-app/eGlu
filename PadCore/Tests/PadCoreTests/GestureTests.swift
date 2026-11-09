@@ -393,6 +393,54 @@ final class MomentumTests: XCTestCase {
     }
 }
 
+final class SpaceSwipeTests: XCTestCase {
+    func testOnlyASweepMoreSidewaysThanUpAndDownCounts() {
+        XCTAssertTrue(SpaceSwipe.isSideways(dx: 16, dy: 10))
+        XCTAssertTrue(SpaceSwipe.isSideways(dx: -16, dy: -10))
+        XCTAssertFalse(SpaceSwipe.isSideways(dx: 15, dy: 10), "half again as much, as the Mac's")
+        XCTAssertFalse(SpaceSwipe.isSideways(dx: 2, dy: 30), "a scroll down the tabs")
+        XCTAssertFalse(SpaceSwipe.isSideways(dx: 0, dy: 0))
+    }
+
+    func testTheContentFollowsTheFingers() {
+        var left = SpaceSwipe()
+        XCTAssertNil(left.moved(to: -40))
+        XCTAssertNil(left.moved(to: -70), "the Mac's reach, passed")
+        XCTAssertEqual(left.moved(to: -71), 1, "a sweep to the left brings in the space on the right")
+        var right = SpaceSwipe()
+        XCTAssertEqual(right.moved(to: 90), -1)
+    }
+
+    func testOnlyOnceASweep() {
+        var swipe = SpaceSwipe()
+        XCTAssertEqual(swipe.moved(to: -80), 1)
+        XCTAssertTrue(swipe.went)
+        XCTAssertNil(swipe.moved(to: -200), "on and on is still one sweep")
+        XCTAssertNil(swipe.moved(to: 200), "nor back past where it began")
+        XCTAssertNil(swipe.letGo(at: -200, velocity: -2000))
+    }
+
+    func testAFingerFlickedGoesShortOfTheReach() {
+        var flick = SpaceSwipe()
+        XCTAssertEqual(flick.letGo(at: -30, velocity: -900), 1)
+        var short = SpaceSwipe()
+        XCTAssertNil(short.letGo(at: -20, velocity: -900), "less than a third of the reach")
+        var slow = SpaceSwipe()
+        XCTAssertNil(slow.letGo(at: -60, velocity: -300), "let go without speed")
+        var back = SpaceSwipe()
+        XCTAssertNil(back.letGo(at: -40, velocity: 900), "on its way back")
+        var other = SpaceSwipe()
+        XCTAssertEqual(other.letGo(at: 30, velocity: 800), -1)
+    }
+
+    func testRightToLeftTheRowsEndIsOnTheLeft() {
+        var swipe = SpaceSwipe(rightToLeft: true)
+        XCTAssertEqual(swipe.moved(to: 80), 1, "a sweep to the right brings in the space on the left, the next")
+        var back = SpaceSwipe(rightToLeft: true)
+        XCTAssertEqual(back.letGo(at: -30, velocity: -900), -1)
+    }
+}
+
 final class ZoomLockTests: XCTestCase {
     func testHeldAtOne() {
         XCTAssertEqual(ZoomLock.scale(webKitMinimum: 1), 1)

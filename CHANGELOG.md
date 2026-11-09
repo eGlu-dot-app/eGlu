@@ -6,6 +6,8 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 - The Engineer icon in satin chrome: a terminal window bevelled along every edge on a green dot-matrix screen, with a mint neon line just inside the screen's edge. The e globe and the I-beam keep their pixel drawings, the beam's cells in chrome, and the window's three lights are Liquid Glass.
 - eGlu's icon in dark: the system's own dark ground shows through under the fluted glass, with no milky veil on the glass.
+- On iPad, and on the iPhone Duo with the sidebar, two fingers on the trackpad or one finger swept sideways across the sidebar go to the next or the previous space, as on the Mac; a sweep that sets out up or down still scrolls the tabs. With more spaces than the sidebar has room for, the row of spaces scrolls and keeps the one you are in at its middle.
+- On iPad and Mac, a space's tabs come in from its side of the row of spaces: from the right going to a space on the right, from the left going back, whether it is chosen by its button, a sweep or Next and Previous Space. Before, on the Mac they always came in from the right, and on iPad they didn't slide at all. Under Reduce Motion they only fade.
 
 ## 1.1.3
 
