@@ -300,7 +300,7 @@ struct BookmarkManagerView: View {
         #if os(iOS)
         .swipeActions {
             Button("Delete", systemImage: "trash", role: .destructive) { askToRemove([item.id]) }
-            Button("Edit", systemImage: "pencil") { editor = .edit(item) }
+            Button(item.isFolder ? String(localized: "Rename…") : String(localized: "Edit…"), systemImage: "pencil") { editor = .edit(item) }
         }
         #endif
         .accessibilityElement(children: .combine)
@@ -452,7 +452,7 @@ struct BookmarkManagerView: View {
 
     private func title(of place: Place) -> String {
         switch place {
-        case .bar: return BrowserText.localized("Bookmarks bar")
+        case .bar: return BrowserText.localized("Bookmarks Bar")
         case .others: return String(localized: "Other Bookmarks")
         case .folder(let id): return Bookmarks.find(id, in: bookmarks)?.label ?? BrowserText.localized("Folder")
         }

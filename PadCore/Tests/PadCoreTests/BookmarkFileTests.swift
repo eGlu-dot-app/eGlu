@@ -58,7 +58,7 @@ final class BookmarkFileTests: XCTestCase {
 
     func testChromesBarComesFirstAsTheBarAndItsFoldersKeepTheirShape() {
         let read = BookmarkFile.parse(Data(chrome.utf8))
-        XCTAssertEqual(read.items.map(\.label), ["Bookmarks bar", "Slack — the team", "Linear"],
+        XCTAssertEqual(read.items.map(\.label), ["Bookmarks Bar", "Slack — the team", "Linear"],
                        "Other bookmarks are the top's own rest; entities decoded, spaces tidied")
         XCTAssertEqual(read.items[0].title, Bookmarks.barName)
         XCTAssertEqual(read.items[0].children?.map(\.label), ["Figma", "Design & Docs"])
@@ -70,7 +70,7 @@ final class BookmarkFileTests: XCTestCase {
 
     func testSafarisFavoritesComeFirst() {
         let read = BookmarkFile.parse(Data(safari.utf8))
-        XCTAssertEqual(read.items.map(\.label), ["Bookmarks bar", "Reading List"])
+        XCTAssertEqual(read.items.map(\.label), ["Bookmarks Bar", "Reading List"])
         XCTAssertEqual(read.items[0].children?.map(\.label), ["Apple"])
         XCTAssertEqual(read.items[1].children?.first?.url?.absoluteString, "https://webkit.org/blog/")
         XCTAssertTrue(read.icons.isEmpty)
@@ -113,7 +113,7 @@ final class BookmarkFileTests: XCTestCase {
         XCTAssertTrue(ZipFile.isArchive(archive))
         XCTAssertEqual(ZipFile.names(in: archive), ["Safari Export/Bookmarks.html"])
         let file = try XCTUnwrap(ZipFile.file(in: archive) { $0.hasSuffix("Bookmarks.html") })
-        XCTAssertEqual(BookmarkFile.parse(file).items.map(\.label), ["Bookmarks bar", "Reading List"])
+        XCTAssertEqual(BookmarkFile.parse(file).items.map(\.label), ["Bookmarks Bar", "Reading List"])
         XCTAssertNil(ZipFile.file(in: archive) { $0.hasSuffix("History.json") })
         XCTAssertFalse(ZipFile.isArchive(Data(safari.utf8)))
     }

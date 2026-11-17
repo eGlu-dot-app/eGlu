@@ -32,7 +32,7 @@ public struct Bookmark: Codable, Identifiable, Equatable, Sendable {
     /// The name a tile shows: the title, else the address. The bookmarks
     /// bar in the reader's own words: its title stays Chromium's.
     public var label: String {
-        if Bookmarks.isBar(self) { return BrowserText.localized("Bookmarks bar") }
+        if Bookmarks.isBar(self) { return BrowserText.localized("Bookmarks Bar") }
         let named = title.trimmingCharacters(in: .whitespacesAndNewlines)
         if !named.isEmpty { return named }
         return url.map(Address.pretty) ?? BrowserText.localized("Folder")

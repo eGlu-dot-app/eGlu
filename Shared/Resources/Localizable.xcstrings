@@ -2727,16 +2727,6 @@
         }
       }
     },
-    "Edit" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "편집"
-          }
-        }
-      }
-    },
     "Edit Address" : {
 
     },

@@ -26,7 +26,7 @@ final class BookmarksBarTests: XCTestCase {
     func testTheBarIsKnownByItsNameAndTheRestAreOthers() throws {
         let (w, _, slackMark, folder, notionMark) = try spaceWithBar()
         let space = w.spaces[0]
-        XCTAssertEqual(space.bar?.label, "Bookmarks bar")
+        XCTAssertEqual(space.bar?.label, "Bookmarks Bar")
         XCTAssertEqual(Bookmarks.others(in: space.bookmarks).map(\.label), ["Elsewhere"])
         XCTAssertEqual(Bookmarks.barIDs(in: space.bookmarks), [slackMark, folder, notionMark])
         // Chrome's older spelling is the same bar.
