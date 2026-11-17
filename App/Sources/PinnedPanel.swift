@@ -22,6 +22,12 @@ import UIKit
 // button gives to 0.96 under the finger. Under Reduce Motion nothing grows
 // or moves: the dim, the card and the rows fade.
 //
+// From iOS 27 the system does the growing (PinnedMenu): the list is a
+// popover of its own that opens out of the button's glass and goes back
+// into it as the system's menus do, glass flowing from the one shape to the
+// other. The system places it and draws its card; the rows, the highlight
+// following the finger and what is felt are as before.
+//
 // Felt: a medium tap as the list opens, a selection tick at each row the
 // finger reaches, a soft tap as it leaves the rows (letting go there does
 // nothing), and a light one as letting go goes to a tab.
@@ -162,6 +168,9 @@ final class PinnedTouchView: UIView {
     var pressed: ((Bool) -> Void)?
     /// The button has become the list (true) or come back from it (false).
     var lifted: ((Bool) -> Void)?
+    /// The list for the button to open out of itself as a menu (PinnedMenu,
+    /// iOS 27), or none to put it away.
+    var listed: ((PinnedPanel?) -> Void)?
     let press = PinnedPress()
     let menuButton = UIButton(type: .system)
 
@@ -216,15 +225,30 @@ struct PinnedButton: View {
     @State private var pressed = false
     /// Become the list of pinned tabs, which stands where it was.
     @State private var lifted = false
+    /// The list opened out of the button as a menu (iOS 27), kept while it
+    /// goes back in, so its rows are there to the end.
+    @State private var list: PinnedPanel?
+    @State private var listShown = false
+    @Namespace private var menu
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        PinnedDisc(tab: tab)
+        PinnedDisc(tab: tab, source: menu)
             .opacity(lifted ? 0 : 1)
             .animation(.easeOut(duration: 0.1), value: lifted)
             .scaleEffect(pressed && !reduceMotion ? 0.96 : 1)
             .animation(.spring(duration: 0.2, bounce: 0), value: pressed)
-            .overlay { PinnedTouch(control: window.pinned, pressed: { pressed = $0 }, lifted: { lifted = $0 }) }
+            .overlay {
+                PinnedTouch(control: window.pinned, pressed: { pressed = $0 }, lifted: { lifted = $0 }, listed: { panel in
+                    if let panel { list = panel }
+                    listShown = panel != nil
+                })
+            }
+            .modifier(PinnedMenu(list: list, source: menu, shown: Binding(get: { listShown }, set: { shown in
+                listShown = shown
+                // Put away by the system: a tap beside it.
+                if !shown { window.pinned?.listDismissed(list) }
+            })))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Pinned Tab, \(tab.label)")
             .accessibilityAddTraits(.isButton)
@@ -245,6 +269,9 @@ struct PinnedButton: View {
 /// button, and the same drawn alone in the row a sideways drag brings in.
 struct PinnedDisc: View {
     let tab: TabRecord
+    /// Where the list of pinned tabs opens out of it (PinnedMenu); none for
+    /// the drawing alone.
+    var source: Namespace.ID?
     private let shape = RoundedRectangle(cornerRadius: Side.tileCorner, style: .continuous)
     /// Larger than the iPad tile's (Side.tileIcon), as the button is: every
     /// icon is drawn as large to the eye as a square icon this size (IconOptics).
@@ -257,24 +284,77 @@ struct PinnedDisc: View {
         let url = tab.url ?? tab.pinned
         let workspace = Session.shared.workspace
         let colour = workspace.spaceID(of: tab.id).flatMap { workspace.space($0)?.color } ?? .blue
+        let tint = PinnedIcon.tileTint(for: url, colour: colour) ?? Palette.ink.opacity(0.12)
         // The glow and the icon over it, as the iPad's tile stacks them.
-        ZStack {
+        let icon = ZStack {
             PinnedIcon(url: url, open: true, colour: colour, size: Self.icon, lean: nil, plate: Self.plate, fills: true)
         }
         .frame(width: 44, height: 44)
         .clipShape(shape)
-        .background {
-            Color.clear.liquidGlass(.regular, tint: PinnedIcon.tileTint(for: url, colour: colour) ?? Palette.ink.opacity(0.12),
-                                    reacting: false, in: shape, otherwise: Palette.card)
+        if #available(iOS 27.0, *), let source {
+            // The source under the glass, not over it: marked before the
+            // glass is applied, the system grows the glass itself into the
+            // popover, as a menu's button becomes its menu; marked after,
+            // the popover zooms out of a picture of the button.
+            icon.matchedTransitionSource(id: PinnedMenu.sourceID, in: source)
+                .glassEffect(.regular.tint(tint).interactive(false), in: shape)
+                .contentShape(shape)
+        } else {
+            icon.background { Color.clear.liquidGlass(.regular, tint: tint, reacting: false, in: shape, otherwise: Palette.card) }
+                .contentShape(shape)
         }
-        .contentShape(shape)
     }
+}
+
+/// The list of pinned tabs as a popover that opens out of the pinned button
+/// as the system's menus open out of theirs (iOS 27): its zoom begins at the
+/// source marked under the button's glass (PinnedDisc), which the system
+/// draws as that glass growing into the popover's and, put away, going back
+/// into the button. The popover is the card; inside it are the panel's rows
+/// alone (PinnedPanel, `embedded`), which still follow the finger that
+/// opened them.
+private struct PinnedMenu: ViewModifier {
+    let list: PinnedPanel?
+    let source: Namespace.ID
+    @Binding var shown: Bool
+
+    static let sourceID = "pinned"
+
+    func body(content: Content) -> some View {
+        if #available(iOS 27.0, *) {
+            content.popover(isPresented: $shown) {
+                if let list {
+                    PinnedRows(panel: list)
+                        // A list opened again is another panel: another view.
+                        .id(ObjectIdentifier(list))
+                        .frame(width: list.size.width, height: list.size.height)
+                        // A popover on a phone too, not the sheet it would become.
+                        .presentationCompactAdaptation(.popover)
+                        .navigationTransition(.zoom(sourceID: Self.sourceID, in: source))
+                }
+            }
+        } else {
+            content
+        }
+    }
+}
+
+/// The panel's rows in the popover.
+private struct PinnedRows: UIViewRepresentable {
+    let panel: PinnedPanel
+
+    func makeUIView(context: Context) -> PinnedPanel {
+        panel
+    }
+
+    func updateUIView(_ view: PinnedPanel, context: Context) {}
 }
 
 private struct PinnedTouch: UIViewRepresentable {
     let control: PinnedControl?
     let pressed: (Bool) -> Void
     let lifted: (Bool) -> Void
+    let listed: (PinnedPanel?) -> Void
 
     func makeUIView(context: Context) -> PinnedTouchView {
         let view = PinnedTouchView()
@@ -286,6 +366,7 @@ private struct PinnedTouch: UIViewRepresentable {
         view.control = control
         view.pressed = pressed
         view.lifted = lifted
+        view.listed = listed
     }
 }
 
@@ -310,6 +391,8 @@ final class PinnedControl {
     private let landing = UIImpactFeedbackGenerator(style: .light)
     /// The button the list grew out of, hidden under it until it goes back.
     private weak var lifted: PinnedTouchView?
+    /// The button the list opened out of as a menu (iOS 27), which puts it away.
+    private weak var listing: PinnedTouchView?
     private var lastTick: CFTimeInterval = 0
 
     init(window: WindowModel, host: @escaping () -> UIView?, act: @escaping (BarAction) -> Void) {
@@ -396,18 +479,29 @@ final class PinnedControl {
         }
         guard let host = host() else { return }
         let colour = Session.shared.workspace.space(window.spaceID)?.color ?? .blue
-        open(PinnedPanel(rows: rows, colour: colour), beside: source.convert(source.bounds, to: host), scrubbing: point)
-        // The button is the card now, growing from where it was.
-        lifted = source as? PinnedTouchView
-        lifted?.lifted?(true)
+        if #available(iOS 27.0, *), let touch = source as? PinnedTouchView, let show = touch.listed {
+            // Out of the button's glass, as a menu: the system's popover is
+            // the card, and places it (PinnedMenu).
+            let panel = PinnedPanel(rows: rows, colour: colour, embedded: true)
+            panel.embed(in: host.bounds.size, following: point)
+            wire(panel)
+            self.panel = panel
+            listing = touch
+            show(panel)
+        } else {
+            open(PinnedPanel(rows: rows, colour: colour), beside: source.convert(source.bounds, to: host), scrubbing: point)
+            // The button is the card now, growing from where it was.
+            lifted = source as? PinnedTouchView
+            lifted?.lifted?(true)
+        }
         // On the frame the list comes in.
         opening.impactOccurred(intensity: 0.7)
     }
 
     /// The finger, at `point` in the window, moved while it holds the list open.
     func scrub(to point: CGPoint) {
-        guard let panel, let host = host() else { return }
-        feel(panel.follow(host.convert(point, from: nil)))
+        guard let panel else { return }
+        feel(panel.follow(point))
     }
 
     /// A tick at each row the highlight or the scroll reaches, no closer
@@ -431,8 +525,7 @@ final class PinnedControl {
     /// The finger lifted at `point`: on a row, to it; where it held the list
     /// open, the list stays for a tap; anywhere else, away.
     func release(at point: CGPoint) {
-        guard let panel, let host = host() else { return }
-        let point = host.convert(point, from: nil)
+        guard let panel else { return }
         if let row = panel.row(at: point), panel.moved {
             // Lifted on the tab on screen: nothing to go to.
             if row.current { close() } else { choose(row) }
@@ -453,10 +546,25 @@ final class PinnedControl {
     func close(animated: Bool = true, leaving: Bool = false) {
         guard let panel else { return }
         self.panel = nil
+        if panel.embedded {
+            // The system takes it back into the button.
+            panel.stopFollowing()
+            listing?.listed?(nil)
+            listing = nil
+            return
+        }
         let button = lifted
         lifted = nil
         // The button comes back as the card, gone back into its shape, reaches it.
         panel.dismiss(animated: animated, keepingCurrent: !leaving) { button?.lifted?(false) }
+    }
+
+    /// The system put the list's popover away: a tap beside it.
+    func listDismissed(_ list: PinnedPanel?) {
+        guard let panel, panel === list else { return }
+        self.panel = nil
+        listing = nil
+        panel.stopFollowing()
     }
 
     private func choose(_ row: PinnedPanel.Row) {
@@ -469,15 +577,19 @@ final class PinnedControl {
         guard let host = host() else { return }
         panel.frame = host.bounds
         panel.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        wire(panel)
+        host.addSubview(panel)
+        panel.place(from: anchor, following: start)
+        self.panel = panel
+        panel.present()
+    }
+
+    private func wire(_ panel: PinnedPanel) {
         panel.chosen = { [weak self] row in self?.choose(row) }
         panel.scrolled = { [weak self] in self?.feel($0) }
         panel.dismissed = { [weak self, weak panel] in
             if self?.panel === panel { self?.close() }
         }
-        host.addSubview(panel)
-        panel.place(from: anchor, following: host.convert(start, from: nil))
-        self.panel = panel
-        panel.present()
     }
 }
 
@@ -491,6 +603,11 @@ final class PinnedControl {
 /// others above it, nearest the one last on screen, as Dia's back history
 /// steps back a page at a time; the row level with the finger is highlighted
 /// (follow), and the finger lifting goes to it (PinnedControl.release).
+///
+/// `embedded` (iOS 27), it is the rows alone, in a popover of the system's
+/// that is the card and opens out of the button as a menu does (PinnedMenu):
+/// no dim, no glass and no growing of its own, and the system says where it
+/// stands.
 final class PinnedPanel: UIView, UIScrollViewDelegate {
     struct Row {
         var title: String
@@ -508,6 +625,10 @@ final class PinnedPanel: UIView, UIScrollViewDelegate {
     private(set) var following = false
     /// The finger has gone somewhere since it opened the list.
     private(set) var moved = false
+    /// The rows alone, in the system's popover.
+    let embedded: Bool
+    /// How large the popover is to be, embedded (embed).
+    private(set) var size = CGSize.zero
 
     private let rows: [Row]
     /// Over the window behind the card, so the card stands out from the
@@ -529,7 +650,9 @@ final class PinnedPanel: UIView, UIScrollViewDelegate {
     /// The card's own frame, open.
     private var card = CGRect.zero
     /// The window's size it was laid out for: another (the phone turned) puts it away.
+    /// Embedded, its own size the rows were laid out for.
     private var laidOutFor = CGSize.zero
+    /// Where the finger opened it, in the window.
     private var start = CGPoint.zero
     private var highlighted: Int?
     /// Scrolling the rows while the finger is at or past an edge of them.
@@ -552,8 +675,9 @@ final class PinnedPanel: UIView, UIScrollViewDelegate {
     /// How long the rows fade at an edge with more past it.
     static let fadeLength: CGFloat = 24
 
-    init(rows: [Row], colour: SpaceColor) {
+    init(rows: [Row], colour: SpaceColor, embedded: Bool = false) {
         self.rows = rows
+        self.embedded = embedded
         glass = UIVisualEffectView(effect: nil)
         if #available(iOS 26.0, *) {
             glass.cornerConfiguration = .corners(radius: .fixed(Self.corner))
@@ -569,13 +693,13 @@ final class PinnedPanel: UIView, UIScrollViewDelegate {
         shade.frame = dim.contentView.bounds
         shade.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         dim.contentView.addSubview(shade)
-        addSubview(dim)
+        if !embedded { addSubview(dim) }
         // Depth from a soft shadow, not an outline: it reads on any page.
         plate.layer.shadowColor = UIColor.black.cgColor
         plate.layer.shadowOpacity = 0.18
         plate.layer.shadowRadius = 24
         plate.layer.shadowOffset = CGSize(width: 0, height: 8)
-        addSubview(plate)
+        if !embedded { addSubview(plate) }
         plate.addSubview(glass)
         highlight.backgroundColor = UIColor { $0.userInterfaceStyle == .dark ? UIColor(white: 1, alpha: 0.14) : UIColor(white: 0, alpha: 0.07) }
         highlight.layer.cornerRadius = Self.corner - Self.inset
@@ -590,7 +714,8 @@ final class PinnedPanel: UIView, UIScrollViewDelegate {
         rowsHost.addSubview(scroller)
         rowsShape.backgroundColor = .black
         rowsShape.layer.cornerCurve = .continuous
-        rowsHost.mask = rowsShape
+        // The popover cuts its own corners.
+        if !embedded { rowsHost.mask = rowsShape }
         addSubview(rowsHost)
         for (index, row) in rows.enumerated() {
             let view = PinnedRowView(row: row, colour: colour)
@@ -603,6 +728,8 @@ final class PinnedPanel: UIView, UIScrollViewDelegate {
             scroller.addSubview(view)
             rowViews.append(view)
         }
+        // The popover takes a tap beside it, and keeps VoiceOver to itself.
+        guard !embedded else { return }
         let away = UITapGestureRecognizer(target: self, action: #selector(tappedAway(_:)))
         away.cancelsTouchesInView = false
         addGestureRecognizer(away)
@@ -622,9 +749,18 @@ final class PinnedPanel: UIView, UIScrollViewDelegate {
     /// finger are elsewhere now, so it goes, as the system's menus do.
     override func layoutSubviews() {
         super.layoutSubviews()
+        if embedded {
+            layOutRows()
+            return
+        }
         guard laidOutFor != .zero, bounds.size != laidOutFor else { return }
         laidOutFor = .zero
         DispatchQueue.main.async { [weak self] in self?.dismissed?() }
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if embedded { setNeedsLayout() }
     }
 
     @objc private func tappedAway(_ tap: UITapGestureRecognizer) {
@@ -637,7 +773,10 @@ final class PinnedPanel: UIView, UIScrollViewDelegate {
     /// By `anchor`, the button's frame here, held open by a finger at
     /// `finger`: the last row, the tab on screen, under the finger, the rest
     /// above it; on the button's side of the window, its edge by the button's.
-    func place(from anchor: CGRect, following finger: CGPoint) {
+    /// `touch` is the finger in the window.
+    func place(from anchor: CGRect, following touch: CGPoint) {
+        start = touch
+        let finger = convert(touch, from: nil)
         self.anchor = anchor
         laidOutFor = bounds.size
         dim.frame = bounds
@@ -674,7 +813,6 @@ final class PinnedPanel: UIView, UIScrollViewDelegate {
         }
         shadeEdges()
         following = true
-        start = finger
         moved = false
         // Where it starts: on the tab on screen, the finger on it.
         if let current = rows.firstIndex(where: \.current) {
@@ -685,6 +823,47 @@ final class PinnedPanel: UIView, UIScrollViewDelegate {
         }
     }
 
+    /// Embedded: how large the popover is to be in a window of `room`'s
+    /// size, held open by a finger at `finger` in the window. Every row
+    /// while they take half the window's height or less; past that, half of
+    /// it, the rest scrolling. Where it stands is the system's to say, so
+    /// the rows are laid out once it has (layOutRows).
+    func embed(in room: CGSize, following finger: CGPoint) {
+        let content = CGFloat(rows.count) * Self.rowHeight
+        let shown = max(Self.rowHeight, min(content, room.height * Self.most - Self.inset * 2))
+        size = CGSize(width: min(Self.width, room.width - 16), height: Self.inset * 2 + shown)
+        following = true
+        start = finger
+        moved = false
+        highlighted = rows.firstIndex(where: \.current)
+    }
+
+    /// Embedded: the rows in the popover, the tab on screen's in view and
+    /// highlighted as the list opens. In the window by then, for the rows
+    /// to read their light in its light or dark.
+    private func layOutRows() {
+        guard window != nil, bounds.size != laidOutFor else { return }
+        let first = laidOutFor == .zero
+        laidOutFor = bounds.size
+        rowsHost.frame = bounds
+        let content = CGFloat(rows.count) * Self.rowHeight
+        let shown = max(bounds.height - Self.inset * 2, 0)
+        scroller.frame = CGRect(x: Self.inset, y: Self.inset, width: max(bounds.width - Self.inset * 2, 0), height: shown)
+        scroller.contentSize = CGSize(width: scroller.bounds.width, height: content)
+        for (index, view) in rowViews.enumerated() {
+            view.frame = CGRect(x: 0, y: CGFloat(index) * Self.rowHeight, width: scroller.bounds.width, height: Self.rowHeight)
+        }
+        if first, let current = rows.firstIndex(where: \.current) {
+            scroller.contentOffset.y = max(0, min(CGFloat(current + 1) * Self.rowHeight - shown, content - shown))
+        }
+        shadeEdges()
+        if let highlighted {
+            highlight.frame = rowViews[highlighted].frame
+            if first { highlight.alpha = 1 }
+        }
+        if first { shine(highlighted ?? rows.firstIndex(where: \.current)) }
+    }
+
     // MARK: Coming and going
 
     /// The button becomes the card: its glass grows from the button's
@@ -692,6 +871,7 @@ final class PinnedPanel: UIView, UIScrollViewDelegate {
     /// tab on screen's where the button was; the others rise into place,
     /// nearest first. Under Reduce Motion the card and the rows only fade.
     func present() {
+        guard !embedded else { return }
         let still = UIAccessibility.isReduceMotionEnabled
         let current = rows.firstIndex(where: \.current)
         glass.effect = Self.material
@@ -819,13 +999,15 @@ final class PinnedPanel: UIView, UIScrollViewDelegate {
         case same
     }
 
-    /// The finger at `point` here: the row level with it highlighted,
-    /// wherever across the window the finger is.
+    /// The finger at `point` in the window: the row level with it
+    /// highlighted, wherever across the window the finger is.
     func follow(_ point: CGPoint) -> Followed {
         guard following else { return .same }
         if hypot(point.x - start.x, point.y - start.y) > PinnedPress.slop { moved = true }
-        finger = point
-        if speed(at: point) == 0 { stopScrolling() } else { startScrolling() }
+        // Embedded, the system has yet to put it on screen: no row to be level with.
+        guard window != nil else { return .same }
+        finger = convert(point, from: nil)
+        if speed(at: finger) == 0 { stopScrolling() } else { startScrolling() }
         return track()
     }
 
@@ -929,16 +1111,20 @@ final class PinnedPanel: UIView, UIScrollViewDelegate {
         light(nil)
     }
 
-    /// The row the finger lifted on, while it held the list open.
+    /// The row the finger lifted on, at `point` in the window, while it held the list open.
     func row(at point: CGPoint) -> Row? {
-        guard following, let index = rowIndex(level: point) else { return nil }
+        guard following, window != nil, let index = rowIndex(level: convert(point, from: nil)) else { return nil }
         return rows[index]
     }
 
     /// The row level with `point`: only its height counts, so a thumb going
     /// up need not keep to the card's column.
     private func rowIndex(level point: CGPoint) -> Int? {
-        let inRows = scroller.convert(point, from: self)
+        var inRows = scroller.convert(point, from: self)
+        // Embedded, the system places the list, and the finger that opened
+        // it can be below its last row, still on the button: that is the
+        // last row, the tab on screen's, where letting go changes nothing.
+        if embedded, inRows.y > scroller.bounds.maxY { inRows.y = scroller.bounds.maxY - 1 }
         guard scroller.bounds.minY...scroller.bounds.maxY ~= inRows.y, inRows.y >= 0 else { return nil }
         let index = Int(inRows.y / Self.rowHeight)
         return rows.indices.contains(index) ? index : nil
