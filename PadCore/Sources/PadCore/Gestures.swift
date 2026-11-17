@@ -325,6 +325,60 @@ public struct ScrollSwipe: Equatable, Sendable {
     }
 }
 
+/// To the space beside by sweeping sideways across the sidebar, as on the
+/// Mac (its ReaderView): two fingers on the trackpad, or one on the glass.
+/// Only a sweep that sets out more sideways than up and down counts; the
+/// tabs scroll otherwise. It goes once it has come far enough, and only
+/// once a sweep. The content follows the fingers: a sweep toward the row's
+/// start brings in the space after this one, at the row's end.
+public struct SpaceSwipe: Equatable, Sendable {
+    /// How far the fingers go sideways before the space changes, in points: the Mac's.
+    public static let reach = 70.0
+
+    /// A finger let go at this speed, in points a second, after a third of
+    /// the reach has gone on in the end: a flick, as HistorySwipe's. The
+    /// trackpad has none, as the Mac's sweep doesn't: its fingers leave
+    /// with nothing that says how fast.
+    public static let flick = 700.0
+
+    /// Whether fingers that have moved `dx` sideways and `dy` up or down
+    /// since they set out go sideways: the Mac's measure, half again as much.
+    public static func isSideways(dx: Double, dy: Double) -> Bool {
+        abs(dx) > abs(dy) * 1.5
+    }
+
+    /// Mirrored, the row's end on the left.
+    private let rightToLeft: Bool
+    /// It has gone to a space, and goes to no other before the fingers leave.
+    public private(set) var went = false
+
+    public init(rightToLeft: Bool = false) {
+        self.rightToLeft = rightToLeft
+    }
+
+    /// The fingers `dx` points from where they set out, positive to the
+    /// right: the way to go along the row, 1 to the space after this one
+    /// and -1 to the one before, the first time they have come far enough.
+    public mutating func moved(to dx: Double) -> Int? {
+        guard !went, abs(dx) > Self.reach else { return nil }
+        went = true
+        return way(dx)
+    }
+
+    /// A finger left the glass `dx` points from where it set out at
+    /// `velocity` points a second, both positive to the right: the way to
+    /// go, if it hadn't gone and this was a flick that way.
+    public mutating func letGo(at dx: Double, velocity: Double) -> Int? {
+        guard !went, abs(dx) >= Self.reach / 3, abs(velocity) >= Self.flick, (dx < 0) == (velocity < 0) else { return nil }
+        went = true
+        return way(dx)
+    }
+
+    private func way(_ dx: Double) -> Int {
+        (dx < 0) != rightToLeft ? 1 : -1
+    }
+}
+
 /// The glide after the fingers leave the trackpad, which a Mac's trackpad
 /// sends as more wheel events and an iPad pan doesn't send at all.
 ///

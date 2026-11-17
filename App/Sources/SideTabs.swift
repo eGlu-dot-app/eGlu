@@ -20,6 +20,7 @@ struct SideTabs: View {
     let window: WindowModel
     let act: (BarAction) -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.layoutDirection) private var layoutDirection
     @State private var openBar: Set<UUID> = []
 
     /// The Mac sidebar's own width, as it first opens; wider only to an
@@ -53,71 +54,16 @@ struct SideTabs: View {
                     .padding(.trailing, Side.gap - 2)
                 SidePageMenu(window: window, act: act)
             }
-            // The pinned tiles stay put while the tabs under them scroll, as the Mac's do.
-            if !row.pinned.isEmpty {
-                PinnedRows(spacing: Side.gap) {
-                    ForEach(row.pinned) { tab in
-                        SidePinnedTab(window: window, tab: tab, row: row, others: others, act: act)
-                    }
+            ZStack(alignment: .top) {
+                VStack(spacing: Side.gap) {
+                    spaceTabs(space: space, map: map, row: row, others: others)
                 }
-                .animation(.bar, value: row.pinned.map(\.id))
+                // The space's tabs come in from its side of the row of spaces.
+                .id(window.spaceID)
+                .transition(spaceTurn)
             }
-            ScrollView {
-                VStack(spacing: 2) {
-                    if let space, let map, let bar = space.bar, !(bar.children ?? []).isEmpty {
-                        let canSplit = BarBookmarkRow.canSplit(window, in: space, map: map)
-                        // The bar's rows a group of their own, as far from the rows under them as the Mac's.
-                        VStack(spacing: 2) {
-                            ForEach(Bookmarks.rows(of: bar.children ?? [], opening: openBar, keeping: Set(map.tabs.keys)), id: \.item.id) { entry in
-                                BarBookmarkRow(window: window, space: space, map: map, canSplit: canSplit, item: entry.item,
-                                               depth: entry.depth, open: openBar.contains(entry.item.id), source: .sidebar, toggle: {
-                                    withAnimation(.bar) { openBar.formSymmetricDifference([entry.item.id]) }
-                                }, act: act)
-                            }
-                        }
-                        .padding(.bottom, 4)
-                    }
-                    Button { act(.showTabs) } label: {
-                        Label("All Tabs (\(space?.tabs.count ?? 0))", systemImage: "square.on.square")
-                            .font(.subheadline)
-                            .frame(maxWidth: .infinity, minHeight: Side.row, alignment: .leading)
-                            .padding(.horizontal, 10)
-                    }
-                    .buttonStyle(SideRowStyle())
-                    SideBookmarksButton(window: window)
-                    SideLine()
-                        .padding(.vertical, 4)
-                    SideNewTab { act(.command(.newTab)) }
-                    ForEach(row.items) { item in
-                        VStack(spacing: 0) {
-                            ForEach(item.tabs) { tab in
-                                SideTab(window: window, tab: tab, row: row, others: others, act: act)
-                            }
-                        }
-                        // A split's two on a ground of their own, as the Mac's sidebar has them.
-                        .padding(item.tabs.count > 1 ? 2 : 0)
-                        .background {
-                            if item.tabs.count > 1 {
-                                RoundedRectangle(cornerRadius: Side.rowCorner + 2, style: .continuous).fill(Side.wash)
-                            }
-                        }
-                    }
-                }
-                .padding(Side.bleed)
-                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(Self.space)).minY } action: { _ in act(.hideTabHover) }
-                .animation(.bar, value: row.others.map(\.id))
-            }
-            .scrollIndicators(.never)
-            .padding(-Side.bleed)
-            .feathered(.vertical)
-            // The bookmarks out over the list, from where their row is.
-            .overlay(alignment: .top) {
-                if window.bookmarksOpen {
-                    SideBookmarksPanel(session: session, window: window, act: act)
-                        .transition(reduceMotion ? .opacity : .asymmetric(
-                            insertion: .scale(scale: 0.96, anchor: .top).combined(with: .opacity), removal: .opacity))
-                }
-            }
+            .frame(maxHeight: .infinity, alignment: .top)
+            .animation(.bar, value: window.spaceID)
             SideSpaces(session: session, window: window, act: act)
         }
         .padding([.top, .bottom, .leading], Side.gap)
@@ -129,6 +75,89 @@ struct SideTabs: View {
         .onChange(of: window.spaceID) { _, _ in
             openBar.removeAll()
             act(.hideTabHover)
+        }
+    }
+
+    /// As the Mac's (and Arc's), the tabs of a space chosen come in from
+    /// the side it is on in the row, a little way, as the space left fades
+    /// where it is. Not out the other way: a view gone keeps the transition
+    /// it was last drawn with, which is the way of the switch before this
+    /// one. Fading alone under Reduce Motion, and where there is no way
+    /// between the two (the space left is gone).
+    private var spaceTurn: AnyTransition {
+        // Offsets aren't mirrored: from the left, right to left, is toward the row's end.
+        let side = CGFloat(window.spaceSide) * (layoutDirection == .rightToLeft ? -1 : 1)
+        guard !reduceMotion, side != 0 else { return .opacity }
+        return .asymmetric(insertion: .opacity.combined(with: .offset(x: 24 * side)), removal: .opacity)
+    }
+
+    /// The space's own, under its address: its pinned tiles, and the list of its tabs.
+    @ViewBuilder
+    private func spaceTabs(space: Space?, map: Space.BarMap?, row: TabRow, others: [Space]) -> some View {
+        // The pinned tiles stay put while the tabs under them scroll, as the Mac's do.
+        if !row.pinned.isEmpty {
+            PinnedRows(spacing: Side.gap) {
+                ForEach(row.pinned) { tab in
+                    SidePinnedTab(window: window, tab: tab, row: row, others: others, act: act)
+                }
+            }
+            .animation(.bar, value: row.pinned.map(\.id))
+        }
+        ScrollView {
+            VStack(spacing: 2) {
+                if let space, let map, let bar = space.bar, !(bar.children ?? []).isEmpty {
+                    let canSplit = BarBookmarkRow.canSplit(window, in: space, map: map)
+                    // The bar's rows a group of their own, as far from the rows under them as the Mac's.
+                    VStack(spacing: 2) {
+                        ForEach(Bookmarks.rows(of: bar.children ?? [], opening: openBar, keeping: Set(map.tabs.keys)), id: \.item.id) { entry in
+                            BarBookmarkRow(window: window, space: space, map: map, canSplit: canSplit, item: entry.item,
+                                           depth: entry.depth, open: openBar.contains(entry.item.id), source: .sidebar, toggle: {
+                                withAnimation(.bar) { openBar.formSymmetricDifference([entry.item.id]) }
+                            }, act: act)
+                        }
+                    }
+                    .padding(.bottom, 4)
+                }
+                Button { act(.showTabs) } label: {
+                    Label("All Tabs (\(space?.tabs.count ?? 0))", systemImage: "square.on.square")
+                        .font(.subheadline)
+                        .frame(maxWidth: .infinity, minHeight: Side.row, alignment: .leading)
+                        .padding(.horizontal, 10)
+                }
+                .buttonStyle(SideRowStyle())
+                SideBookmarksButton(window: window)
+                SideLine()
+                    .padding(.vertical, 4)
+                SideNewTab { act(.command(.newTab)) }
+                ForEach(row.items) { item in
+                    VStack(spacing: 0) {
+                        ForEach(item.tabs) { tab in
+                            SideTab(window: window, tab: tab, row: row, others: others, act: act)
+                        }
+                    }
+                    // A split's two on a ground of their own, as the Mac's sidebar has them.
+                    .padding(item.tabs.count > 1 ? 2 : 0)
+                    .background {
+                        if item.tabs.count > 1 {
+                            RoundedRectangle(cornerRadius: Side.rowCorner + 2, style: .continuous).fill(Side.wash)
+                        }
+                    }
+                }
+            }
+            .padding(Side.bleed)
+            .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(Self.space)).minY } action: { _ in act(.hideTabHover) }
+            .animation(.bar, value: row.others.map(\.id))
+        }
+        .scrollIndicators(.never)
+        .padding(-Side.bleed)
+        .feathered(.vertical)
+        // The bookmarks out over the list, from where their row is.
+        .overlay(alignment: .top) {
+            if window.bookmarksOpen {
+                SideBookmarksPanel(session: session, window: window, act: act)
+                    .transition(reduceMotion ? .opacity : .asymmetric(
+                        insertion: .scale(scale: 0.96, anchor: .top).combined(with: .opacity), removal: .opacity))
+            }
         }
     }
 
@@ -992,10 +1021,19 @@ struct SideSpaces: View {
                 ViewThatFits(in: .horizontal) {
                     spaces(compact: false)
                     spaces(compact: true)
-                    ScrollView(.horizontal) { spaces(compact: true, glass: false) }
-                        .scrollIndicators(.never)
-                        .padding(3)
-                        .liquidGlass(reacting: false, in: Capsule(), otherwise: Palette.wash)
+                    // More than the room there is: they scroll, with the one you are in
+                    // in the middle, wherever it was chosen from, as far as the row's ends let it.
+                    ScrollViewReader { reader in
+                        ScrollView(.horizontal) { spaces(compact: true, glass: false) }
+                            .scrollIndicators(.never)
+                            .feathered(.horizontal, length: 12)
+                            .onAppear { reader.scrollTo(window.spaceID, anchor: .center) }
+                            .onChange(of: window.spaceID) { _, space in
+                                withAnimation(reduceMotion ? nil : .bar) { reader.scrollTo(space, anchor: .center) }
+                            }
+                    }
+                    .padding(3)
+                    .liquidGlass(reacting: false, in: Capsule(), otherwise: Palette.wash)
                 }
                 // In the row, a gap from the plain buttons either side, which are 2 points from each other.
                 .padding(.horizontal, inRow ? Side.gap - 2 : 0)
@@ -1019,6 +1057,8 @@ struct SideSpaces: View {
         let row = HStack(spacing: 2) {
             ForEach(session.workspace.spaces) { space in
                 SideSpaceButton(window: window, space: space, compact: compact, places: places, act: act)
+                    // What the row scrolls to.
+                    .id(space.id)
             }
         }
         .background {
