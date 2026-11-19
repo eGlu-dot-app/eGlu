@@ -4,6 +4,7 @@ import UIKit
 @MainActor
 final class PageSummaryUITests: XCTestCase {
     private let summary = "A quieter way to browse. Keep related pages in spaces, find what matters, and carry on without losing your place."
+    private let keyPoints = "• Keep related pages in spaces.\n• Find what matters.\n• Read on-device summaries.\n• Carry on without losing your place."
 
     private func launch(_ arguments: [String] = []) -> XCUIApplication {
         continueAfterFailure = false
@@ -56,6 +57,10 @@ final class PageSummaryUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["summary-text"].exists)
         XCTAssertFalse(app.buttons["summary-copy"].isEnabled)
         XCTAssertTrue(app.buttons["summary-handoff"].exists)
+        app.buttons["summary-skill-keyPoints"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["summary-progress"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["summary-failure"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.buttons["summary-copy"].isEnabled)
     }
 
     private func continueToHandoff(_ app: XCUIApplication) {
@@ -92,9 +97,13 @@ final class PageSummaryUITests: XCTestCase {
         openSummary(app)
         XCTAssertTrue(app.staticTexts["summary-failure"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["summary-copy"].isEnabled)
+        app.buttons["summary-skill-keyPoints"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["summary-progress"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["summary-failure"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.staticTexts["summary-text"].exists)
     }
 
-    func testCopySummaryCanBePasted() async {
+    private func assertCopied(_ app: XCUIApplication, text: String) async {
         let monitor = addUIInterruptionMonitor(withDescription: "Paste permission") { alert in
             let allow = alert.buttons["Allow Paste"]
             guard allow.exists else { return false }
@@ -103,8 +112,6 @@ final class PageSummaryUITests: XCTestCase {
         }
         defer { removeUIInterruptionMonitor(monitor) }
         UIPasteboard.general.string = nil
-        let app = launch()
-        openSummary(app)
         let copy = app.buttons["summary-copy"]
         let ready = expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: copy)
         await fulfillment(of: [ready], timeout: 15)
@@ -116,7 +123,52 @@ final class PageSummaryUITests: XCTestCase {
         let allow = XCUIApplication(bundleIdentifier: "com.apple.springboard").buttons["Allow Paste"]
         if allow.waitForExistence(timeout: 5) { app.tap() }
         let pasted = await reading.value
-        XCTAssertEqual(pasted, summary)
+        XCTAssertEqual(pasted, text)
+    }
+
+    func testCopySummaryCanBePasted() async {
+        let app = launch()
+        openSummary(app)
+        await assertCopied(app, text: summary)
+    }
+
+    private func waitForText(_ text: String, in app: XCUIApplication) {
+        expectation(for: NSPredicate(format: "label == %@", text), evaluatedWith: app.staticTexts["summary-text"])
+        waitForExpectations(timeout: 15)
+    }
+
+    func testSwitchingAfterCompletionStreamsKeyPoints() {
+        let app = launch()
+        openSummary(app)
+        waitForText(summary, in: app)
+        app.buttons["summary-skill-keyPoints"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["summary-progress"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["summary-text"].waitForExistence(timeout: 5))
+        XCTAssertNotEqual(app.staticTexts["summary-text"].label, keyPoints)
+        XCTAssertNotEqual(app.staticTexts["summary-text"].label, summary)
+        waitForText(keyPoints, in: app)
+        XCTAssertTrue(app.buttons["summary-skill-keyPoints"].isSelected)
+        capture("skills-key-points", app: app)
+    }
+
+    func testSwitchingMidStreamDoesNotMixOutput() {
+        let app = launch()
+        openSummary(app)
+        XCTAssertTrue(app.staticTexts["summary-text"].waitForExistence(timeout: 10))
+        XCTAssertNotEqual(app.staticTexts["summary-text"].label, summary)
+        XCTAssertTrue(app.descendants(matching: .any)["summary-progress"].firstMatch.exists)
+        app.buttons["summary-skill-keyPoints"].tap()
+        XCTAssertFalse(app.buttons["summary-copy"].isEnabled)
+        waitForText(keyPoints, in: app)
+        XCTAssertFalse(app.descendants(matching: .any)["summary-progress"].firstMatch.exists)
+    }
+
+    func testCopyAfterSwitchingUsesCurrentSkill() async {
+        let app = launch()
+        openSummary(app)
+        app.buttons["summary-skill-keyPoints"].tap()
+        await assertCopied(app, text: keyPoints)
+        XCTAssertEqual(app.staticTexts["summary-text"].label, keyPoints)
     }
 
     func testSummariesStayOptIn() {

@@ -3,6 +3,28 @@ import Foundation
 import FoundationModels
 import PadCore
 
+enum PageSkill: String, CaseIterable {
+    case summary, keyPoints, explainSimply, actionItems
+
+    var title: String {
+        switch self {
+        case .summary: String(localized: "Summary")
+        case .keyPoints: String(localized: "Key points")
+        case .explainSimply: String(localized: "Simpler")
+        case .actionItems: String(localized: "Actions")
+        }
+    }
+
+    var instruction: String {
+        switch self {
+        case .summary: ""
+        case .keyPoints: "For the about answer, list the page's key points as short bullet points. Use only facts in the page."
+        case .explainSimply: "For the about answer, explain the page in simple, everyday words for a reader new to the topic. Keep its meaning and do not add facts."
+        case .actionItems: "For the about answer, list concrete action items supported by the page as short bullet points. If there are none, say so; do not invent tasks."
+        }
+    }
+}
+
 /// What the model is asked about a page for a handoff: what it reads
 /// (Handoff.brief), from the fullest to the shortest, the shorter ones for
 /// a prompt that turned out too long, and whether it is also to pick parts
@@ -10,6 +32,13 @@ import PadCore
 struct PageQuestion {
     let briefs: [String]
     let picks: Bool
+    let skill: PageSkill
+
+    init(briefs: [String], picks: Bool, skill: PageSkill = .summary) {
+        self.briefs = briefs
+        self.picks = picks
+        self.skill = skill
+    }
 }
 
 /// Apple Intelligence's on-device model, asked once for a handoff what the
@@ -139,8 +168,21 @@ private final class TestPageMind: PageMind {
 
     func read(_ question: PageQuestion, looks: Bool, picture: @MainActor () async -> CGImage?,
               writing: @escaping @MainActor (String) -> Void) async -> PageAnswer? {
-        let parts = ["A quieter way to browse.", " Keep related pages in spaces,",
+        let parts: [String]
+        switch question.skill {
+        case .summary:
+            parts = ["A quieter way to browse.", " Keep related pages in spaces,",
                      " find what matters,", " and carry on without losing your place."]
+        case .keyPoints:
+            parts = ["• Keep related pages in spaces.", "\n• Find what matters.",
+                     "\n• Read on-device summaries.", "\n• Carry on without losing your place."]
+        case .explainSimply:
+            parts = ["Think of spaces as shelves", " for your open pages.",
+                     " A short summary helps you understand a page", " before you keep reading."]
+        case .actionItems:
+            parts = ["• Put related pages in a space.", "\n• Find the page you need.",
+                     "\n• Read its summary.", "\n• Continue where you left off."]
+        }
         var summary = ""
         for part in parts {
             do { try await Task.sleep(for: .seconds(2)) } catch { return nil }
@@ -207,7 +249,7 @@ private final class OnDevicePageMind: PageMind {
         for attempt in tries {
             guard !Task.isCancelled else { return nil }
             writing("")
-            if let answer = await ask(model, attempt.brief, picture: attempt.picture, picks: question.picks, writing: writing) {
+            if let answer = await ask(model, attempt.brief, picture: attempt.picture, picks: question.picks, skill: question.skill, writing: writing) {
                 return answer
             }
         }
@@ -219,9 +261,10 @@ private final class OnDevicePageMind: PageMind {
     /// is the same as the whole of it at once, the sampling being greedy.
     /// The summary comes first in the answer's shape, ahead of the kind
     /// and the picks, so it is what is written first.
-    private func ask(_ model: SystemLanguageModel, _ brief: String, picture: CGImage?, picks: Bool,
+    private func ask(_ model: SystemLanguageModel, _ brief: String, picture: CGImage?, picks: Bool, skill: PageSkill,
                      writing: @escaping @MainActor (String) -> Void) async -> PageAnswer? {
-        let instructions = Handoff.kindInstructions + (picks ? Handoff.pickInstructions : "")
+        var instructions = Handoff.kindInstructions + (picks ? Handoff.pickInstructions : "")
+        if skill != .summary { instructions += "\n\n" + skill.instruction }
         let session = LanguageModelSession(model: model, instructions: instructions)
         let options = GenerationOptions(samplingMode: .greedy)
         if picks {
