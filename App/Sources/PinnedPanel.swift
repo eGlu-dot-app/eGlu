@@ -251,6 +251,7 @@ struct PinnedButton: View {
             })))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Pinned Tab, \(tab.label)")
+            .accessibilityValue(Pinned.isOpen(tab) ? String(localized: "Open") : String(localized: "Unloaded"))
             .accessibilityAddTraits(.isButton)
             .accessibilityHint("Shows its options. Its actions go to the other pinned tabs.")
             .accessibilityAction { window.pinned?.showOptions(from: nil) }
@@ -1246,7 +1247,7 @@ private final class PinnedRowView: UIControl {
         addSubview(dot)
         isAccessibilityElement = true
         accessibilityLabel = row.title
-        accessibilityValue = row.current ? String(localized: "Current") : row.open ? String(localized: "Open") : nil
+        accessibilityValue = row.open ? String(localized: "Open") : String(localized: "Unloaded")
         accessibilityTraits = row.current ? [.button, .selected] : .button
     }
 

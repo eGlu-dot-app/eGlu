@@ -452,6 +452,7 @@ private struct SidePinnedTab: View {
         .animation(.bar, value: selected)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(tab.title.isEmpty ? String(localized: "Pinned Tab") : tab.title)
+        .accessibilityValue(Pinned.isOpen(tab) ? String(localized: "Open") : String(localized: "Unloaded"))
         .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
     }
 }
@@ -1221,7 +1222,8 @@ struct TabMenuItems: View {
             }
         }
         Section {
-            Button("Close Tab", systemImage: "xmark") { act(.close(tab.id)) }
+            Button(tab.isPinned ? String(localized: "Close and Unload") : String(localized: "Close Tab"),
+                   systemImage: "xmark") { act(.close(tab.id)) }
             if !tab.isPinned, !inBar, ordinary.count > 1 {
                 Button("Close Other Tabs", systemImage: "xmark.square", role: .destructive) {
                     act(.closeTabs(ordinary.map(\.id).filter { $0 != tab.id }))

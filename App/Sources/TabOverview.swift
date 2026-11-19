@@ -422,7 +422,8 @@ final class TabOverviewController: UIViewController, UICollectionViewDelegate {
                 })
             }
         }
-        close.append(UIAction(title: String(localized: "Close Tab"), image: UIImage(systemName: "xmark"), attributes: .destructive) { [weak self] _ in
+        close.append(UIAction(title: tab.isPinned ? String(localized: "Close and Unload") : String(localized: "Close Tab"),
+                              image: UIImage(systemName: "xmark"), attributes: .destructive) { [weak self] _ in
             self?.act(.close(tab.id))
         })
         sections.append(UIMenu(options: .displayInline, children: close))
@@ -1018,7 +1019,7 @@ final class DockIcon: UIButton {
         setNeedsLayout()
         colours()
         accessibilityLabel = String(localized: "\(tab.label), pinned")
-        accessibilityValue = open ? String(localized: "Open") : nil
+        accessibilityValue = open ? String(localized: "Open") : String(localized: "Unloaded")
         accessibilityTraits = current ? [.button, .selected] : .button
     }
 

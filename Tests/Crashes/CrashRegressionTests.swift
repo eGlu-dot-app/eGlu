@@ -42,6 +42,83 @@ final class CrashRegressionTests: XCTestCase {
         XCTAssertTrue(credentials.allSatisfy { $0 == nil })
     }
 
+    func testPinnedDockAnnouncesUnloadAndReopenWithoutLosingThePin() throws {
+        let session = Session.shared
+        let home = try XCTUnwrap(URL(string: "https://example.com/"))
+        let away = try XCTUnwrap(URL(string: "https://example.com/away"))
+        let pin = TabRecord(url: home, title: "Pinned page", pinned: home)
+        let space = Space(name: "Pinned state regression", symbol: "pin", tabs: [pin])
+        session.change { $0.spaces.append(space) }
+        defer {
+            session.pages.close(pin.id)
+            session.change { $0.spaces.removeAll { $0.id == space.id } }
+        }
+        let icon = DockIcon()
+        _ = session.pages.adopt(tab: pin.id, space: space.id, configuration: WKWebViewConfiguration())
+        icon.configure(tab: pin, current: true, color: .blue)
+        XCTAssertEqual(icon.accessibilityValue, String(localized: "Open"))
+        XCTAssertTrue(icon.accessibilityTraits.contains(.selected))
+
+        session.change { $0.record(pin.id, url: away, title: "Away from home") }
+        session.closeTab(pin.id)
+        let unloaded = try XCTUnwrap(session.workspace.tab(pin.id))
+        XCTAssertEqual(unloaded.url, home)
+        XCTAssertEqual(unloaded.pinned, home)
+        XCTAssertFalse(session.pages.isLive(pin.id))
+        icon.configure(tab: unloaded, current: false, color: .blue)
+        XCTAssertEqual(icon.accessibilityValue, String(localized: "Unloaded"))
+        XCTAssertFalse(icon.accessibilityTraits.contains(.selected))
+
+        _ = session.pages.adopt(tab: pin.id, space: space.id, configuration: WKWebViewConfiguration())
+        icon.configure(tab: unloaded, current: true, color: .blue)
+        XCTAssertEqual(icon.accessibilityValue, String(localized: "Open"))
+        XCTAssertTrue(icon.accessibilityTraits.contains(.selected))
+    }
+
+    func testOverviewNamesPinnedAndOrdinaryCloseActionsDifferently() throws {
+        let session = Session.shared
+        let home = try XCTUnwrap(URL(string: "https://example.com/"))
+        let pin = TabRecord(url: home, title: "Pinned page", pinned: home)
+        let ordinary = TabRecord(url: nil, title: "Ordinary tab")
+        let space = Space(name: "Pinned menu regression", symbol: "pin", tabs: [pin, ordinary])
+        session.change { $0.spaces.append(space) }
+        defer { session.change { $0.spaces.removeAll { $0.id == space.id } } }
+        let model = WindowModel(spaceID: space.id)
+        model.tabID = ordinary.id
+        let overview = TabOverviewController(session: session, window: model, act: { _ in }, done: { _ in })
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.rootViewController = overview
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        overview.view.frame = CGRect(x: 0, y: 0, width: 393, height: 700)
+        overview.view.layoutIfNeeded()
+
+        func descendants(of view: UIView) -> [UIView] {
+            [view] + view.subviews.flatMap { descendants(of: $0) }
+        }
+        func titles(in menu: UIMenu) -> [String] {
+            menu.children.flatMap { element -> [String] in
+                if let submenu = element as? UIMenu { return titles(in: submenu) }
+                return [element.title]
+            }
+        }
+        let icon = try XCTUnwrap(descendants(of: overview.view).compactMap { $0 as? DockIcon }.first)
+        let pinnedMenu = titles(in: try XCTUnwrap(icon.menu))
+        XCTAssertTrue(pinnedMenu.contains(String(localized: "Close and Unload")))
+        XCTAssertFalse(pinnedMenu.contains(String(localized: "Close Tab")))
+        XCTAssertTrue(pinnedMenu.contains(String(localized: "Unpin Tab")))
+        XCTAssertEqual(icon.accessibilityValue, String(localized: "Unloaded"))
+
+        let collection = try XCTUnwrap(overview.view.subviews.compactMap { $0 as? UICollectionView }.first)
+        collection.layoutIfNeeded()
+        let cell = try XCTUnwrap(collection.cellForItem(at: IndexPath(item: 0, section: 0)) as? TabCardCell)
+        let ordinaryMenu = titles(in: try XCTUnwrap(cell.menu))
+        XCTAssertTrue(ordinaryMenu.contains(String(localized: "Close Tab")))
+        XCTAssertFalse(ordinaryMenu.contains(String(localized: "Close and Unload")))
+        XCTAssertEqual(cell.accessibilityCustomActions?.first?.name, String(localized: "Close Tab"))
+    }
+
     func testOverviewLayoutAcrossWidthsAndTabUpdates() async throws {
         let session = Session.shared
         let space = Space(name: "Crash regression", symbol: "square", tabs:
