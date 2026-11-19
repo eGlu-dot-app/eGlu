@@ -4,7 +4,7 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
-- On iPhone, iPad and the Mac, history search says when it stops at its first 100 pages or first 100 handoffs, under the heading of the list that reached it, where before the rest were left out without a word. A search with fewer shows no note.
+- On iPhone, iPad and the Mac, history search shows its first 100 pages and handoffs, with Show More under each list to bring in another 100. The heading says how many are shown while more may be left; once all are loaded, the note and button go away.
 - On iPhone with iOS 27, the pinned tabs' list opens out of the pinned tab's button as the system's menus open out of theirs: the button's glass grows into the list and, put away, goes back into the button. The system places the list and draws its card, without the dimmed page behind it; held open, it still follows the finger from row to row. Before iOS 27 it is as it was.
 - The Engineer icon in satin chrome: a terminal window bevelled along every edge on a green dot-matrix screen, with a mint neon line just inside the screen's edge. The e globe and the I-beam keep their pixel drawings, the beam's cells in chrome, and the window's three lights are Liquid Glass.
 - eGlu's icon in dark: the system's own dark ground shows through under the fluted glass, with no milky veil on the glass.

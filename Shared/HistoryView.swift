@@ -23,6 +23,10 @@ struct HistoryView: View {
     @State private var days: [HistoryDay] = []
     @State private var found: [HistoryPage] = []
     @State private var foundHandoffs: [HistoryHandoff] = []
+    @State private var pageLimit = History.searchLimit
+    @State private var handoffLimit = History.searchLimit
+    @State private var pageSearch: Task<Void, Never>?
+    @State private var handoffSearch: Task<Void, Never>?
     /// The words `found` answers, so "No Results" waits for the store.
     @State private var searched: String?
     /// What Apple Intelligence made of the words sent with Return
@@ -83,7 +87,8 @@ struct HistoryView: View {
         }
         // Reloaded as words are typed (a moment after the last), as the filter
         // changes, and as history does.
-        .task(id: Reload(text: text, filter: filter, revision: recorder.revision, understood: understood?.text)) { await load() }
+        .task(id: searchIdentity) { await load() }
+        .onDisappear { stopSearchPaging() }
         .sheet(isPresented: $clearing) {
             ClearHistoryView(spaceID: spaceID) { clearing = false }
         }
@@ -142,8 +147,8 @@ struct HistoryView: View {
                     }
                 } header: {
                     if loaded, loadingProblem == nil, searched == text.trimmingCharacters(in: .whitespaces),
-                       History.searchIsCapped(count: found.count) {
-                        Text("Showing the first \(History.searchLimit) page matches")
+                       History.searchIsCapped(count: found.count, limit: pageLimit) {
+                        Text("Showing the first \(found.count) page matches")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -151,6 +156,15 @@ struct HistoryView: View {
                         Label("Asking Apple Intelligence…", systemImage: "sparkles")
                     } else if let understood, understood.text == text.trimmingCharacters(in: .whitespaces) {
                         Label(Self.describe(understood.query), systemImage: "sparkles")
+                    }
+                } footer: {
+                    if searchReady, History.searchIsCapped(count: found.count, limit: pageLimit) {
+                        Button("Show More") { showMore(handoffs: false) }
+                            .buttonStyle(.borderless)
+                            .focusable()
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel(Text("Show \(History.searchLimit) more pages"))
+                            .disabled(pageSearch != nil)
                     }
                 }
                 if !foundHandoffs.isEmpty {
@@ -161,10 +175,19 @@ struct HistoryView: View {
                     } header: {
                         Text("Handoffs")
                         if loaded, loadingProblem == nil, searched == text.trimmingCharacters(in: .whitespaces),
-                           History.searchIsCapped(count: foundHandoffs.count) {
-                            Text("Showing the first \(History.searchLimit) handoff matches")
+                           History.searchIsCapped(count: foundHandoffs.count, limit: handoffLimit) {
+                            Text("Showing the first \(foundHandoffs.count) handoff matches")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
+                        }
+                    } footer: {
+                        if searchReady, History.searchIsCapped(count: foundHandoffs.count, limit: handoffLimit) {
+                            Button("Show More") { showMore(handoffs: true) }
+                                .buttonStyle(.borderless)
+                                .focusable()
+                                .foregroundStyle(.secondary)
+                                .accessibilityLabel(Text("Show \(History.searchLimit) more handoffs"))
+                                .disabled(handoffSearch != nil)
                         }
                     }
                 }
@@ -384,10 +407,54 @@ struct HistoryView: View {
     // MARK: Loading
 
     private struct Reload: Equatable {
+        var space: UUID
         var text: String
         var filter: HistoryFilter
         var revision: Int
         var understood: String?
+    }
+
+    private var searchIdentity: Reload {
+        Reload(space: spaceID, text: text, filter: filter, revision: recorder.revision, understood: understood?.text)
+    }
+
+    private var searchReady: Bool {
+        loaded && loadingProblem == nil && searched == text.trimmingCharacters(in: .whitespaces)
+    }
+
+    private func stopSearchPaging() {
+        pageSearch?.cancel()
+        handoffSearch?.cancel()
+        pageSearch = nil
+        handoffSearch = nil
+    }
+
+    private func showMore(handoffs: Bool) {
+        let identity = searchIdentity
+        let words = text.trimmingCharacters(in: .whitespaces)
+        let query = understood?.text == words ? understood?.query : nil
+        let parsed = query ?? HistoryQuery.parse(words, now: Date())
+        let limit = History.nextSearchLimit(after: handoffs ? handoffLimit : pageLimit)
+        let task = Task {
+            if handoffs {
+                let result = await recorder.handoffSearchResult(space: spaceID, query: parsed, limit: limit, filter: filter)
+                guard !Task.isCancelled, identity == searchIdentity else { return }
+                switch result {
+                case .success(let rows): foundHandoffs = rows; handoffLimit = limit
+                case .failure(let issue): loadingProblem = issue
+                }
+                handoffSearch = nil
+            } else {
+                let result = await recorder.searchResult(space: spaceID, query: parsed, limit: limit, filter: filter)
+                guard !Task.isCancelled, identity == searchIdentity else { return }
+                switch result {
+                case .success(let rows): found = rows; pageLimit = limit
+                case .failure(let issue): loadingProblem = issue
+                }
+                pageSearch = nil
+            }
+        }
+        if handoffs { handoffSearch = task } else { pageSearch = task }
     }
 
     /// Apple Intelligence, where it is on: Return asks it what the words mean.
@@ -425,6 +492,9 @@ struct HistoryView: View {
 
     private func load() async {
         stopPaging()
+        stopSearchPaging()
+        pageLimit = History.searchLimit
+        handoffLimit = History.searchLimit
         loaded = false
         loadingProblem = nil
         let words = text.trimmingCharacters(in: .whitespaces)

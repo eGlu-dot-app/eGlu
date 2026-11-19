@@ -280,8 +280,12 @@ extension HistoryEntry {
 public enum History {
     public static let searchLimit = 100
 
-    public static func searchIsCapped(count: Int) -> Bool {
-        count >= searchLimit
+    public static func searchIsCapped(count: Int, limit: Int = searchLimit) -> Bool {
+        count >= limit
+    }
+
+    public static func nextSearchLimit(after limit: Int) -> Int {
+        limit + searchLimit
     }
 
     /// The longest a page's description is kept.
