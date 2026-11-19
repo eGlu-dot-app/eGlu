@@ -216,6 +216,9 @@ final class TabOverviewController: UIViewController, UICollectionViewDelegate, U
         }
         let emptyBottom = docked && !compact ? dock.frame.minY - 12 : bottom - footerHeight
         emptyView.frame = CGRect(x: bounds.minX, y: gridTop, width: bounds.width, height: max(0, emptyBottom - gridTop))
+        // The dock speaks for itself here; its explanatory text would only
+        // have a clipped sliver of room above the shared tools row.
+        emptyView.isHidden = emptyKind == nil || (compact && emptyKind == .pinnedOnly)
         // The grid's last row clears the dock, which floats over the grid
         // as it scrolls, with room to spare.
         let below = footerHeight + (docked && !compact ? PinnedDock.height + 20 : 8)

@@ -97,6 +97,8 @@ final class CrashRegressionTests: XCTestCase {
         XCTAssertLessThanOrEqual(newTab.frame.maxY, 460, "Footer must clear the docked software keyboard")
         XCTAssertLessThanOrEqual(dock.frame.maxY, 460)
         // Rotate into the short room left by a landscape software keyboard.
+        search.text = "pinned page"
+        overview.searchBar(search, textDidChange: "pinned page")
         overview.view.frame = CGRect(x: 0, y: 0, width: 700, height: 360)
         let landscapeKeyboard = overview.view.convert(CGRect(x: 0, y: 180, width: 700, height: 180), to: window)
         NotificationCenter.default.post(name: UIResponder.keyboardWillChangeFrameNotification, object: nil, userInfo: [
@@ -110,16 +112,28 @@ final class CrashRegressionTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(dock.frame.minY, search.frame.maxY)
         XCTAssertLessThanOrEqual(dock.frame.maxY, 180)
         XCTAssertLessThanOrEqual(newTab.frame.maxY, 180)
+        XCTAssertTrue(empty.isHidden, "Do not clip the redundant pinned-only message in compact height")
         overview.view.frame = CGRect(x: 0, y: 0, width: 393, height: 700)
         NotificationCenter.default.post(name: UIResponder.keyboardDidChangeFrameNotification, object: nil, userInfo: [
             UIResponder.keyboardFrameEndUserInfoKey: CGRect(x: 0, y: 5000, width: 393, height: 240),
         ])
+        overview.view.layoutIfNeeded()
+        XCTAssertFalse(empty.isHidden, "Restore the pinned-only explanation when space returns")
         func filter(_ query: String) {
             search.text = query
             overview.searchBar(search, textDidChange: query)
             overview.view.layoutIfNeeded()
             collection.layoutIfNeeded()
         }
+        func waitForItems(_ count: Int) async throws {
+            let clock = ContinuousClock()
+            let deadline = clock.now.advanced(by: .seconds(2))
+            while collection.numberOfItems(inSection: 0) != count, clock.now < deadline {
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            XCTAssertEqual(collection.numberOfItems(inSection: 0), count)
+        }
+        filter("")
         XCTAssertEqual(collection.numberOfItems(inSection: 0), 2)
         XCTAssertTrue(empty.isHidden)
         filter("beta")
@@ -141,18 +155,16 @@ final class CrashRegressionTests: XCTestCase {
         XCTAssertEqual(session.workspace.space(space.id)?.tabs.map(\.id), space.tabs.map(\.id))
         filter("cafe")
         session.change { $0.record(beta.id, url: beta.url, title: "Café updated") }
-        try await Task.sleep(for: .milliseconds(50))
-        XCTAssertEqual(collection.numberOfItems(inSection: 0), 2, "Live title changes must update filtered results")
+        try await waitForItems(2)
         model.spaceID = other.id
-        try await Task.sleep(for: .milliseconds(50))
-        XCTAssertEqual(collection.numberOfItems(inSection: 0), 0)
+        try await waitForItems(0)
         filter("")
         XCTAssertEqual(collection.numberOfItems(inSection: 0), 1)
         session.change { workspace in
             guard let index = workspace.spaces.firstIndex(where: { $0.id == other.id }) else { return }
             workspace.spaces[index].tabs = []
         }
-        try await Task.sleep(for: .milliseconds(50))
+        try await waitForItems(0)
         XCTAssertEqual((empty.configuration as? UIContentUnavailableConfiguration)?.text, String(localized: "No tabs to show"))
         XCTAssertFalse(empty.isHidden)
     }
