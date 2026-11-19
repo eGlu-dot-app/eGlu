@@ -161,7 +161,6 @@ struct HistoryView: View {
                     if searchReady, History.searchIsCapped(count: found.count, limit: pageLimit) {
                         Button("Show More") { showMore(handoffs: false) }
                             .buttonStyle(.borderless)
-                            .focusable()
                             .foregroundStyle(.secondary)
                             .accessibilityLabel(Text("Show \(History.searchLimit) more pages"))
                             .disabled(pageSearch != nil)
@@ -184,7 +183,6 @@ struct HistoryView: View {
                         if searchReady, History.searchIsCapped(count: foundHandoffs.count, limit: handoffLimit) {
                             Button("Show More") { showMore(handoffs: true) }
                                 .buttonStyle(.borderless)
-                                .focusable()
                                 .foregroundStyle(.secondary)
                                 .accessibilityLabel(Text("Show \(History.searchLimit) more handoffs"))
                                 .disabled(handoffSearch != nil)
