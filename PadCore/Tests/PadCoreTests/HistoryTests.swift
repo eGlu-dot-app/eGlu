@@ -63,10 +63,11 @@ final class HistoryTests: XCTestCase {
         let next = HistorySelection.page(space: space, key: "next")
         XCTAssertEqual(HistorySelection.firstNew(in: [first, next], after: [first]), next)
         XCTAssertEqual(HistorySelection.firstNew(in: [next, first], after: [first]), next)
-        XCTAssertNil(HistorySelection.firstNew(in: [first], after: [first]))
+        XCTAssertEqual(HistorySelection.firstNew(in: [first, next], after: [first, next]), next)
         XCTAssertNil(HistorySelection.firstNew(in: [], after: []))
         let handoff = HistorySelection.handoff(UUID())
         XCTAssertEqual(HistorySelection.firstNew(in: [handoff], after: []), handoff)
+        XCTAssertEqual(HistorySelection.firstNew(in: [handoff], after: [handoff]), handoff)
     }
 
     func testSearchCapIsOnlyReachedAtTheLimit() {

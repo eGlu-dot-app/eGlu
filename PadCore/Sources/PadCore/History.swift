@@ -286,7 +286,7 @@ public enum HistorySelection: Hashable, Sendable {
 
     public static func firstNew(in rows: [Self], after previous: [Self]) -> Self? {
         let loaded = Set(previous)
-        return rows.first { !loaded.contains($0) }
+        return rows.first { !loaded.contains($0) } ?? rows.last
     }
 }
 
