@@ -217,6 +217,20 @@ targets:
         SWIFT_STRICT_CONCURRENCY: complete
         SWIFT_APPROACHABLE_CONCURRENCY: YES
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+  # Exercise the production UIKit/SwiftUI motion without loading the browser,
+  # its website stores, or the app's newer-SDK-only device integrations.
+  eGlu Command Bar Motion Tests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: App/Sources/CommandBarMotion.swift
+      - path: Tests/CommandBarMotionTests.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: net.taehee.safience.commandbarmotiontests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_STRICT_CONCURRENCY: complete
+        SWIFT_APPROACHABLE_CONCURRENCY: YES
   # The Mac app's Page against a real WKWebView (Tests/MacPage), inside
   # eGlu Mac as the Test configuration builds it (scheme eGlu Mac Page Tests).
   eGlu Mac Page Tests:
@@ -288,6 +302,13 @@ targets:
           plutil -replace SUPublicEDKey -string "$SPARKLE_PUBLIC_KEY" "$plist"
           plutil -replace SUEnableAutomaticChecks -bool YES "$plist"
 schemes:
+  eGlu Command Bar Motion Tests:
+    build:
+      targets:
+        eGlu Command Bar Motion Tests: [test]
+    test:
+      targets:
+        - eGlu Command Bar Motion Tests
   Site Icons Tests:
     build:
       targets:
