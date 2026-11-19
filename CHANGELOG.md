@@ -4,6 +4,7 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+- On wide iPad windows, Settings shows its categories beside the selected page; narrow windows keep the single-column layout, with the same search and selection across resize.
 - Settings has a search field on iPhone, iPad and Mac: it finds a part of Settings by its name or by what is changed there, as the address bar does, and goes to its section. On the Mac it sits over the sidebar; Return goes to the first part found. The Mac's command bar now finds every part of Settings, not only App Icon, and opens Settings at that section.
 - On iPhone with iOS 27, the pinned tabs' list opens out of the pinned tab's button as the system's menus open out of theirs: the button's glass grows into the list and, put away, goes back into the button. The system places the list and draws its card, without the dimmed page behind it; held open, it still follows the finger from row to row. Before iOS 27 it is as it was.
 - The Engineer icon in satin chrome: a terminal window bevelled along every edge on a green dot-matrix screen, with a mint neon line just inside the screen's edge. The e globe and the I-beam keep their pixel drawings, the beam's cells in chrome, and the window's three lights are Liquid Glass.
