@@ -129,7 +129,7 @@ struct MacSettings: View {
     /// chosen in the sidebar is, then the part, as the command bar opens it.
     private func show(_ anchor: SettingsAnchor) {
         if let next = SettingsPane(anchor) { go(to: next) }
-        SettingsPane.show(anchor)
+        SettingsPane.reveal(anchor)
     }
 
     private func go(to next: SettingsPane) {
@@ -282,12 +282,19 @@ extension SettingsPane {
     /// Settings, at the pane a part is in with the part in view: where the
     /// command bar and Settings' own search field both go.
     @MainActor static func show(_ anchor: SettingsAnchor) {
-        if let pane = SettingsPane(anchor) {
-            // The pane MacSettings keeps, and opens on.
-            UserDefaults.standard.set(pane.rawValue, forKey: "settingsPane")
-            SettingsReveal.shared.show(anchor)
-        }
+        reveal(anchor)
         Session.shared.openSettings?()
+    }
+
+    /// The pane a part is in, with the part in view, in Settings as it is:
+    /// opening Settings again from inside it made the window take the
+    /// toolbar's room under the sidebar's search field once more each time,
+    /// until the list's first rows went up under the field.
+    @MainActor static func reveal(_ anchor: SettingsAnchor) {
+        guard let pane = SettingsPane(anchor) else { return }
+        // The pane MacSettings keeps, and opens on.
+        UserDefaults.standard.set(pane.rawValue, forKey: "settingsPane")
+        SettingsReveal.shared.show(anchor)
     }
 }
 
