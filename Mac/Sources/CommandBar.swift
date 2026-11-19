@@ -196,12 +196,8 @@ final class Suggestions: ObservableObject {
                 keywords: command.keywords, detail: WindowModel.keys(for: command) ?? "", symbol: command.symbol
             ))
         }
-        // App Icon, the one part of the Mac's Settings the address bar goes
-        // to, as the iPhone and iPad's goes to each of theirs.
-        list.append(Autocomplete.Candidate(
-            id: "setting-\(SettingsAnchor.appIcon.rawValue)", source: .setting, action: .setting(.appIcon),
-            title: String(localized: "App Icon"), keywords: DockIcon.keywords, detail: String(localized: "The icon in the Dock")
-        ))
+        // The parts of Settings, as Settings' own search field finds them.
+        list += SettingsPane.search.candidates
         for bookmark in here?.bookmarks.flatMap(\.links) ?? [] {
             guard let url = bookmark.url else { continue }
             list.append(Autocomplete.Candidate(

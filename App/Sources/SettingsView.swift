@@ -15,6 +15,9 @@ struct SettingsView: View {
     @State private var keyboard = GCKeyboard.coalesced != nil
     @State private var path: [SettingsGroup] = []
     @State private var openedAnchor = false
+    /// What Settings' own search field has, and the part last chosen from it.
+    @State private var query = ""
+    @State private var found: SettingsAnchor?
     // Import failures and parsed-file recovery survive returning to categories.
     @State private var importing = false
     @State private var imported: BookmarkImportOutcome?
@@ -23,6 +26,14 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack(path: $path) {
             List {
+                if !query.isEmpty {
+                    SettingsResults(matches: Device.settingsSearch(phoneLayout: phoneLayout, padLayout: padLayout)
+                        .find(query).filter { $0.anchor.group.shown(padLayout: padLayout, keyboard: keyboard) },
+                                    query: query, padLayout: padLayout) { destination in
+                        found = destination.anchor
+                        path = [destination.anchor.group]
+                    }
+                } else {
                 ForEach(SettingsGroup.allCases.filter {
                     $0.shown(padLayout: padLayout, keyboard: keyboard)
                 }, id: \.self) { group in
@@ -40,7 +51,11 @@ struct SettingsView: View {
                 Section {
                     NavigationLink(String(localized: "Acknowledgements")) { LicencesView() }
                 }
+                }
             }
+            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always),
+                        prompt: Text("Search Settings"))
+            .autocorrectionDisabled()
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -48,7 +63,7 @@ struct SettingsView: View {
             }
             .navigationDestination(for: SettingsGroup.self) { group in
                 SettingsDetail(session: session, spaceID: spaceID, group: group,
-                               anchor: anchor?.group == group ? anchor : nil,
+                               anchor: (found ?? anchor)?.group == group ? (found ?? anchor) : nil,
                                phoneLayout: phoneLayout, padLayout: padLayout,
                                done: done, keyboard: keyboard,
                                importing: $importing, imported: $imported, importWorking: $importWorking)
@@ -64,6 +79,43 @@ struct SettingsView: View {
             .onReceive(NotificationCenter.default.publisher(for: .GCKeyboardDidConnect)) { _ in keyboard = true }
             .onReceive(NotificationCenter.default.publisher(for: .GCKeyboardDidDisconnect)) { _ in
                 keyboard = GCKeyboard.coalesced != nil
+            }
+        }
+    }
+}
+
+/// What Settings' own search finds, each row going to its section.
+private struct SettingsResults: View {
+    let matches: [SettingsSearch.Destination]
+    let query: String
+    let padLayout: Bool
+    let choose: (SettingsSearch.Destination) -> Void
+
+    var body: some View {
+        if matches.isEmpty {
+            ContentUnavailableView.search(text: query)
+                .listRowBackground(Color.clear)
+        } else {
+            ForEach(matches, id: \.anchor) { destination in
+                Button { choose(destination) } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(destination.title)
+                            Text(destination.anchor.group.shownTitle(padLayout: padLayout) + " · " + destination.detail)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 8)
+                        Image(systemName: "chevron.forward")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                            .accessibilityHidden(true)
+                    }
+                    .padding(.vertical, 2)
+                    .contentShape(Rectangle())
+                }
+                .foregroundStyle(.primary)
+                .accessibilityHint(Text(destination.anchor.group.shownTitle(padLayout: padLayout)))
             }
         }
     }

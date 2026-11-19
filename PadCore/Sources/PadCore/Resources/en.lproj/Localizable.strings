@@ -690,3 +690,6 @@
 "Folders Already Present" = "Folders Already Present";
 "%1$lld folders added to %2$@." = "%1$lld folders added to %2$@.";
 "The folders in the file are already in %@." = "The folders in the file are already in %@.";
+"Extensions" = "Extensions";
+"Each space's pinned tabs, in their order" = "Each space's pinned tabs, in their order";
+"Installed extensions and what they may do" = "Installed extensions and what they may do";

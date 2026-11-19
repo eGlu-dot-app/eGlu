@@ -210,12 +210,8 @@ final class Suggestions: ObservableObject {
                 keywords: command.keywords, detail: Device.keys(for: command) ?? "", symbol: command.symbol
             ))
         }
-        for anchor in SettingsAnchor.allCases where Device.offers(anchor, compact: window.phone) {
-            list.append(Autocomplete.Candidate(
-                id: "setting-\(anchor.rawValue)", source: .setting, action: .setting(anchor), title: anchor.title,
-                keywords: anchor.keywords, detail: anchor.detail
-            ))
-        }
+        let layouts = Device.settingsLayouts(compact: window.phone)
+        list += Device.settingsSearch(phoneLayout: layouts.phone, padLayout: layouts.pad).candidates
         for bookmark in here?.bookmarks.flatMap(\.links) ?? [] {
             guard let url = bookmark.url else { continue }
             list.append(Autocomplete.Candidate(

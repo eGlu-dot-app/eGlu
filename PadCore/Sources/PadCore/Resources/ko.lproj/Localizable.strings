@@ -365,3 +365,6 @@
 "Folders Already Present" = "폴더가 이미 있음";
 "%1$lld folders added to %2$@." = "%2$@에 폴더 %1$lld개를 추가했습니다.";
 "The folders in the file are already in %@." = "파일의 폴더가 모두 이미 %@에 있습니다.";
+"Extensions" = "확장 프로그램";
+"Each space's pinned tabs, in their order" = "각 공간의 고정된 탭과 순서";
+"Installed extensions and what they may do" = "설치된 확장 프로그램과 허용된 권한";

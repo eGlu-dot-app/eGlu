@@ -13,9 +13,6 @@ final class DockIcon: ObservableObject {
     static let shared = DockIcon()
 
     @Published private(set) var current: AppIcon
-    /// Set as the address bar opens Settings at App Icon; the section, once
-    /// scrolled into view, sets it back.
-    @Published var reveal = false
     private var appearance: NSKeyValueObservation?
 
     /// Words the address bar finds App Icon by, as the iPhone and iPad's
@@ -51,10 +48,7 @@ final class DockIcon: ObservableObject {
 
     /// Settings, at General, with App Icon in view.
     func showInSettings() {
-        // The pane MacSettings keeps, and opens on.
-        UserDefaults.standard.set(SettingsPane.general.rawValue, forKey: "settingsPane")
-        reveal = true
-        Session.shared.openSettings?()
+        SettingsPane.show(.appIcon)
     }
 
     /// The icon's picture, which takes the light or the dark look of where it is drawn.
@@ -115,9 +109,9 @@ struct AppIconSettings: View {
                 }
             }
             .padding(.vertical, 6)
-            .background(Reveal(now: icon.reveal))
         } header: {
             Text("App Icon")
+                .settingsMark(.appIcon)
         } footer: {
             // As Settings' notes are (SettingsView.swift's Note).
             Text("Finder and Spotlight keep showing eGlu's own icon.")
@@ -146,21 +140,5 @@ private struct Ring: Shape {
             shape.copy(strokingWithWidth: distance * 2, lineCap: .butt, lineJoin: .round, miterLimit: 10)
         }
         return Path(within(gap + width).subtracting(within(gap)).subtracting(shape))
-    }
-}
-
-/// Scrolls the section into view, when the address bar opened Settings at it.
-private struct Reveal: NSViewRepresentable {
-    let now: Bool
-
-    func makeNSView(context: Context) -> NSView { NSView() }
-
-    func updateNSView(_ view: NSView, context: Context) {
-        guard now else { return }
-        // Once the form is laid out, with the section in it.
-        DispatchQueue.main.async {
-            view.scrollToVisible(view.bounds)
-            DockIcon.shared.reveal = false
-        }
     }
 }

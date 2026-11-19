@@ -15,20 +15,34 @@ struct MacSettings: View {
     /// The panes seen before and after this one, for Back and Forward.
     @State private var backward: [SettingsPane] = []
     @State private var forward: [SettingsPane] = []
+    /// What the sidebar's search field has: while it has something, the
+    /// sidebar lists the parts of Settings it finds instead of the panes.
+    @State private var query = ""
 
     var body: some View {
         NavigationSplitView {
-            List(selection: chosen) {
-                ForEach(SettingsPane.sidebar, id: \.self) { item in
-                    Label {
-                        Text(item.title)
-                    } icon: {
-                        SymbolTile(symbol: item.symbol, color: item.tint)
+            Group {
+                if query.isEmpty {
+                    List(selection: chosen) {
+                        ForEach(SettingsPane.sidebar, id: \.self) { item in
+                            Label {
+                                Text(item.title)
+                            } icon: {
+                                SymbolTile(symbol: item.symbol, color: item.tint)
+                            }
+                            .tag(item)
+                        }
                     }
-                    .tag(item)
+                } else {
+                    SettingsResults(matches: SettingsPane.search.find(query), query: query, choose: show)
                 }
             }
             .listStyle(.sidebar)
+            .searchable(text: $query, placement: .sidebar, prompt: Text("Search Settings"))
+            // Return goes to the first part found, as the command bar's does.
+            .onSubmit(of: .search) {
+                if let first = SettingsPane.search.find(query).first { show(first.anchor) }
+            }
             // One width, as System Settings' sidebar has. The Settings window
             // goes by neither column width at first (it gave the sidebar 144
             // points); a frame it can't go under, it does.
@@ -87,6 +101,13 @@ struct MacSettings: View {
             guard let next, next != pane else { return }
             go(to: next)
         }
+    }
+
+    /// A part the sidebar's search found: its pane, kept for Back as one
+    /// chosen in the sidebar is, then the part, as the command bar opens it.
+    private func show(_ anchor: SettingsAnchor) {
+        if let next = SettingsPane(anchor) { go(to: next) }
+        SettingsPane.show(anchor)
     }
 
     private func go(to next: SettingsPane) {
@@ -164,6 +185,166 @@ enum SettingsPane: String, CaseIterable {
     }
 }
 
+/// The parts of Settings the sidebar's search field finds, each with the
+/// pane it is in; choosing one, by clicking it or with the arrow keys, goes
+/// there, as System Settings' search does.
+private struct SettingsResults: View {
+    let matches: [SettingsSearch.Destination]
+    let query: String
+    let choose: (SettingsAnchor) -> Void
+    @State private var picked: SettingsAnchor?
+
+    var body: some View {
+        if matches.isEmpty {
+            ContentUnavailableView.search(text: query)
+        } else {
+            List(selection: Binding(get: { picked }, set: { next in
+                picked = next
+                if let next { choose(next) }
+            })) {
+                ForEach(matches, id: \.anchor) { destination in
+                    let pane = SettingsPane(destination.anchor) ?? .general
+                    Label {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(destination.title)
+                            Text(pane.title)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        SymbolTile(symbol: pane.symbol, color: pane.tint)
+                    }
+                    .tag(destination.anchor)
+                }
+            }
+            // A new search starts with nothing chosen, so its first click goes there.
+            .onChange(of: query) { picked = nil }
+        }
+    }
+}
+
+// MARK: Search
+
+extension SettingsPane {
+    /// The pane a part of Settings is in (SettingsAnchor), or nil for the
+    /// iPhone and iPad's own parts, which the Mac has no place for.
+    init?(_ anchor: SettingsAnchor) {
+        switch anchor {
+        case .defaultBrowser, .appIcon, .window, .search, .history, .handoff: self = .general
+        case .sync: self = .iCloud
+        case .spaces: self = .spaces
+        case .pinnedTabs: self = .pinned
+        case .blocking: self = .blocking
+        case .writing: self = .writing
+        case .extensions: self = .extensions
+        case .developer: self = .developer
+        case .desktopView, .addressBar, .memory, .trackpad, .linkMenu, .diagnostics, .shortcuts: return nil
+        }
+    }
+
+    /// The parts of the Mac's Settings, which Settings' search field and the
+    /// command bar find (SettingsSearch): each that has a pane here, Handoff
+    /// only where there is Apple Intelligence, and App Icon and Ads and
+    /// Trackers by the Mac's names for them.
+    @MainActor static var search: SettingsSearch {
+        SettingsSearch(SettingsAnchor.allCases.compactMap { anchor in
+            guard let pane = SettingsPane(anchor) else { return nil }
+            switch anchor {
+            case .handoff where !Session.shared.hasIntelligence: return nil
+            case .appIcon:
+                return .init(anchor, title: String(localized: "App Icon"),
+                             detail: String(localized: "The icon in the Dock"), keywords: DockIcon.keywords)
+            case .blocking: return .init(anchor, title: pane.title)
+            default: return .init(anchor)
+            }
+        })
+    }
+
+    /// Settings, at the pane a part is in with the part in view: where the
+    /// command bar and Settings' own search field both go.
+    @MainActor static func show(_ anchor: SettingsAnchor) {
+        if let pane = SettingsPane(anchor) {
+            // The pane MacSettings keeps, and opens on.
+            UserDefaults.standard.set(pane.rawValue, forKey: "settingsPane")
+            SettingsReveal.shared.show(anchor)
+        }
+        Session.shared.openSettings?()
+    }
+}
+
+/// The part of Settings a search last went to: scrolled into view once its
+/// pane is on screen, and in the accent colour for a moment, as the iPhone's
+/// and iPad's is, so the eye finds it among the pane's other sections.
+@MainActor
+final class SettingsReveal: ObservableObject {
+    static let shared = SettingsReveal()
+
+    /// Until the part is on screen and scrolled to.
+    @Published private(set) var pending: SettingsAnchor?
+    @Published private(set) var lit: SettingsAnchor?
+    private var fading: Task<Void, Never>?
+
+    func show(_ anchor: SettingsAnchor) {
+        pending = anchor
+        lit = anchor
+        fading?.cancel()
+        fading = Task {
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.6)) { lit = nil }
+        }
+    }
+
+    fileprivate func scrolled() {
+        pending = nil
+    }
+}
+
+extension View {
+    /// Marks the header (or the row) of the section a part of Settings is
+    /// (SettingsAnchor), for a search to scroll to and light (SettingsReveal).
+    func settingsMark(_ anchor: SettingsAnchor) -> some View {
+        modifier(SettingsMark(anchor: anchor))
+    }
+}
+
+private struct SettingsMark: ViewModifier {
+    let anchor: SettingsAnchor
+    @ObservedObject private var reveal = SettingsReveal.shared
+
+    func body(content: Content) -> some View {
+        content
+            .foregroundStyle(reveal.lit == anchor ? AnyShapeStyle(.tint) : AnyShapeStyle(.foreground))
+            .background(ScrollHere(now: reveal.pending == anchor))
+    }
+}
+
+/// Scrolls the form so the view it is behind comes to its top, or as near
+/// as the form goes, with the section under it in view.
+private struct ScrollHere: NSViewRepresentable {
+    let now: Bool
+
+    func makeNSView(context: Context) -> NSView { NSView() }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        guard now else { return }
+        // Once the form is laid out, with the section in it.
+        DispatchQueue.main.async {
+            SettingsReveal.shared.scrolled()
+            guard let scroller = view.enclosingScrollView, let document = scroller.documentView else {
+                view.scrollToVisible(view.bounds)
+                return
+            }
+            let gap: CGFloat = 12
+            let room = scroller.contentView.bounds.height - gap
+            var target = view.convert(view.bounds, to: document)
+            target.origin.y = document.isFlipped ? target.minY - gap : target.maxY + gap - room
+            target.size.height = room
+            document.scrollToVisible(target)
+        }
+    }
+}
+
 /// Makes the Settings window's toolbar a unified one, as System Settings'
 /// is: Back and Forward beside the pane's name, not centred under it as
 /// SwiftUI's Settings window has its toolbar.
@@ -233,6 +414,7 @@ private struct GeneralSettings: View {
                 .accessibilityLabel("Tabs")
             } header: {
                 Text("Window")
+                    .settingsMark(.window)
             }
             Section {
                 Toggle("Automatic Picture in Picture", isOn: $session.preferences.automaticPictureInPicture)
@@ -281,6 +463,7 @@ private struct GeneralSettings: View {
                 }
             } header: {
                 Text("Search")
+                    .settingsMark(.search)
             } footer: {
                 Note(Autocomplete.suggestionsDisclosure(engine: session.preferences.engine)
                      + (session.hasIntelligence ? " " + String(localized: "Apple Intelligence reads your tabs, bookmarks and history on this Mac and sends nothing anywhere.") : ""))
@@ -296,6 +479,7 @@ private struct GeneralSettings: View {
                 }
             } header: {
                 Text("History")
+                    .settingsMark(.history)
             } footer: {
                 Note(String(localized: "Each space keeps its own history. Pages older than this are deleted."))
             }
@@ -307,18 +491,22 @@ private struct GeneralSettings: View {
                     Toggle("Use Handoff", isOn: $session.preferences.handoff)
                 } header: {
                     Text("Handoff")
+                        .settingsMark(.handoff)
                 } footer: {
                     Note(String(localized: "The page goes as text to the app you pick, such as Claude or ChatGPT, for your question. Nothing leaves this Mac until you pick one."))
                 }
             }
             Section {
-                LabeledContent("Default browser") {
+                LabeledContent {
                     if isDefault {
                         Label("eGlu", systemImage: "checkmark.circle.fill")
                             .foregroundStyle(.secondary)
                     } else {
                         Button("Make Default…") { DefaultBrowser.ask() }
                     }
+                } label: {
+                    Text("Default browser")
+                        .settingsMark(.defaultBrowser)
                 }
             } footer: {
                 Note(isDefault ? String(localized: "Links you open in other apps open here.") : String(localized: "Links you open in other apps open in your default browser."))
