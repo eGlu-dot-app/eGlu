@@ -1,6 +1,150 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Filter Tabs" : {
+      "comment" : "Placeholder and accessibility label for the All Tabs title/address filter.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filter Tabs"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "탭 필터"
+          }
+        }
+      }
+    },
+    "Filters tabs in this Space by title or address." : {
+      "comment" : "Accessibility hint for the local All Tabs filter.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filters tabs in this Space by title or address."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 스페이스의 탭을 제목이나 주소로 필터링합니다."
+          }
+        }
+      }
+    },
+    "No tabs to show" : {
+      "comment" : "All Tabs empty-state heading when the Space has no visible tabs.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No tabs to show"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "표시할 탭이 없습니다"
+          }
+        }
+      }
+    },
+    "Open a new tab to get started in this Space." : {
+      "comment" : "Description for an empty All Tabs view.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open a new tab to get started in this Space."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 탭을 열어 이 스페이스에서 시작하세요."
+          }
+        }
+      }
+    },
+    "Choose a pinned tab below or open a new tab." : {
+      "comment" : "All Tabs description when only the pinned dock has results.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a pinned tab below or open a new tab."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "아래의 고정된 탭을 선택하거나 새 탭을 여세요."
+          }
+        }
+      }
+    },
+    "No matching tabs" : {
+      "comment" : "All Tabs heading when the local filter has no results.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No matching tabs"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "일치하는 탭이 없습니다"
+          }
+        }
+      }
+    },
+    "Try another title or address." : {
+      "comment" : "All Tabs no-results guidance.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try another title or address."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다른 제목이나 주소로 찾아보세요."
+          }
+        }
+      }
+    },
+    "Clear Filter" : {
+      "comment" : "All Tabs button that clears the local title/address filter.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clear Filter"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "필터 지우기"
+          }
+        }
+      }
+    },
     "Not included, %@ characters" : {
       "extractionState" : "manual",
       "localizations" : {

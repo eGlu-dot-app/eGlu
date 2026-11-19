@@ -42,6 +42,106 @@ final class CrashRegressionTests: XCTestCase {
         XCTAssertTrue(credentials.allSatisfy { $0 == nil })
     }
 
+    func testOverviewFilterMatchesNamesAddressesAndUnicode() throws {
+        let home = try XCTUnwrap(URL(string: "https://example.com/%ED%95%9C%EA%B8%80"))
+        let pin = TabRecord(url: URL(string: "https://away.test/path"), title: "Café 한글 👩‍💻", pinned: home)
+        for query in ["", " \n ", "CAFE", "한글", "👩‍💻", "cafe example.com", "AWAY.test", "%ED%95%9C%EA%B8%80"] {
+            XCTAssertTrue(TabOverviewFilter(query).matches(pin), query)
+        }
+        XCTAssertFalse(TabOverviewFilter("missing").matches(pin))
+        XCTAssertFalse(TabOverviewFilter("cafe missing").matches(pin))
+        XCTAssertTrue(TabOverviewFilter(TabRecord(url: nil).label).matches(TabRecord(url: nil)))
+        let long = TabRecord(url: nil, title: String(repeating: "a", count: 80) + " final")
+        XCTAssertTrue(TabOverviewFilter("final").matches(long))
+    }
+
+    func testOverviewFilteringPreservesIdentitySpaceAndEmptyStates() async throws {
+        let session = Session.shared
+        let alpha = TabRecord(url: URL(string: "https://alpha.test/"), title: "Alpha café")
+        let beta = TabRecord(url: URL(string: "https://beta.test/"), title: "Beta 한글")
+        let pin = TabRecord(url: URL(string: "https://pin.test/"), title: "Pinned page", pinned: URL(string: "https://pin.test/"))
+        let hidden = TabRecord(url: URL(string: "https://hidden.test/"), title: "Hidden pin", pinned: URL(string: "https://hidden.test/"))
+        let space = Space(name: "Filter regression", symbol: "square", tabs: [pin, hidden, alpha, beta])
+        let other = Space(name: "Other Space", symbol: "circle", tabs: [TabRecord(url: nil, title: "Other Space only")])
+        session.change { $0.spaces.append(contentsOf: [space, other]) }
+        session.preferences.hiddenPinnedTabs.insert(hidden.id)
+        defer {
+            session.preferences.hiddenPinnedTabs.remove(hidden.id)
+            session.change { $0.spaces.removeAll { $0.id == space.id || $0.id == other.id } }
+        }
+        let model = WindowModel(spaceID: space.id)
+        model.tabID = alpha.id
+        var chosen: UUID?
+        let overview = TabOverviewController(session: session, window: model, act: { _ in }, done: { action in
+            if case .select(let id)? = action { chosen = id }
+        })
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.rootViewController = overview
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        overview.view.frame = CGRect(x: 0, y: 0, width: 393, height: 700)
+        overview.view.layoutIfNeeded()
+        let collection = try XCTUnwrap(overview.view.subviews.compactMap { $0 as? UICollectionView }.first)
+        let search = try XCTUnwrap(overview.view.subviews.compactMap { $0 as? UISearchBar }.first)
+        let empty = try XCTUnwrap(overview.view.subviews.compactMap { $0 as? UIContentUnavailableView }.first)
+        let dock = try XCTUnwrap(overview.view.subviews.compactMap { $0 as? PinnedDock }.first)
+        let newTab = try XCTUnwrap(overview.view.subviews.compactMap { $0 as? UIButton }
+            .first { $0.accessibilityLabel == String(localized: "New Tab") })
+        let keyboard = overview.view.convert(CGRect(x: 0, y: 460, width: 393, height: 240), to: window)
+        NotificationCenter.default.post(name: UIResponder.keyboardWillChangeFrameNotification, object: nil, userInfo: [
+            UIResponder.keyboardFrameEndUserInfoKey: window.convert(keyboard, to: window.screen.coordinateSpace),
+            UIResponder.keyboardAnimationDurationUserInfoKey: 0.0,
+        ])
+        overview.view.layoutIfNeeded()
+        XCTAssertLessThanOrEqual(newTab.frame.maxY, 460, "Footer must clear the docked software keyboard")
+        XCTAssertLessThanOrEqual(dock.frame.maxY, 460)
+        NotificationCenter.default.post(name: UIResponder.keyboardDidChangeFrameNotification, object: nil, userInfo: [
+            UIResponder.keyboardFrameEndUserInfoKey: CGRect(x: 0, y: 5000, width: 393, height: 240),
+        ])
+        func filter(_ query: String) {
+            search.text = query
+            overview.searchBar(search, textDidChange: query)
+            overview.view.layoutIfNeeded()
+            collection.layoutIfNeeded()
+        }
+        XCTAssertEqual(collection.numberOfItems(inSection: 0), 2)
+        XCTAssertTrue(empty.isHidden)
+        filter("beta")
+        XCTAssertEqual(collection.numberOfItems(inSection: 0), 1)
+        XCTAssertFalse(collection.dragInteractionEnabled)
+        overview.collectionView(collection, didSelectItemAt: IndexPath(item: 0, section: 0))
+        XCTAssertEqual(chosen, beta.id, "Selection must use the filtered tab's identity, not its original index")
+        XCTAssertTrue(dock.isHidden)
+        filter("Other Space only")
+        XCTAssertEqual((empty.configuration as? UIContentUnavailableConfiguration)?.text, String(localized: "No matching tabs"))
+        filter("hidden")
+        XCTAssertEqual((empty.configuration as? UIContentUnavailableConfiguration)?.text, String(localized: "No matching tabs"))
+        filter("pinned page")
+        XCTAssertFalse(dock.isHidden)
+        XCTAssertEqual((empty.configuration as? UIContentUnavailableConfiguration)?.text, String(localized: "Pinned tabs"))
+        filter("")
+        XCTAssertEqual(collection.numberOfItems(inSection: 0), 2)
+        XCTAssertTrue(collection.dragInteractionEnabled)
+        XCTAssertEqual(session.workspace.space(space.id)?.tabs.map(\.id), space.tabs.map(\.id))
+        filter("cafe")
+        session.change { $0.record(beta.id, url: beta.url, title: "Café updated") }
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(collection.numberOfItems(inSection: 0), 2, "Live title changes must update filtered results")
+        model.spaceID = other.id
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(collection.numberOfItems(inSection: 0), 0)
+        filter("")
+        XCTAssertEqual(collection.numberOfItems(inSection: 0), 1)
+        session.change { workspace in
+            guard let index = workspace.spaces.firstIndex(where: { $0.id == other.id }) else { return }
+            workspace.spaces[index].tabs = []
+        }
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual((empty.configuration as? UIContentUnavailableConfiguration)?.text, String(localized: "No tabs to show"))
+        XCTAssertFalse(empty.isHidden)
+    }
+
     func testOverviewLayoutAcrossWidthsAndTabUpdates() async throws {
         let session = Session.shared
         let space = Space(name: "Crash regression", symbol: "square", tabs:
