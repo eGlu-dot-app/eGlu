@@ -58,6 +58,15 @@ final class SettingsSearchTests: XCTestCase {
         }
     }
 
+    func testAPhonesKeyboardBringsItsPartsAsItBringsTheirGroups() {
+        for anchor in [SettingsAnchor.trackpad, .shortcuts] {
+            XCTAssertFalse(anchor.isOffered(phoneLayout: true, padLayout: false))
+            XCTAssertTrue(anchor.isOffered(phoneLayout: true, padLayout: false, keyboard: true))
+            XCTAssertTrue(anchor.group.isOffered(padLayout: false, keyboard: true))
+        }
+        XCTAssertFalse(SettingsAnchor.window.isOffered(phoneLayout: true, padLayout: false, keyboard: true))
+    }
+
     func testEveryPartHasANameAndWordsToFindItBy() {
         for anchor in SettingsAnchor.allCases {
             XCTAssertFalse(anchor.title.isEmpty, "\(anchor)")

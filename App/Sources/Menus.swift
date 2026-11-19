@@ -111,20 +111,21 @@ enum Device {
     }
 
     /// Whether Settings has that part with these layouts' parts (offers).
-    @MainActor static func offers(_ anchor: SettingsAnchor, phoneLayout: Bool, padLayout: Bool) -> Bool {
+    @MainActor static func offers(_ anchor: SettingsAnchor, phoneLayout: Bool, padLayout: Bool,
+                                  keyboard: Bool = false) -> Bool {
         if anchor == .appIcon, !UIApplication.shared.supportsAlternateIcons { return false }
         if anchor == .handoff, !Session.shared.hasIntelligence { return false }
         if anchor == .diagnostics, !diagnostics { return false }
         // No developer mode on an iPhone (the Mac's and the iPad's).
         if anchor == .developer, phone { return false }
-        return anchor.isOffered(phoneLayout: phoneLayout, padLayout: padLayout)
+        return anchor.isOffered(phoneLayout: phoneLayout, padLayout: padLayout, keyboard: keyboard)
     }
 
     /// The parts of Settings a search finds in a window with these layouts'
     /// parts: Settings' own search field's and the address bar's.
-    @MainActor static func settingsSearch(phoneLayout: Bool, padLayout: Bool) -> SettingsSearch {
+    @MainActor static func settingsSearch(phoneLayout: Bool, padLayout: Bool, keyboard: Bool = false) -> SettingsSearch {
         SettingsSearch(anchors: SettingsAnchor.allCases.filter {
-            offers($0, phoneLayout: phoneLayout, padLayout: padLayout)
+            offers($0, phoneLayout: phoneLayout, padLayout: padLayout, keyboard: keyboard)
         })
     }
 

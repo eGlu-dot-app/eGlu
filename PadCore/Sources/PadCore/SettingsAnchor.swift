@@ -127,10 +127,13 @@ public enum SettingsAnchor: String, CaseIterable, Sendable {
     /// Whether Settings has the section where windows take the phone's
     /// layout, the iPad's, or either: the iPhone Duo and a large iPhone have
     /// both, as they open or turn (Docs/iPhoneDuoPlan.md, decisions 5 and 9).
-    public func isOffered(phoneLayout: Bool, padLayout: Bool) -> Bool {
+    /// A keyboard with keys brings a phone layout the keyboard's parts, as
+    /// it brings their groups (SettingsGroup.isOffered(padLayout:keyboard:)).
+    public func isOffered(phoneLayout: Bool, padLayout: Bool, keyboard: Bool = false) -> Bool {
         switch self {
         case .desktopView, .addressBar: return phoneLayout
-        case .window, .trackpad, .shortcuts: return padLayout
+        case .window: return padLayout
+        case .trackpad, .shortcuts: return padLayout || keyboard
         case .pinnedTabs, .extensions: return false
         default: return true
         }

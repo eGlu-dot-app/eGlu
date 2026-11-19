@@ -27,7 +27,7 @@ struct SettingsView: View {
         NavigationStack(path: $path) {
             List {
                 if !query.isEmpty {
-                    SettingsResults(matches: Device.settingsSearch(phoneLayout: phoneLayout, padLayout: padLayout)
+                    SettingsResults(matches: Device.settingsSearch(phoneLayout: phoneLayout, padLayout: padLayout, keyboard: keyboard)
                         .find(query).filter { $0.anchor.group.shown(padLayout: padLayout, keyboard: keyboard) },
                                     query: query, padLayout: padLayout) { destination in
                         found = destination.anchor
