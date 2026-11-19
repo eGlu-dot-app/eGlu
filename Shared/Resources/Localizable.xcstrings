@@ -1,6 +1,28 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Showing the first %lld page matches" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Showing the first %lld page matches"
+          }
+        }
+      }
+    },
+    "Showing the first %lld handoff matches" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Showing the first %lld handoff matches"
+          }
+        }
+      }
+    },
     "Not included, %@ characters" : {
       "extractionState" : "manual",
       "localizations" : {

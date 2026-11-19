@@ -141,6 +141,12 @@ struct HistoryView: View {
                         row(page, time: page.last, day: true)
                     }
                 } header: {
+                    if loaded, loadingProblem == nil, searched == text.trimmingCharacters(in: .whitespaces),
+                       History.searchIsCapped(count: found.count) {
+                        Text("Showing the first \(History.searchLimit) page matches")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                     if understanding {
                         Label("Asking Apple Intelligence…", systemImage: "sparkles")
                     } else if let understood, understood.text == text.trimmingCharacters(in: .whitespaces) {
@@ -148,9 +154,17 @@ struct HistoryView: View {
                     }
                 }
                 if !foundHandoffs.isEmpty {
-                    Section("Handoffs") {
+                    Section {
                         ForEach(foundHandoffs) { handoff in
                             row(handoff, day: true)
+                        }
+                    } header: {
+                        Text("Handoffs")
+                        if loaded, loadingProblem == nil, searched == text.trimmingCharacters(in: .whitespaces),
+                           History.searchIsCapped(count: foundHandoffs.count) {
+                            Text("Showing the first \(History.searchLimit) handoff matches")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -425,9 +439,9 @@ struct HistoryView: View {
             // What Apple Intelligence made of these words, if it was asked; else the words as typed.
             let query = understood?.text == words ? understood?.query : nil
             let parsed = query ?? HistoryQuery.parse(words, now: Date())
-            let result = await recorder.searchResult(space: spaceID, query: parsed, limit: 100, filter: filter)
+            let result = await recorder.searchResult(space: spaceID, query: parsed, limit: History.searchLimit, filter: filter)
             guard !Task.isCancelled else { return }
-            let handoffs = await recorder.handoffSearchResult(space: spaceID, query: parsed, limit: 100, filter: filter)
+            let handoffs = await recorder.handoffSearchResult(space: spaceID, query: parsed, limit: History.searchLimit, filter: filter)
             guard !Task.isCancelled else { return }
             switch (result, handoffs) {
             case (.success(let pages), .success(let made)): found = pages; foundHandoffs = made; searched = words
