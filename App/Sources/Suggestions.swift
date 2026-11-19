@@ -232,16 +232,19 @@ final class Suggestions: ObservableObject {
 struct SuggestionList: View {
     let window: WindowModel
     @ObservedObject var suggestions: Suggestions
+    let heightChanged: (CGFloat) -> Void
     let choose: (Suggestion) -> Void
 
-    init(window: WindowModel, choose: @escaping (Suggestion) -> Void) {
+    init(window: WindowModel, heightChanged: @escaping (CGFloat) -> Void, choose: @escaping (Suggestion) -> Void) {
         self.window = window
         suggestions = window.suggestions
+        self.heightChanged = heightChanged
         self.choose = choose
     }
 
     var body: some View {
-        SuggestionRows(suggestions: suggestions, choose: choose)
+        SuggestionRows(rows: suggestions.rows, listing: suggestions.listing, selection: suggestions.selection,
+                       heightChanged: heightChanged, choose: choose)
         // In Liquid Glass with no colour of its own, as the bar under it is
         // while an address is typed: risen over the keyboard, the bar shows
         // the page where it now is, not the colour at the page's foot it
@@ -258,20 +261,15 @@ struct SuggestionList: View {
 /// for the command bar. With everything listed and nothing typed yet, each
 /// kind is under a heading.
 struct SuggestionRows: View {
-    @ObservedObject var suggestions: Suggestions
+    let rows: [Suggestion]
+    var listing = false
+    var selection: Int?
+    let heightChanged: (CGFloat) -> Void
     let choose: (Suggestion) -> Void
 
     static let rowHeight: CGFloat = 44
     static let headingHeight: CGFloat = 28
     static let inset: CGFloat = 6
-
-    /// The rows' height, headings included, before the room they have is counted.
-    @MainActor static func height(of suggestions: Suggestions) -> CGFloat {
-        let rows = suggestions.rows
-        guard !rows.isEmpty else { return 0 }
-        let headings = suggestions.listing ? Self.headings(rows).count : 0
-        return CGFloat(rows.count) * rowHeight + CGFloat(headings) * headingHeight + 2 * inset
-    }
 
     /// The heading over each row that starts another kind, by the row's place.
     static func headings(_ rows: [Suggestion]) -> [Int: String] {
@@ -300,42 +298,49 @@ struct SuggestionRows: View {
     }
 
     var body: some View {
-        let rows = suggestions.rows
-        let listing = suggestions.listing
-        let headings = listing ? Self.headings(rows) : [:]
         ScrollViewReader { scroller in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
-                        if let heading = headings[index] {
-                            Text(heading)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal, 10)
-                                .padding(.bottom, 4)
-                                .frame(minHeight: Self.headingHeight, alignment: .bottomLeading)
-                                .accessibilityAddTraits(.isHeader)
-                        }
-                        // Under a heading that says what the row is, it says
-                        // only what the heading can't: which space, which device.
-                        // The search engine is named on the first of its rows only: four
-                        // tags saying "Google" one under another say it no better than one.
-                        let again = index > 0 && Self.searches(row) && Self.searches(rows[index - 1])
-                        Button {
-                            choose(row)
-                        } label: {
-                            SuggestionRow(row: row, selected: index == suggestions.selection, named: !listing && !again)
-                        }
-                        .buttonStyle(RowPress())
-                        .id(row.id)
+                Group {
+                    // Typed results are bounded: measure every row so wrapping
+                    // and Dynamic Type determine the height, even offscreen.
+                    if rows.count <= Autocomplete.wideLimit {
+                        VStack(alignment: .leading, spacing: 0) { content }
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        // The empty palette can list a whole library. It already
+                        // fills the viewport; don't eagerly lay out all of it.
+                        LazyVStack(alignment: .leading, spacing: 0) { content }
                     }
                 }
-                .padding(Self.inset)
+                .padding(rows.isEmpty ? 0 : Self.inset)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height.rounded(.up) } action: { heightChanged($0) }
             }
             .scrollBounceBehavior(.basedOnSize)
-            .onChange(of: suggestions.selection) { _, index in
+            .onChange(of: selection) { _, index in
                 if let index, rows.indices.contains(index) { scroller.scrollTo(rows[index].id) }
             }
+        }
+    }
+
+    private var content: some View {
+        let headings = listing ? Self.headings(rows) : [:]
+        return ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+            if let heading = headings[index] {
+                Text(heading)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 4)
+                    .frame(minHeight: Self.headingHeight, alignment: .bottomLeading)
+                    .accessibilityAddTraits(.isHeader)
+            }
+            // A heading names the kind; repeated engine rows name it once.
+            let again = index > 0 && Self.searches(row) && Self.searches(rows[index - 1])
+            Button { choose(row) } label: {
+                SuggestionRow(row: row, selected: index == selection, named: !listing && !again)
+            }
+            .buttonStyle(RowPress())
+            .id(row.id)
         }
     }
 

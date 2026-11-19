@@ -7,6 +7,7 @@ Small, focused changes are the easiest to take: one thing per pull request, read
 - Open `eGlu.xcodeproj` in Xcode 26 or later. Your team ID goes in `Config/Local.xcconfig`, which git ignores (see README).
 - After adding or removing a file, run `xcodegen` at the root and commit the regenerated project with your change.
 - `cd PadCore && swift test`: the app's logic, on macOS or Linux.
+- `xcodebuild -scheme 'eGlu Suggestion Tests' -destination 'platform=iOS Simulator,name=iPhone 17' test`: the iPhone/iPad suggestion rows' rendered layout (requires the app's iOS SDK).
 - `node Tests/bridge.mjs`: the script that goes into pages, in a browser (needs Playwright).
 - On an iPad, [Validation/CHECKLIST.md](Validation/CHECKLIST.md) covers what only a device can show.
 - Builds clean: no warnings you introduced.

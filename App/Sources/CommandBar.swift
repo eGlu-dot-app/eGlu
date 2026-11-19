@@ -46,6 +46,8 @@ private struct CommandBarTurn: View {
     /// The text came over from the bar at the bottom (WindowModel.carriedAddress):
     /// kept as typed, the cursor after it, not all selected to type over.
     @State private var carried = false
+    @State private var rowsHeight: CGFloat = 0
+    @ScaledMetric(relativeTo: .subheadline) private var maximumRowsHeight = CommandBar.rowsShown * SuggestionRows.rowHeight
     @ObservedObject private var session = Session.shared
     @Environment(\.colorScheme) private var scheme
 
@@ -55,8 +57,6 @@ private struct CommandBarTurn: View {
     }
 
     var body: some View {
-        let rows = SuggestionRows.height(of: suggestions)
-        let most = CommandBar.rowsShown * SuggestionRows.rowHeight
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 Image(systemName: "magnifyingglass")
@@ -106,14 +106,15 @@ private struct CommandBarTurn: View {
                 }
                 .buttonStyle(.plain)
             }
-            if rows > 0 {
+            if !suggestions.rows.isEmpty {
                 Rectangle()
                     .fill(Color.primary.opacity(0.08))
                     .frame(height: 1)
-                SuggestionRows(suggestions: suggestions) { row in act(.suggestion(row)) }
+                SuggestionRows(rows: suggestions.rows, listing: suggestions.listing, selection: suggestions.selection,
+                               heightChanged: { rowsHeight = $0 }) { row in act(.suggestion(row)) }
                     // As tall as its rows up to a point, and less where the
                     // window or the keyboard leaves less: then it scrolls.
-                    .frame(idealHeight: min(rows, most), maxHeight: min(rows, most))
+                    .frame(idealHeight: min(rowsHeight, maximumRowsHeight), maxHeight: min(rowsHeight, maximumRowsHeight))
             }
         }
         // In Liquid Glass of the space's colour, as the Mac's command bar
