@@ -170,9 +170,9 @@ struct SideTabs: View {
 /// rows and buttons a little taller, for a finger.
 enum Side {
     static let gap: CGFloat = 8
-    static let control: CGFloat = 32
-    static let field: CGFloat = 34
-    static let row: CGFloat = 36
+    static let control: CGFloat = 44
+    static let field: CGFloat = 44
+    static let row: CGFloat = 44
     static let rowCorner: CGFloat = 12
     static let tile: CGFloat = 44
     static let tileIcon: CGFloat = 18
@@ -344,7 +344,7 @@ private struct SideAddress: View {
 struct SidePageMenu: View {
     let window: WindowModel
     let act: (BarAction) -> Void
-    /// In a tab, as small as its ✕ (SideClose).
+    /// In a tab, the same compact mark and touch cell as its ✕ (SideClose).
     var inTab = false
     @State private var hovering = false
 
@@ -357,7 +357,8 @@ struct SidePageMenu: View {
                         .foregroundStyle(hovering ? Palette.ink : Side.secondary)
                         .frame(width: 20, height: 20)
                         .background(Circle().fill(hovering ? Side.hover : .clear))
-                        .contentShape(Circle().inset(by: -6))
+                        .frame(width: Side.control, height: Side.control)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(PressScale())
                 .onHover { hovering = $0 }
@@ -988,7 +989,8 @@ struct SideClose: View {
                 .font(.system(size: 10, weight: .bold))
                 .frame(width: 20, height: 20)
                 .background(Circle().fill(hovering ? Side.hover : .clear))
-                .contentShape(Circle().inset(by: -6))
+                .frame(width: Side.control, height: Side.control)
+                .contentShape(Rectangle())
         }
         .buttonStyle(PressScale())
         .foregroundStyle(hovering ? Palette.ink : Side.secondary)
@@ -1032,8 +1034,8 @@ struct SideSpaces: View {
                                 withAnimation(reduceMotion ? nil : .bar) { reader.scrollTo(space, anchor: .center) }
                             }
                     }
-                    .padding(3)
-                    .liquidGlass(reacting: false, in: Capsule(), otherwise: Palette.wash)
+                    .padding(.horizontal, 3)
+                    .background { spaceGlass(compact: true) }
                 }
                 // In the row, a gap from the plain buttons either side, which are 2 points from each other.
                 .padding(.horizontal, inRow ? Side.gap - 2 : 0)
@@ -1071,10 +1073,16 @@ struct SideSpaces: View {
         // Under Reduce Motion the disc is at the chosen space at once, not slid there.
         .animation(reduceMotion ? nil : .bar, value: window.spaceID)
         if glass {
-            row.padding(3).liquidGlass(reacting: false, in: Capsule(), otherwise: Palette.wash)
+            row.padding(.horizontal, 3).background { spaceGlass(compact: compact) }
         } else {
             row
         }
+    }
+
+    private func spaceGlass(compact: Bool) -> some View {
+        Color.clear
+            .frame(height: compact ? 30 : 34)
+            .liquidGlass(reacting: false, in: Capsule(), otherwise: Palette.wash)
     }
 }
 
@@ -1104,7 +1112,8 @@ private struct SideSpaceButton: View {
                 .frame(width: side, height: side)
                 .matchedGeometryEffect(id: Self.place(space.id, compact: compact), in: places, isSource: true)
                 .background { if !chosen { Circle().fill(hovering ? Side.hover : .clear) } }
-                .contentShape(Circle())
+                .frame(width: Side.control, height: Side.control)
+                .contentShape(Rectangle())
         }
         .buttonStyle(PressScale())
         .onHover { inside in withAnimation(.easeOut(duration: 0.12)) { hovering = inside } }

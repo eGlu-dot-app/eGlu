@@ -137,7 +137,7 @@ struct TopTabs: View {
                         }
                     }
                 SideSpaces(session: session, window: window, act: act, inRow: true)
-                    .fixedSize()
+                    .frame(maxWidth: max(width / 4, Side.control))
                     .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { spacesWidth = $0 }
             }
         }

@@ -70,13 +70,13 @@ enum Palette {
 
 enum Metrics {
     /// The row of tabs, and the address bar under it when it shows. Tall
-    /// enough for 40-point hit areas with room above and below.
+    /// enough for 44-point touch cells.
     static let bar: CGFloat = 44
     static let corner: CGFloat = 8
     /// What a control on a bar draws, and the area that answers a touch or
-    /// a click, which is never smaller than 40 points a side.
+    /// a click, which is never smaller than 44 points a side.
     static let control: CGFloat = 32
-    static let target: CGFloat = 40
+    static let target: CGFloat = 44
     /// The ring between the two, where a click answers but nothing is drawn.
     static let ring: CGFloat = (target - control) / 2
 }
@@ -90,7 +90,7 @@ enum BarScale {
 
     /// The address's height.
     var control: CGFloat { self == .thumb ? 44 : Metrics.control }
-    /// The area that answers: the drawn height, never under 40.
+    /// The area that answers: the drawn height, never under 44.
     var target: CGFloat { max(control, Metrics.target) }
     var text: CGFloat { self == .thumb ? 16 : 13 }
     var icon: CGFloat { self == .thumb ? 18 : 16 }
