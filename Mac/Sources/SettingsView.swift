@@ -23,9 +23,7 @@ struct MacSettings: View {
 
     var body: some View {
         NavigationSplitView {
-            // One list for the panes and for what a search finds: a list put
-            // in its place lost the room kept under the search field, and its
-            // rows went up under it.
+            // One list for the panes and for what a search finds.
             List(selection: row) {
                 if query.isEmpty {
                     ForEach(SettingsPane.sidebar, id: \.self) { item in
@@ -42,6 +40,19 @@ struct MacSettings: View {
             }
             // A new search starts with nothing chosen, so its first click goes there.
             .onChange(of: query) { picked = nil }
+            // The field over the sidebar's list, as System Settings has it.
+            // SwiftUI's sidebar search field, while it had the focus, let the
+            // list go up under it a little more with each part chosen, and
+            // Return reached its submit action only from some places in the
+            // view tree; this one is AppKit's, kept in the list's own room.
+            .safeAreaInset(edge: .top, spacing: 0) {
+                SidebarSearchField(text: $query) {
+                    // Return goes to the first part found, as the command bar's does.
+                    if let first = SettingsPane.search.find(query).first { show(first.anchor) }
+                }
+                .padding(.horizontal, 10)
+                .padding(.bottom, 6)
+            }
             .listStyle(.sidebar)
             // One width, as System Settings' sidebar has. The Settings window
             // goes by neither column width at first (it gave the sidebar 144
@@ -87,16 +98,6 @@ struct MacSettings: View {
                     .controlGroupStyle(.navigation)
                 }
             }
-        }
-        // On the split view, as Apple has it: on the sidebar's list, each
-        // pane chosen while searching moved the list a little further up
-        // under the field.
-        .searchable(text: $query, placement: .sidebar, prompt: Text("Search Settings"))
-        // Return goes to the first part found, as the command bar's does: on
-        // the split view, which holds the sidebar's search field (on the
-        // sidebar's list, Return never reached it).
-        .onSubmit(of: .search) {
-            if let first = SettingsPane.search.find(query).first { show(first.anchor) }
         }
         .frame(minWidth: 700, minHeight: 480)
         .background(UnifiedToolbar())
@@ -213,6 +214,55 @@ enum SettingsPane: String, CaseIterable {
 /// The parts of Settings the sidebar's search field finds, each with the
 /// pane it is in; choosing one, by clicking it or with the arrow keys, goes
 /// there, as System Settings' search does.
+/// Settings' search field: AppKit's own, with its clear button, and
+/// Escape clearing it as a search field's does.
+private struct SidebarSearchField: NSViewRepresentable {
+    @Binding var text: String
+    let submit: () -> Void
+
+    func makeNSView(context: Context) -> NSSearchField {
+        let field = NSSearchField()
+        field.placeholderString = String(localized: "Search Settings")
+        field.sendsSearchStringImmediately = true
+        field.delegate = context.coordinator
+        field.target = context.coordinator
+        field.action = #selector(Coordinator.changed(_:))
+        return field
+    }
+
+    func updateNSView(_ field: NSSearchField, context: Context) {
+        context.coordinator.parent = self
+        if field.stringValue != text { field.stringValue = text }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    @MainActor
+    final class Coordinator: NSObject, NSSearchFieldDelegate {
+        var parent: SidebarSearchField
+
+        init(_ parent: SidebarSearchField) {
+            self.parent = parent
+        }
+
+        /// Each letter typed or taken away, and the clear button.
+        @objc func changed(_ field: NSSearchField) {
+            parent.text = field.stringValue
+        }
+
+        func controlTextDidChange(_ note: Notification) {
+            guard let field = note.object as? NSSearchField else { return }
+            parent.text = field.stringValue
+        }
+
+        func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+            guard selector == #selector(NSResponder.insertNewline(_:)) else { return false }
+            parent.submit()
+            return true
+        }
+    }
+}
+
 private enum SidebarRow: Hashable {
     case pane(SettingsPane)
     case found(SettingsAnchor)
