@@ -11,12 +11,12 @@ public struct SettingsNavigation: Equatable, Sendable {
         didSet {
             if path != oldValue {
                 anchor = nil
-                revealID = nil
+                requestID = nil
             }
         }
     }
     public private(set) var anchor: SettingsAnchor?
-    public private(set) var revealID: UUID?
+    public private(set) var requestID: UUID?
     public var selection: Page? { path.last }
 
     public init() {}
@@ -29,13 +29,13 @@ public struct SettingsNavigation: Equatable, Sendable {
     public mutating func show(_ page: Page) {
         path = [page]
         anchor = nil
-        revealID = nil
+        requestID = UUID()
     }
 
     public mutating func reveal(_ anchor: SettingsAnchor) {
         path = [.group(anchor.group)]
         self.anchor = anchor
-        revealID = UUID()
+        requestID = UUID()
     }
 
     public mutating func adapt(sidebar: Bool) {

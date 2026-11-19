@@ -62,6 +62,8 @@ struct SettingsView: View {
             }
         }
         .navigationSplitViewStyle(.balanced)
+        // The split owns pushed detail controllers; a new destination must dismiss them.
+        .id(navigation.requestID)
     }
 
     private var stack: some View {
@@ -119,7 +121,7 @@ struct SettingsView: View {
         case .group(let group):
             SettingsDetail(session: session, spaceID: spaceID, group: group,
                            anchor: navigation.anchor?.group == group ? navigation.anchor : nil,
-                           revealID: navigation.revealID,
+                           requestID: navigation.requestID,
                            phoneLayout: phoneLayout, padLayout: padLayout,
                            done: done, keyboard: keyboard,
                            importing: $importing, imported: $imported, importWorking: $importWorking)
@@ -179,7 +181,7 @@ private struct SettingsDetail: View {
     /// The part to open at, when the address bar sent one (SettingsAnchor).
     var anchor: SettingsAnchor?
     /// Re-selecting the same search result must reveal it again after scrolling away.
-    var revealID: UUID?
+    var requestID: UUID?
     /// Which layouts' parts to have (Device.settingsLayouts): a phone-width
     /// window's (one bar at the bottom, Desktop View), an iPad's (the tabs'
     /// place, the trackpad, shortcuts), or, on the iPhone Duo, both.
@@ -562,7 +564,7 @@ private struct SettingsDetail: View {
                     .frame(height: anchor == nil ? 0 : SettingsHeader.room)
                     .allowsHitTesting(false)
             }
-            .task(id: revealID) {
+            .task(id: requestID) {
                 lit = nil
                 guard let anchor else { return }
                 // Once the list has its rows: before that there is nowhere to scroll to.

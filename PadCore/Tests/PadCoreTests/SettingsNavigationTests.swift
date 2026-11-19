@@ -35,12 +35,12 @@ struct SettingsNavigationTests {
         var navigation = SettingsNavigation()
         for anchor in [SettingsAnchor.history, .blocking, .appIcon] {
             navigation.reveal(anchor)
-            let revealID = navigation.revealID
+            let requestID = navigation.requestID
             navigation.adapt(sidebar: false)
             navigation.adapt(sidebar: true)
             #expect(navigation.selection == .group(anchor.group))
             #expect(navigation.anchor == anchor)
-            #expect(navigation.revealID == revealID)
+            #expect(navigation.requestID == requestID)
         }
     }
 
@@ -67,11 +67,22 @@ struct SettingsNavigationTests {
     @Test func selectingTheSameResultCreatesANewRevealRequest() {
         var navigation = SettingsNavigation()
         navigation.reveal(.history)
-        let first = navigation.revealID
+        let first = navigation.requestID
         navigation.reveal(.history)
         #expect(navigation.anchor == .history)
-        #expect(navigation.revealID != first)
+        #expect(navigation.requestID != first)
+        let second = navigation.requestID
         navigation.show(.group(.privacy))
-        #expect(navigation.revealID == nil)
+        #expect(navigation.anchor == nil)
+        #expect(navigation.requestID != second)
+    }
+
+    @Test func reselectingACategoryStartsANewDetailNavigation() {
+        var navigation = SettingsNavigation()
+        navigation.show(.group(.privacy))
+        let first = navigation.requestID
+        navigation.show(.group(.privacy))
+        #expect(navigation.selection == .group(.privacy))
+        #expect(navigation.requestID != first)
     }
 }
