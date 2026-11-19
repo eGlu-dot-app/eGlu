@@ -144,6 +144,7 @@ private struct SettingsDetail: View {
     @AppStorage(Menus.controlShortcutsKey) private var controlShortcuts = false
     /// The part the address bar sent Settings to, for a moment after it opens there.
     @State private var lit: SettingsAnchor?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Apple Intelligence on this device, as Settings opens (Intelligence.swift).
     private let intelligence = IntelligenceStatus.current
 
@@ -510,14 +511,18 @@ private struct SettingsDetail: View {
                     .frame(height: anchor == nil ? 0 : SettingsHeader.room)
                     .allowsHitTesting(false)
             }
-            .task {
-                guard let anchor else { return }
+            .task(id: anchor) {
+                guard let anchor else { lit = nil; return }
                 // Once the list has its rows: before that there is nowhere to scroll to.
                 try? await Task.sleep(for: .milliseconds(120))
+                guard !Task.isCancelled else { return }
                 scroller.scrollTo(anchor, anchor: .top)
                 lit = anchor
                 try? await Task.sleep(for: .seconds(2))
-                withAnimation(.easeOut(duration: 0.6)) { lit = nil }
+                guard !Task.isCancelled else { return }
+                var fade = Transaction(animation: reduceMotion ? nil : .easeOut(duration: 0.2))
+                fade.disablesAnimations = reduceMotion
+                withTransaction(fade) { lit = nil }
             }
             }
     }
