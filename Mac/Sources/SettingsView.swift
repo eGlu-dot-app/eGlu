@@ -46,7 +46,7 @@ struct MacSettings: View {
             // Return reached its submit action only from some places in the
             // view tree; this one is AppKit's, kept in the list's own room.
             .safeAreaInset(edge: .top, spacing: 0) {
-                SidebarSearchField(text: $query) {
+                SidebarSearchField(text: $query, step: step) {
                     // Return goes to the first part found, as the command bar's does.
                     if let first = SettingsPane.search.find(query).first { show(first.anchor) }
                 }
@@ -127,6 +127,17 @@ struct MacSettings: View {
             case nil: break
             }
         }
+    }
+
+    /// Down and Up in the search field go to the next and the previous part
+    /// found, the field keeping the focus, as System Settings' does.
+    private func step(_ by: Int) {
+        let found = SettingsPane.search.find(query)
+        guard !found.isEmpty else { return }
+        let at = picked.flatMap { picked in found.firstIndex { $0.anchor == picked } }
+        let next = at.map { min(max($0 + by, 0), found.count - 1) } ?? (by > 0 ? 0 : found.count - 1)
+        picked = found[next].anchor
+        show(found[next].anchor)
     }
 
     /// A part the sidebar's search found: its pane, kept for Back as one
@@ -218,6 +229,7 @@ enum SettingsPane: String, CaseIterable {
 /// Escape clearing it as a search field's does.
 private struct SidebarSearchField: NSViewRepresentable {
     @Binding var text: String
+    let step: (Int) -> Void
     let submit: () -> Void
 
     func makeNSView(context: Context) -> NSSearchField {
@@ -256,8 +268,12 @@ private struct SidebarSearchField: NSViewRepresentable {
         }
 
         func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
-            guard selector == #selector(NSResponder.insertNewline(_:)) else { return false }
-            parent.submit()
+            switch selector {
+            case #selector(NSResponder.insertNewline(_:)): parent.submit()
+            case #selector(NSResponder.moveDown(_:)): parent.step(1)
+            case #selector(NSResponder.moveUp(_:)): parent.step(-1)
+            default: return false
+            }
             return true
         }
     }
