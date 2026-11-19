@@ -464,6 +464,10 @@ public enum ExtensionPreparation {
             }
             object["background"] = background
         }
+        // The shim runs once in a world (__egluShim), but every entry that
+        // lists it has the whole file read again in each frame it runs in.
+        // An entry an earlier one already gave it to does without.
+        var shimmed: [[String: Any]] = []
         if let scripts = object["content_scripts"] as? [Any] {
             object["content_scripts"] = scripts.map { entry -> Any in
                 guard var entry = entry as? [String: Any], let js = entry["js"] as? [Any], !js.isEmpty,
@@ -471,7 +475,9 @@ public enum ExtensionPreparation {
                       // and the page would see the shim there.
                       entry["world"] as? String != "MAIN"
                 else { return entry }
+                guard !shimmed.contains(where: { covers($0, entry) }) else { return entry }
                 entry["js"] = [shimFile] + js
+                shimmed.append(entry)
                 return entry
             }
         }
@@ -483,12 +489,33 @@ public enum ExtensionPreparation {
         // the extension's own entries, the shim runs once (__egluShim).
         if permissions.contains(where: { $0 as? String == "scripting" }),
            let hosts = object["host_permissions"] as? [Any], !hosts.isEmpty {
-            var scripts = object["content_scripts"] as? [Any] ?? []
-            scripts.append(["js": [shimFile], "matches": hosts, "run_at": "document_start"])
-            object["content_scripts"] = scripts
+            let entry: [String: Any] = ["js": [shimFile], "matches": hosts, "run_at": "document_start"]
+            if !shimmed.contains(where: { covers($0, entry) }) {
+                var scripts = object["content_scripts"] as? [Any] ?? []
+                scripts.append(entry)
+                object["content_scripts"] = scripts
+            }
         }
         let out = try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .withoutEscapingSlashes, .sortedKeys])
         return (out, added, worker)
+    }
+
+    /// Whether `earlier`, a content_scripts entry the shim goes first in,
+    /// has run it in `later`'s world in every frame `later` runs in, by the
+    /// time `later` runs: as early or earlier, in the same world, in every
+    /// frame and on every address of `later`'s, with nothing left out.
+    static func covers(_ earlier: [String: Any], _ later: [String: Any]) -> Bool {
+        let stages = ["document_start", "document_end", "document_idle"]
+        func stage(_ entry: [String: Any]) -> Int? { stages.firstIndex(of: entry["run_at"] as? String ?? "document_idle") }
+        func world(_ entry: [String: Any]) -> String { entry["world"] as? String ?? "ISOLATED" }
+        func flag(_ entry: [String: Any], _ key: String) -> Bool { entry[key] as? Bool ?? false }
+        func list(_ entry: [String: Any], _ key: String) -> [String] { (entry[key] as? [Any] ?? []).compactMap { $0 as? String } }
+        guard let first = stage(earlier), let then = stage(later), first <= then, world(earlier) == world(later),
+              ["exclude_matches", "include_globs", "exclude_globs"].allSatisfy({ list(earlier, $0).isEmpty }),
+              ["all_frames", "match_about_blank", "match_origin_as_fallback"].allSatisfy({ !flag(later, $0) || flag(earlier, $0) })
+        else { return false }
+        let reached = Set(list(earlier, "matches")), wanted = list(later, "matches")
+        return !wanted.isEmpty && (reached.contains("<all_urls>") || wanted.allSatisfy(reached.contains))
     }
 
     /// An extension page with the shim first: right after its head's
