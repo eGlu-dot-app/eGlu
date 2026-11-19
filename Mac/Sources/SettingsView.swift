@@ -350,17 +350,22 @@ private struct ScrollHere: NSViewRepresentable {
         // Once the form is laid out, with the section in it.
         DispatchQueue.main.async {
             SettingsReveal.shared.scrolled()
-            guard let scroller = view.enclosingScrollView, let document = scroller.documentView else {
+            guard let scroller = view.enclosingScrollView, let document = scroller.documentView,
+                  document.isFlipped else {
                 view.scrollToVisible(view.bounds)
                 return
             }
-            // The form runs on under the toolbar: what is there is not in view.
-            let gap = 12 + max(scroller.contentView.contentInsets.top, scroller.contentInsets.top)
-            let room = scroller.contentView.bounds.height - 12
-            var target = view.convert(view.bounds, to: document)
-            target.origin.y = document.isFlipped ? target.minY - gap : target.maxY + gap - room
-            target.size.height = room
-            document.scrollToVisible(target)
+            // The form's own clip view only: scrolling a rect to visible
+            // asked the views around the form to scroll too, the sidebar's
+            // list among them. The form runs on under the toolbar, so what
+            // is there is not in view.
+            let clip = scroller.contentView
+            let top = clip.contentInsets.top
+            let header = view.convert(view.bounds, to: document)
+            let lowest = max(-top, document.frame.height - clip.bounds.height + clip.contentInsets.bottom)
+            let y = min(max(header.minY - 12 - top, -top), lowest)
+            clip.scroll(to: NSPoint(x: clip.bounds.origin.x, y: y))
+            scroller.reflectScrolledClipView(clip)
         }
     }
 }
