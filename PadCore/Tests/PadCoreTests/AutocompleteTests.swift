@@ -204,6 +204,49 @@ final class AutocompleteTests: XCTestCase {
 
     // MARK: Everything listed
 
+    func testPaletteSectionBoundsAndTypedBypass() {
+        let listing = PaletteListing()
+        XCTAssertTrue(listing.rows([], listing: true).isEmpty)
+        for count in [0, PaletteListing.sectionLimit - 1, PaletteListing.sectionLimit, PaletteListing.sectionLimit + 1] {
+            let all = Autocomplete.Index((0..<count).map { bookmark("Bookmark \($0)", "https://example.com/\($0)") }).everything
+            let rows = listing.rows(all, listing: true)
+            XCTAssertEqual(rows.count, min(count, PaletteListing.sectionLimit) + (count > PaletteListing.sectionLimit ? 1 : 0))
+            if count > PaletteListing.sectionLimit {
+                XCTAssertEqual(rows.last, .showAll(section: .bookmarks, total: count, source: .bookmark))
+            }
+            XCTAssertEqual(listing.rows(all, listing: false), all.map(PaletteListing.Row.suggestion))
+        }
+    }
+
+    func testPaletteExpansionKeepsSectionsIndependentAndIDsStable() throws {
+        let tabs = (0..<8).map { tab("Tab \($0)", "https://tabs.example/\($0)", pinned: $0.isMultiple(of: 2)) }
+        let bookmarks = (0..<9).map { bookmark("Bookmark \($0)", "https://bookmarks.example/\($0)") }
+        let all = Autocomplete.Index(tabs + bookmarks).everything
+        var listing = PaletteListing()
+        let before = listing.rows(all, listing: true).map(\.suggestion)
+        XCTAssertEqual(before.prefix(5).map(\.id), all.prefix(5).map(\.id))
+        XCTAssertEqual(before[5].action, .showAll(.tabs))
+        XCTAssertEqual(before[11].action, .showAll(.bookmarks))
+        let selected = try XCTUnwrap(listing.expand(.bookmarks, in: all))
+        XCTAssertEqual(selected, all[8 + PaletteListing.sectionLimit].id)
+        let after = listing.rows(all, listing: true).map(\.suggestion)
+        XCTAssertEqual(Array(after.prefix(6)), Array(before.prefix(6)))
+        XCTAssertEqual(Array(after.dropFirst(6)), Array(all.dropFirst(8)))
+        XCTAssertEqual(after.firstIndex { $0.id == selected }, 6 + PaletteListing.sectionLimit)
+        XCTAssertEqual(listing.rows(all, listing: false).map(\.suggestion), all)
+        XCTAssertEqual(PaletteListing().rows(all, listing: true).map(\.suggestion), before)
+    }
+
+    func testPaletteGroupsPinnedTabsInFirstSectionOrder() {
+        let candidates = [bookmark("First", "https://example.com/first"),
+                          tab("Pinned", "https://example.com/pinned", pinned: true),
+                          tab("Tab", "https://example.com/tab"),
+                          bookmark("Last", "https://example.com/last")]
+        let all = Autocomplete.Index(candidates).everything
+        XCTAssertEqual(PaletteListing().rows(all, listing: true).map(\.suggestion.id),
+                       [all[0].id, all[3].id, all[1].id, all[2].id])
+    }
+
     /// Asked for everything, the field lists all of it before anything is
     /// typed, in the order given; what is typed then finds every kind with
     /// none held back, one letter enough.

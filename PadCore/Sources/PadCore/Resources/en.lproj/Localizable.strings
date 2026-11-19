@@ -1,3 +1,13 @@
+"Show All (%ld)" = "Show All (%ld)";
+"Show all %ld open tabs" = "Show all %ld open tabs";
+"Show all %ld spaces" = "Show all %ld spaces";
+"Show all %ld commands" = "Show all %ld commands";
+"Show all %ld settings" = "Show all %ld settings";
+"Show all %ld tabs from other devices" = "Show all %ld tabs from other devices";
+"Show all %ld bookmarks" = "Show all %ld bookmarks";
+"Show all %ld history entries" = "Show all %ld history entries";
+"Show all %ld local servers" = "Show all %ld local servers";
+"Show all %ld searches" = "Show all %ld searches";
 "%1$@ %2$@" = "%1$@ %2$@";
 "%1$@ · %2$@" = "%1$@ · %2$@";
 "%1$@%2$@" = "%1$@%2$@";

@@ -56,6 +56,7 @@ public struct Suggestion: Identifiable, Equatable, Sendable {
 
     /// What choosing the row does.
     public enum Action: Equatable, Sendable {
+        case showAll(PaletteListing.Section)
         /// Goes to the tab, wherever it is.
         case tab(UUID)
         case open(URL)
@@ -98,6 +99,86 @@ public struct Suggestion: Identifiable, Equatable, Sendable {
         self.url = url
         self.symbol = symbol
         self.byMeaning = byMeaning
+    }
+}
+
+public struct PaletteListing: Sendable {
+    public static let sectionLimit = 5
+
+    public enum Section: String, Hashable, Sendable {
+        case tabs, spaces, commands, settings, devices, bookmarks, history, servers, searches
+
+        public init(_ source: Suggestion.Source) {
+            switch source {
+            case .tab, .pinnedTab: self = .tabs
+            case .space: self = .spaces
+            case .command: self = .commands
+            case .setting: self = .settings
+            case .device: self = .devices
+            case .bookmark: self = .bookmarks
+            case .history: self = .history
+            case .localServer: self = .servers
+            case .searched, .engine, .intelligence: self = .searches
+            }
+        }
+
+        public func accessibilityLabel(total: Int) -> String {
+            let key: String
+            switch self {
+            case .tabs: key = "Show all %ld open tabs"
+            case .spaces: key = "Show all %ld spaces"
+            case .commands: key = "Show all %ld commands"
+            case .settings: key = "Show all %ld settings"
+            case .devices: key = "Show all %ld tabs from other devices"
+            case .bookmarks: key = "Show all %ld bookmarks"
+            case .history: key = "Show all %ld history entries"
+            case .servers: key = "Show all %ld local servers"
+            case .searches: key = "Show all %ld searches"
+            }
+            return String.localizedStringWithFormat(BrowserText.localized(key), total)
+        }
+    }
+
+    public enum Row: Equatable, Sendable {
+        case suggestion(Suggestion)
+        case showAll(section: Section, total: Int, source: Suggestion.Source)
+
+        public var suggestion: Suggestion {
+            switch self {
+            case .suggestion(let row): return row
+            case .showAll(let section, let total, let source):
+                return Suggestion(id: "show-all-\(section.rawValue)", source: source, action: .showAll(section),
+                                  phrase: String.localizedStringWithFormat(BrowserText.localized("Show All (%ld)"), total),
+                                  typed: [], detail: section.accessibilityLabel(total: total))
+            }
+        }
+    }
+
+    public var expanded: Set<Section> = []
+
+    public init() {}
+
+    public func rows(_ suggestions: [Suggestion], listing: Bool) -> [Row] {
+        guard listing else { return suggestions.map(Row.suggestion) }
+        var order: [Section] = []
+        var groups: [Section: [Suggestion]] = [:]
+        for row in suggestions {
+            let section = Section(row.source)
+            if groups[section] == nil { order.append(section) }
+            groups[section, default: []].append(row)
+        }
+        return order.flatMap { section -> [Row] in
+            let group = groups[section] ?? []
+            guard !expanded.contains(section), group.count > Self.sectionLimit else { return group.map(Row.suggestion) }
+            return group.prefix(Self.sectionLimit).map(Row.suggestion)
+                + [.showAll(section: section, total: group.count, source: group[0].source)]
+        }
+    }
+
+    @discardableResult
+    public mutating func expand(_ section: Section, in suggestions: [Suggestion]) -> String? {
+        expanded.insert(section)
+        return suggestions.filter { Section($0.source) == section }.dropFirst(Self.sectionLimit).first?.id
     }
 }
 

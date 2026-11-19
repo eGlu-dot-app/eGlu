@@ -2608,10 +2608,12 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         case .go(let text):
             // Read before typing ends, which lets the rows go.
             let chosen = model.suggestions.selected
+            if let chosen, model.suggestions.expand(chosen) { return }
             let made = madeForBar
             model.editingAddress = false
             if let chosen { take(chosen, leaving: made) } else { go(text) }
         case .suggestion(let row):
+            if model.suggestions.expand(row) { return }
             let made = madeForBar
             model.editingAddress = false
             take(row, leaving: made)
@@ -3482,6 +3484,7 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
     /// is the new tab the bar was opened for, if it was.
     private func take(_ row: Suggestion, leaving made: MadeTab? = nil) {
         switch row.action {
+        case .showAll: return
         case .tab(let tab):
             refreshChrome()
             act(.select(tab))
