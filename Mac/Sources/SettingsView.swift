@@ -43,7 +43,6 @@ struct MacSettings: View {
             // A new search starts with nothing chosen, so its first click goes there.
             .onChange(of: query) { picked = nil }
             .listStyle(.sidebar)
-            .searchable(text: $query, placement: .sidebar, prompt: Text("Search Settings"))
             // One width, as System Settings' sidebar has. The Settings window
             // goes by neither column width at first (it gave the sidebar 144
             // points); a frame it can't go under, it does.
@@ -89,6 +88,10 @@ struct MacSettings: View {
                 }
             }
         }
+        // On the split view, as Apple has it: on the sidebar's list, each
+        // pane chosen while searching moved the list a little further up
+        // under the field.
+        .searchable(text: $query, placement: .sidebar, prompt: Text("Search Settings"))
         // Return goes to the first part found, as the command bar's does: on
         // the split view, which holds the sidebar's search field (on the
         // sidebar's list, Return never reached it).
