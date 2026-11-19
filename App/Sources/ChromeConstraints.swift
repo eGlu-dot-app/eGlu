@@ -1,4 +1,42 @@
+import SwiftUI
 import UIKit
+
+/// The bar wraps around system window controls without narrowing the page below it.
+@MainActor
+final class BarHost<Content: View>: UIViewController {
+    let content: UIHostingController<Content>
+
+    init(_ root: Content) {
+        content = UIHostingController(rootView: root)
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .clear
+        // UIKit owns the insets, including the corners; the keyboard must not move the bar.
+        content.safeAreaRegions = []
+        content.view.backgroundColor = .clear
+        addChild(content)
+        content.view.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(content.view)
+        let horizontal: UILayoutGuide
+        if #available(iOS 26.0, *) {
+            horizontal = view.layoutGuide(for: .safeArea(cornerAdaptation: .horizontal))
+        } else {
+            horizontal = view.safeAreaLayoutGuide
+        }
+        NSLayoutConstraint.activate([
+            content.view.topAnchor.constraint(equalTo: view.topAnchor),
+            content.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            content.view.leadingAnchor.constraint(equalTo: horizontal.leadingAnchor),
+            content.view.trailingAnchor.constraint(equalTo: horizontal.trailingAnchor),
+        ])
+        content.didMove(toParent: self)
+    }
+}
 
 /// The constraints a Browser moves its chrome by, between its layouts
 /// (Browser.show(_:)) and as its page turns into a card and back

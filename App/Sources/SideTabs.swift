@@ -1037,6 +1037,8 @@ struct SideSpaces: View {
                     .padding(.horizontal, 3)
                     .background { spaceGlass(compact: true) }
                 }
+                // Keep one whole touch cell visible when the bar also makes room for window controls.
+                .frame(minWidth: Side.control + 6)
                 // In the row, a gap from the plain buttons either side, which are 2 points from each other.
                 .padding(.horizontal, inRow ? Side.gap - 2 : 0)
             }

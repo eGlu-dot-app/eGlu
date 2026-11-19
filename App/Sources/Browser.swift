@@ -287,7 +287,7 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
     private var dragRatio: Double?
     private var dragSnapped = false
     private let evenTap = UIImpactFeedbackGenerator(style: .light)
-    private var topBar: UIHostingController<TopBar>?
+    private var topBar: BarHost<TopBar>?
     /// The tabs down the window's side, in place of the row along the top
     /// and the address bar (Settings › Tabs).
     private var sideTabs: UIHostingController<SideTabs>?
@@ -341,7 +341,7 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
     private var afterTabs: BarAction?
     /// Behind the phone bar: the page through it, blurred more the lower it is (BarBackdrop).
     private let barBackdrop = BarBackdrop()
-    private var addressBar: UIHostingController<AddressBar>?
+    private var addressBar: BarHost<AddressBar>?
     /// The space's bookmarks under the bars, where the tabs are along the top (BookmarksStrip).
     private var bookmarksStrip: UIHostingController<BookmarksStrip>?
     private var bannerBar: UIHostingController<BannerBar>?
@@ -655,12 +655,12 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         session.persistence.$state.sink { [weak saveStatus] state in
             saveStatus?.view.isHidden = state.failure == nil
         }.store(in: &subscriptions)
-        let top = embed(TopBar(session: session, window: model) { [weak self] in self?.act($0) })
+        let top = embedBar(TopBar(session: session, window: model) { [weak self] in self?.act($0) })
         topBarHeight = top.view.heightAnchor.constraint(equalToConstant: Metrics.bar)
         topBarHeight?.isActive = true
         topBar = top
 
-        let address = embed(AddressBar(session: session, window: model) { [weak self] in self?.act($0) })
+        let address = embedBar(AddressBar(session: session, window: model) { [weak self] in self?.act($0) })
         addressBarHeight = address.view.heightAnchor.constraint(equalToConstant: Metrics.bar)
         addressBarHeight?.isActive = true
         addressBar = address
@@ -916,6 +916,14 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
             if shadow.frame != frame { shadow.frame = frame }
             shadow.layer.shadowPath = outline.cgPath
         }
+    }
+
+    private func embedBar<V: View>(_ root: V) -> BarHost<V> {
+        let host = BarHost(root)
+        addChild(host)
+        stack.addArrangedSubview(host.view)
+        host.didMove(toParent: self)
+        return host
     }
 
     private func embed<V: View>(_ root: V, inStack: Bool = true) -> UIHostingController<V> {
@@ -2752,7 +2760,7 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
             anchor = view.convert(item.anchor, from: side)
         case .top:
             guard let top = topBar?.view, !top.isHidden else { hideTabHover(); return }
-            anchor = view.convert(item.anchor, from: top)
+            anchor = view.convert(item.anchor, from: topBar?.content.view)
         case .window:
             anchor = view.convert(item.anchor, from: nil)
         }

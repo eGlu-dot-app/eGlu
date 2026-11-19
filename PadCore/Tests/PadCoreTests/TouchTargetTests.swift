@@ -50,6 +50,21 @@ struct TouchTargetTests {
         #expect(top.contains(".frame(maxWidth: max(width / 4, Side.control))"))
         let side = try source("App/Sources/SideTabs.swift")
         #expect(side.contains("ScrollView(.horizontal) { spaces(compact: true, glass: false) }"))
+        #expect(side.contains(".frame(minWidth: Side.control + 6)"))
         #expect(side.contains("reader.scrollTo(space, anchor: .center)"))
+    }
+
+    @Test func customNavigationBarsRespectWindowControlCorners() throws {
+        let browser = try source("App/Sources/Browser.swift")
+        for name in ["TopBar", "AddressBar"] {
+            #expect(browser.contains("embedBar(\(name)("))
+        }
+        let constraints = try source("App/Sources/ChromeConstraints.swift")
+        #expect(constraints.contains(".safeArea(cornerAdaptation: .horizontal)"))
+        #expect(constraints.contains("horizontal = view.safeAreaLayoutGuide"))
+        #expect(constraints.contains("content.safeAreaRegions = []"))
+        #expect(constraints.contains("content.view.leadingAnchor.constraint(equalTo: horizontal.leadingAnchor)"))
+        #expect(constraints.contains("content.view.trailingAnchor.constraint(equalTo: horizontal.trailingAnchor)"))
+        #expect(browser.contains("view.convert(item.anchor, from: topBar?.content.view)"))
     }
 }
