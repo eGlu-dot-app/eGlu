@@ -5,11 +5,12 @@ public struct SettingsNavigation: Equatable, Sendable {
     public enum Page: Hashable, Sendable {
         case group(SettingsGroup)
         case acknowledgements
+        case spaces, space(UUID), pinnedTabs, writingRules, ownMenuSites, filterLists
     }
 
     public var path: [Page] = [] {
         didSet {
-            if path != oldValue {
+            if path.first != oldValue.first {
                 anchor = nil
                 requestID = nil
             }
@@ -17,7 +18,13 @@ public struct SettingsNavigation: Equatable, Sendable {
     }
     public private(set) var anchor: SettingsAnchor?
     public private(set) var requestID: UUID?
-    public var selection: Page? { path.last }
+    public var selection: Page? { path.first }
+
+    /// The wide detail stack omits the category shown at its root.
+    public var detailPath: [Page] {
+        get { Array(path.dropFirst()) }
+        set { path = Array(path.prefix(1)) + newValue }
+    }
 
     public init() {}
 

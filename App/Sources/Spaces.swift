@@ -171,9 +171,7 @@ struct SpaceList: View {
         List {
             Section {
                 ForEach(session.workspace.spaces) { space in
-                    NavigationLink {
-                        SpaceEditor(session: session, spaceID: space.id)
-                    } label: {
+                    NavigationLink(value: SettingsNavigation.Page.space(space.id)) {
                         HStack(spacing: 12) {
                             Image(systemName: space.symbol)
                                 .font(.system(size: 13, weight: .semibold))

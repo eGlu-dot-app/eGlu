@@ -57,13 +57,12 @@ struct SettingsView: View {
                 .autocorrectionDisabled()
                 .toolbar(removing: .sidebarToggle)
         } detail: {
-            NavigationStack {
+            NavigationStack(path: $navigation.detailPath) {
                 page(navigation.selection ?? .group(.general))
+                    .navigationDestination(for: SettingsNavigation.Page.self) { page($0) }
             }
         }
         .navigationSplitViewStyle(.balanced)
-        // The split owns pushed detail controllers; a new destination must dismiss them.
-        .id(navigation.requestID)
     }
 
     private var stack: some View {
@@ -131,6 +130,18 @@ struct SettingsView: View {
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) { Button("Done", action: done) }
                 }
+        case .spaces:
+            SpaceList(session: session)
+        case .space(let id):
+            SpaceEditor(session: session, spaceID: id)
+        case .pinnedTabs:
+            PinnedTabList(session: session)
+        case .writingRules:
+            WritingRulesPage().navigationTitle("Rules")
+        case .ownMenuSites:
+            OwnMenuSites(session: session)
+        case .filterLists:
+            FilterListsView(session: session)
         }
     }
 }
@@ -312,9 +323,7 @@ private struct SettingsDetail: View {
 
                 if group == .spaces {
                     Section {
-                        NavigationLink {
-                            SpaceList(session: session)
-                        } label: {
+                        NavigationLink(value: SettingsNavigation.Page.spaces) {
                             HStack {
                                 Text("Spaces")
                                 Spacer()
@@ -323,9 +332,7 @@ private struct SettingsDetail: View {
                                     .monospacedDigit()
                             }
                         }
-                        NavigationLink {
-                            PinnedTabList(session: session)
-                        } label: {
+                        NavigationLink(value: SettingsNavigation.Page.pinnedTabs) {
                             HStack {
                                 Text("Pinned Tabs")
                                 Spacer()
@@ -677,10 +684,7 @@ private struct WritingSection: View {
             }
             Section {
                 // A page of their own, a step below, where they can be searched: there are many.
-                NavigationLink {
-                    WritingRulesPage()
-                        .navigationTitle("Rules")
-                } label: {
+                NavigationLink(value: SettingsNavigation.Page.writingRules) {
                     HStack {
                         Text("Rules")
                         Spacer()
@@ -746,9 +750,7 @@ private struct LinkMenuSection: View {
         let kept = OwnMenus.builtIn.filter { session.preferences.keepsOwnMenus(onHost: $0.host) }.count
             + session.preferences.addedOwnMenuSites.count
         Section {
-            NavigationLink {
-                OwnMenuSites(session: session)
-            } label: {
+            NavigationLink(value: SettingsNavigation.Page.ownMenuSites) {
                 LabeledContent("Sites with their own menus") {
                     Text(kept.formatted(.number)).monospacedDigit()
                 }
@@ -837,9 +839,7 @@ private struct BlockingSection: View {
         Section {
             Toggle("Block ads and trackers", isOn: $session.preferences.blocksContent)
             if session.preferences.blocksContent {
-                NavigationLink {
-                    FilterListsView(session: session)
-                } label: {
+                NavigationLink(value: SettingsNavigation.Page.filterLists) {
                     LabeledContent("Filter lists") {
                         let on = session.preferences.filterLists(languages: ContentBlocker.languages, region: ContentBlocker.region).count
                         Text("\(on) on").monospacedDigit()
