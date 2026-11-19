@@ -18,25 +18,30 @@ struct MacSettings: View {
     /// What the sidebar's search field has: while it has something, the
     /// sidebar lists the parts of Settings it finds instead of the panes.
     @State private var query = ""
+    /// The part of Settings last chosen from what the search found.
+    @State private var picked: SettingsAnchor?
 
     var body: some View {
         NavigationSplitView {
-            Group {
+            // One list for the panes and for what a search finds: a list put
+            // in its place lost the room kept under the search field, and its
+            // rows went up under it.
+            List(selection: row) {
                 if query.isEmpty {
-                    List(selection: chosen) {
-                        ForEach(SettingsPane.sidebar, id: \.self) { item in
-                            Label {
-                                Text(item.title)
-                            } icon: {
-                                SymbolTile(symbol: item.symbol, color: item.tint)
-                            }
-                            .tag(item)
+                    ForEach(SettingsPane.sidebar, id: \.self) { item in
+                        Label {
+                            Text(item.title)
+                        } icon: {
+                            SymbolTile(symbol: item.symbol, color: item.tint)
                         }
+                        .tag(SidebarRow.pane(item))
                     }
                 } else {
-                    SettingsResults(matches: SettingsPane.search.find(query), query: query, choose: show)
+                    SettingsResults(matches: SettingsPane.search.find(query), query: query)
                 }
             }
+            // A new search starts with nothing chosen, so its first click goes there.
+            .onChange(of: query) { picked = nil }
             .listStyle(.sidebar)
             .searchable(text: $query, placement: .sidebar, prompt: Text("Search Settings"))
             // One width, as System Settings' sidebar has. The Settings window
@@ -102,6 +107,21 @@ struct MacSettings: View {
         } set: { next in
             guard let next, next != pane else { return }
             go(to: next)
+        }
+    }
+
+    /// The sidebar's row chosen: the pane, or while searching, a part found.
+    private var row: Binding<SidebarRow?> {
+        Binding {
+            query.isEmpty ? .pane(pane.above ?? pane) : picked.map(SidebarRow.found)
+        } set: { next in
+            switch next {
+            case .pane(let item): chosen.wrappedValue = item
+            case .found(let anchor):
+                picked = anchor
+                show(anchor)
+            case nil: break
+            }
         }
     }
 
@@ -190,37 +210,34 @@ enum SettingsPane: String, CaseIterable {
 /// The parts of Settings the sidebar's search field finds, each with the
 /// pane it is in; choosing one, by clicking it or with the arrow keys, goes
 /// there, as System Settings' search does.
+private enum SidebarRow: Hashable {
+    case pane(SettingsPane)
+    case found(SettingsAnchor)
+}
+
 private struct SettingsResults: View {
     let matches: [SettingsSearch.Destination]
     let query: String
-    let choose: (SettingsAnchor) -> Void
-    @State private var picked: SettingsAnchor?
 
     var body: some View {
         if matches.isEmpty {
             ContentUnavailableView.search(text: query)
+                .selectionDisabled()
         } else {
-            List(selection: Binding(get: { picked }, set: { next in
-                picked = next
-                if let next { choose(next) }
-            })) {
-                ForEach(matches, id: \.anchor) { destination in
-                    let pane = SettingsPane(destination.anchor) ?? .general
-                    Label {
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(destination.title)
-                            Text(pane.title)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    } icon: {
-                        SymbolTile(symbol: pane.symbol, color: pane.tint)
+            ForEach(matches, id: \.anchor) { destination in
+                let pane = SettingsPane(destination.anchor) ?? .general
+                Label {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(destination.title)
+                        Text(pane.title)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
-                    .tag(destination.anchor)
+                } icon: {
+                    SymbolTile(symbol: pane.symbol, color: pane.tint)
                 }
+                .tag(SidebarRow.found(destination.anchor))
             }
-            // A new search starts with nothing chosen, so its first click goes there.
-            .onChange(of: query) { picked = nil }
         }
     }
 }
