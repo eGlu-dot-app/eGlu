@@ -39,10 +39,6 @@ struct MacSettings: View {
             }
             .listStyle(.sidebar)
             .searchable(text: $query, placement: .sidebar, prompt: Text("Search Settings"))
-            // Return goes to the first part found, as the command bar's does.
-            .onSubmit(of: .search) {
-                if let first = SettingsPane.search.find(query).first { show(first.anchor) }
-            }
             // One width, as System Settings' sidebar has. The Settings window
             // goes by neither column width at first (it gave the sidebar 144
             // points); a frame it can't go under, it does.
@@ -87,6 +83,12 @@ struct MacSettings: View {
                     .controlGroupStyle(.navigation)
                 }
             }
+        }
+        // Return goes to the first part found, as the command bar's does: on
+        // the split view, which holds the sidebar's search field (on the
+        // sidebar's list, Return never reached it).
+        .onSubmit(of: .search) {
+            if let first = SettingsPane.search.find(query).first { show(first.anchor) }
         }
         .frame(minWidth: 700, minHeight: 480)
         .background(UnifiedToolbar())
@@ -335,8 +337,9 @@ private struct ScrollHere: NSViewRepresentable {
                 view.scrollToVisible(view.bounds)
                 return
             }
-            let gap: CGFloat = 12
-            let room = scroller.contentView.bounds.height - gap
+            // The form runs on under the toolbar: what is there is not in view.
+            let gap = 12 + max(scroller.contentView.contentInsets.top, scroller.contentInsets.top)
+            let room = scroller.contentView.bounds.height - 12
             var target = view.convert(view.bounds, to: document)
             target.origin.y = document.isFlipped ? target.minY - gap : target.maxY + gap - room
             target.size.height = room
