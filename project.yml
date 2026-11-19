@@ -167,6 +167,9 @@ targets:
         # Everything on the main actor unless it says otherwise: what works
         # off it (the snapshots' files, the share sheet's file) says so.
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+      configs:
+        Release:
+          EXCLUDED_SOURCE_FILE_NAMES: "$(inherited) SummaryFixture.html"
   # eGlu's tile in the Dock while eGlu isn't open, a plug-in the Dock loads
   # from both Mac apps (Mac/DockTile/DockTile.swift): the icon chosen in
   # Settings › General › App Icon.

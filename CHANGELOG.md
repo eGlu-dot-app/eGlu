@@ -4,6 +4,7 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+- The bundled page used by the summary UI tests is left out of Release builds.
 - On iPhone and iPad, Summarize Page opens a summary over the page, written as Apple Intelligence reads it on the device. Copy its words or continue to Handoff; nothing is sent anywhere. It is offered only with Handoff turned on and Apple Intelligence available, never on protected sign-in pages. The page menu, command bar and ⌃⌥U open it.
 
 - On iPhone with iOS 27, the pinned tabs' list opens out of the pinned tab's button as the system's menus open out of theirs: the button's glass grows into the list and, put away, goes back into the button. The system places the list and draws its card, without the dimmed page behind it; held open, it still follows the finger from row to row. Before iOS 27 it is as it was.

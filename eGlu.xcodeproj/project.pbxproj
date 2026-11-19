@@ -2100,6 +2100,7 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				ENABLE_PREVIEWS = NO;
+				EXCLUDED_SOURCE_FILE_NAMES = "$(inherited) SummaryFixture.html";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = App/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
