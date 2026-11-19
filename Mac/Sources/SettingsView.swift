@@ -38,13 +38,16 @@ struct MacSettings: View {
                     SettingsResults(matches: SettingsPane.search.find(query), query: query)
                 }
             }
+            // A list of its own for each search, starting at its top: one list
+            // kept for search after search came a little further up under the
+            // field with each, its rows changed under where it was scrolled.
+            // The field, outside it, keeps the focus.
+            .id(query)
             // A new search starts with nothing chosen, so its first click goes there.
             .onChange(of: query) { picked = nil }
-            // The field over the sidebar's list, as System Settings has it.
-            // SwiftUI's sidebar search field, while it had the focus, let the
-            // list go up under it a little more with each part chosen, and
-            // Return reached its submit action only from some places in the
-            // view tree; this one is AppKit's, kept in the list's own room.
+            // The field over the sidebar's list, as System Settings has it:
+            // AppKit's, as Return reached SwiftUI's sidebar search field's
+            // submit action only from some places in the view tree.
             .safeAreaInset(edge: .top, spacing: 0) {
                 SidebarSearchField(text: $query, step: step) {
                     // Return goes to the first part found, as the command bar's does.
