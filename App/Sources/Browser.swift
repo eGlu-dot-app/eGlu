@@ -546,13 +546,16 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         if !Session.shared.needsWelcome { page?.reviewPendingDialog() }
         guard connected, Session.shared.needsWelcome, Browser.welcomeOwner == nil,
               viewIfLoaded?.window?.windowScene?.activationState == .foregroundActive,
-              presentedViewController == nil else { return }
+              presentedViewController == nil,
+              let progress = Session.shared.resumeWelcome(in: model.spaceID),
+              let spaceID = progress.spaceID else { return }
         Browser.welcomeOwner = self
-        let welcome = UIHostingController(rootView: Welcome(session: Session.shared, spaceID: model.spaceID) { [weak self] in
+        let welcome = UIHostingController(rootView: Welcome(session: Session.shared, spaceID: spaceID,
+                                                           step: progress.step) { [weak self] reason in
             guard let self, Browser.welcomeOwner === self else { return }
             Task { [weak self] in
                 guard let self else { return }
-                guard await Session.shared.finishWelcome(), Browser.welcomeOwner === self else { return }
+                guard await Session.shared.finishWelcome(reason), Browser.welcomeOwner === self else { return }
                 self.dismiss(animated: true) { [weak self] in
                     guard let self else { return }
                     if Browser.welcomeOwner === self { Browser.welcomeOwner = nil }
@@ -575,7 +578,7 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
     func askAboutWritingIfNeeded() {
         guard connected, presentedViewController == nil,
               WritingAsk.decision(welcomePending: Session.shared.needsWelcome,
-                                  asked: WritingAsked.wasAsked) == .sheet,
+                                  asked: WritingAsked.wasAsked, setupSkipped: Session.shared.skippedSetup) == .sheet,
               WritingChecker.canCheck,
               Browser.welcomeOwner === self || Browser.welcomeOwner == nil,
               viewIfLoaded?.window?.windowScene?.activationState == .foregroundActive else { return }
