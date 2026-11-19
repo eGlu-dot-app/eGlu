@@ -51,3 +51,22 @@ public struct SyncStatus: Equatable, Sendable {
         phase = .completed
     }
 }
+
+/// Announce meaningful results, not every progress tick or a waiting state
+/// repeated by account/network polling. A newly enabled session starts fresh.
+public struct SyncResultAnnouncements: Sendable {
+    private var lastResult: SyncStatus.Phase?
+
+    public init() {}
+
+    public mutating func accepts(_ phase: SyncStatus.Phase) -> Bool {
+        switch phase {
+        case .off: lastResult = nil; return false
+        case .checkingAccount, .syncing, .retrying, .waiting(.pendingChanges), .waiting(.confirmation): return false
+        case .completed, .waiting:
+            guard phase != lastResult else { return false }
+            lastResult = phase
+            return true
+        }
+    }
+}

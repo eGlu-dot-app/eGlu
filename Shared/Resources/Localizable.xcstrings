@@ -1,6 +1,27 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Saving Setup…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Saving Setup…" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "설정 저장 중…" } }
+      }
+    },
+    "Setup hasn't finished. Your choices are still here. Retry saving to finish." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Setup hasn't finished. Your choices are still here. Retry saving to finish." } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "설정이 완료되지 않았습니다. 선택한 내용은 그대로 있습니다. 저장을 다시 시도해 완료하세요." } }
+      }
+    },
+    "Opened from search" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Opened from search" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "검색에서 연 항목" } }
+      }
+    },
     "%@ · %lld of %lld" : {
       "comment" : "Current setup step, step number, and total offered steps.",
       "extractionState" : "manual",
