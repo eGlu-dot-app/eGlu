@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 
 @MainActor
 final class PageSummaryUITests: XCTestCase {
@@ -64,26 +65,29 @@ final class PageSummaryUITests: XCTestCase {
         XCTAssertFalse(app.buttons["summary-copy"].isEnabled)
     }
 
-    func testCopySummaryCanBePasted() {
+    func testCopySummaryCanBePasted() async {
+        let monitor = addUIInterruptionMonitor(withDescription: "Paste permission") { alert in
+            let allow = alert.buttons["Allow Paste"]
+            guard allow.exists else { return false }
+            allow.tap()
+            return true
+        }
+        defer { removeUIInterruptionMonitor(monitor) }
+        UIPasteboard.general.string = nil
         let app = launch()
         openSummary(app)
         let copy = app.buttons["summary-copy"]
-        expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: copy)
-        waitForExpectations(timeout: 15)
+        let ready = expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: copy)
+        await fulfillment(of: [ready], timeout: 15)
         copy.tap()
         XCTAssertEqual(copy.label, "Copied")
         XCTAssertTrue(app.buttons["summary-handoff"].exists)
-        app.buttons["summary-close"].tap()
-        let address = app.buttons["page-address"].firstMatch
-        if address.exists { address.tap() } else { app.buttons["Address"].firstMatch.tap() }
-        let field = app.textFields.firstMatch
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
-        field.typeText(XCUIKeyboardKey.delete.rawValue)
-        field.press(forDuration: 1)
-        let paste = app.descendants(matching: .any).matching(identifier: "Paste").firstMatch
-        XCTAssertTrue(paste.waitForExistence(timeout: 5))
-        paste.tap()
-        XCTAssertEqual(field.value as? String, summary)
+        // Reading can wait for permission; keep the test free to answer it.
+        let reading = Task.detached { UIPasteboard.general.string }
+        let allow = XCUIApplication(bundleIdentifier: "com.apple.springboard").buttons["Allow Paste"]
+        if allow.waitForExistence(timeout: 5) { app.tap() }
+        let pasted = await reading.value
+        XCTAssertEqual(pasted, summary)
     }
 
     func testSummariesStayOptIn() {
