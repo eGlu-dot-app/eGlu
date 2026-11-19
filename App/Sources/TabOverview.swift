@@ -187,31 +187,41 @@ final class TabOverviewController: UIViewController, UICollectionViewDelegate, U
         let safe = view.safeAreaInsets
         let bounds = view.bounds.inset(by: UIEdgeInsets(top: 0, left: safe.left, bottom: 0, right: safe.right))
         let bottom = visibleBottom(in: bounds)
+        let docked = !dock.isHidden
+        // A landscape keyboard cannot fit a heading, filter, dock and footer
+        // stacked vertically. Keep the filter first and share one tools row.
+        let compact = bottom < bounds.maxY - 1 &&
+            bottom < Self.headerHeight + Self.searchHeight + Self.barHeight + (docked ? PinnedDock.height + 20 : 8) + 80
+        header.isHidden = compact
         header.frame = CGRect(x: bounds.minX, y: 0, width: bounds.width, height: Self.headerHeight)
         let face = heading.view.intrinsicContentSize
         let width = min(face.width, bounds.width - 32)
         heading.view.frame = CGRect(x: ((bounds.width - width) / 2).rounded(), y: ((Self.headerHeight - face.height) / 2).rounded(),
                                     width: width, height: face.height)
-        search.frame = CGRect(x: bounds.minX + 8, y: Self.headerHeight, width: max(0, bounds.width - 16), height: Self.searchHeight)
+        search.frame = CGRect(x: bounds.minX + 8, y: compact ? 0 : Self.headerHeight, width: max(0, bounds.width - 16), height: Self.searchHeight)
         let gridTop = search.frame.maxY
         collection.frame = CGRect(x: bounds.minX, y: gridTop, width: bounds.width, height: max(0, bottom - gridTop))
-        let y = bottom - Self.barHeight + 10
-        let docked = !dock.isHidden
+        let footerHeight = compact && docked ? max(Self.barHeight, PinnedDock.height + 20) : Self.barHeight
+        let controlHeight = Self.barHeight - 20
+        let fits = doneButton.sizeThatFits(CGSize(width: bounds.width - 100, height: controlHeight))
+        newTab.frame = CGRect(x: bounds.minX + 16, y: bottom - footerHeight + (footerHeight - 44) / 2, width: 44, height: 44)
+        doneButton.frame = CGRect(x: bounds.maxX - 16 - max(fits.width, 72), y: bottom - footerHeight + (footerHeight - controlHeight) / 2,
+                                  width: max(fits.width, 72), height: controlHeight)
         // As wide as the bar's buttons reach, and as far above them as they are apart from its own edge.
         dock.frame = CGRect(x: bounds.minX + 16, y: bottom - Self.barHeight - PinnedDock.height, width: bounds.width - 32,
                             height: PinnedDock.height)
-        let emptyBottom = docked ? dock.frame.minY - 12 : y - 10
+        if compact {
+            dock.frame = CGRect(x: newTab.frame.maxX + 12, y: bottom - footerHeight + (footerHeight - PinnedDock.height) / 2,
+                                width: max(0, doneButton.frame.minX - 12 - (newTab.frame.maxX + 12)), height: PinnedDock.height)
+        }
+        let emptyBottom = docked && !compact ? dock.frame.minY - 12 : bottom - footerHeight
         emptyView.frame = CGRect(x: bounds.minX, y: gridTop, width: bounds.width, height: max(0, emptyBottom - gridTop))
         // The grid's last row clears the dock, which floats over the grid
         // as it scrolls, with room to spare.
-        let below = Self.barHeight + (docked ? PinnedDock.height + 20 : 8)
+        let below = footerHeight + (docked && !compact ? PinnedDock.height + 20 : 8)
         collection.contentInset.bottom = below
         collection.verticalScrollIndicatorInsets.bottom = below
         fadeEdges()
-        newTab.frame = CGRect(x: bounds.minX + 16, y: y, width: 44, height: 44)
-        let controlHeight = Self.barHeight - 20
-        let fits = doneButton.sizeThatFits(CGSize(width: bounds.width - 100, height: controlHeight))
-        doneButton.frame = CGRect(x: bounds.maxX - 16 - max(fits.width, 72), y: y, width: max(fits.width, 72), height: controlHeight)
         // The tab on screen in the middle, once there is a grid to put it in.
         if filter.isEmpty, !scrolledToCurrent, collection.bounds.height > 0, let current = window.tabID,
            let path = source.indexPath(for: .tab(current)) {

@@ -96,6 +96,21 @@ final class CrashRegressionTests: XCTestCase {
         overview.view.layoutIfNeeded()
         XCTAssertLessThanOrEqual(newTab.frame.maxY, 460, "Footer must clear the docked software keyboard")
         XCTAssertLessThanOrEqual(dock.frame.maxY, 460)
+        // Rotate into the short room left by a landscape software keyboard.
+        overview.view.frame = CGRect(x: 0, y: 0, width: 700, height: 360)
+        let landscapeKeyboard = overview.view.convert(CGRect(x: 0, y: 180, width: 700, height: 180), to: window)
+        NotificationCenter.default.post(name: UIResponder.keyboardWillChangeFrameNotification, object: nil, userInfo: [
+            UIResponder.keyboardFrameEndUserInfoKey: window.convert(landscapeKeyboard, to: window.screen.coordinateSpace),
+            UIResponder.keyboardAnimationDurationUserInfoKey: 0.0,
+        ])
+        overview.view.layoutIfNeeded()
+        XCTAssertFalse(dock.frame.intersects(search.frame), "Pins must not intercept the landscape filter")
+        XCTAssertFalse(newTab.frame.intersects(search.frame))
+        XCTAssertFalse(dock.frame.intersects(newTab.frame))
+        XCTAssertGreaterThanOrEqual(dock.frame.minY, search.frame.maxY)
+        XCTAssertLessThanOrEqual(dock.frame.maxY, 180)
+        XCTAssertLessThanOrEqual(newTab.frame.maxY, 180)
+        overview.view.frame = CGRect(x: 0, y: 0, width: 393, height: 700)
         NotificationCenter.default.post(name: UIResponder.keyboardDidChangeFrameNotification, object: nil, userInfo: [
             UIResponder.keyboardFrameEndUserInfoKey: CGRect(x: 0, y: 5000, width: 393, height: 240),
         ])
