@@ -16,7 +16,7 @@ public enum ExtensionPreparation {
     public static let stampFile = "_eglu/stamp"
 
     /// Raised when this file changes what it makes.
-    static let version = 4
+    static let version = 5
 
     static let shimMarks = ("/* eGlu's shim, before the extension's own code (ExtensionPreparation) */",
                             "/* The extension's own code */")
