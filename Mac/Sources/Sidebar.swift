@@ -1372,10 +1372,7 @@ struct SpaceBar: View {
                 ViewThatFits(in: .horizontal) {
                     spaces(compact: false)
                     spaces(compact: true)
-                    ScrollView(.horizontal) { spaces(compact: true, glass: false) }
-                        .scrollIndicators(.never)
-                        .padding(3)
-                        .glassEffect(.regular, in: Capsule())
+                    scrollingSpaces
                 }
                 // In the row, a gap from the plain buttons either side, which are 2 points from each other.
                 .padding(.horizontal, inRow ? Metrics.gap - 2 : 0)
@@ -1408,6 +1405,30 @@ struct SpaceBar: View {
         .animation(.bar, value: downloads.items.isEmpty)
     }
 
+    private var scrollingSpaces: some View {
+        ScrollViewReader { reader in
+            ScrollView(.horizontal) { spaces(compact: true, glass: false) }
+                .scrollIndicators(.never)
+                .onAppear {
+                    DispatchQueue.main.async { revealSpace(using: reader) }
+                }
+                .onChange(of: model.spaceID) { revealSpace(using: reader) }
+                .onChange(of: session.workspace.spaces.map(\.id)) {
+                    DispatchQueue.main.async { revealSpace(using: reader) }
+                }
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { _ in
+                    revealSpace(using: reader)
+                }
+        }
+        .padding(3)
+        .glassEffect(.regular, in: Capsule())
+    }
+
+    private func revealSpace(using reader: ScrollViewProxy) {
+        // Keyboard and command navigation must not queue another slide behind the selection disc.
+        withAnimation(nil) { reader.scrollTo(model.spaceID, anchor: .center) }
+    }
+
     /// The spaces' buttons, and under them one disc in the colour of the
     /// space on screen: going to another space (a click, a sideways sweep,
     /// ⌃1 to ⌃9) slides it there, its colour turning to that space's on the way.
@@ -1416,6 +1437,7 @@ struct SpaceBar: View {
         let row = HStack(spacing: 2) {
             ForEach(session.workspace.spaces) { space in
                 SpaceButton(model: model, space: space, compact: compact, places: places)
+                    .id(space.id)
             }
         }
         .background {
