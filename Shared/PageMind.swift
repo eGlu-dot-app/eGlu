@@ -143,7 +143,7 @@ private final class TestPageMind: PageMind {
                      " find what matters,", " and carry on without losing your place."]
         var summary = ""
         for part in parts {
-            do { try await Task.sleep(for: .milliseconds(700)) } catch { return nil }
+            do { try await Task.sleep(for: .seconds(2)) } catch { return nil }
             summary += part
             writing(summary)
         }

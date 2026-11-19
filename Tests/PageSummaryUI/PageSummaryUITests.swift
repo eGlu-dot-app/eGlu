@@ -78,8 +78,9 @@ final class PageSummaryUITests: XCTestCase {
         if address.exists { address.tap() } else { app.buttons["Address"].firstMatch.tap() }
         let field = app.textFields.firstMatch
         XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.typeText(XCUIKeyboardKey.delete.rawValue)
         field.press(forDuration: 1)
-        let paste = app.buttons["Paste"].firstMatch
+        let paste = app.descendants(matching: .any).matching(identifier: "Paste").firstMatch
         XCTAssertTrue(paste.waitForExistence(timeout: 5))
         paste.tap()
         XCTAssertEqual(field.value as? String, summary)

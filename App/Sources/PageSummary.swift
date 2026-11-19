@@ -129,6 +129,7 @@ struct PageSummarySheet: View {
                         Button(action: handoff) {
                             Label("Handoff…", systemImage: Command.handoff.symbol)
                                 .frame(maxWidth: .infinity)
+                                .foregroundStyle(Palette.ground)
                         }
                         .buttonStyle(.borderedProminent)
                         .accessibilityIdentifier("summary-handoff")
