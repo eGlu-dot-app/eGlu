@@ -4,6 +4,7 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+- Page skills ask for their own plain-text answers, so Key points and Actions can use bullet lists without Handoff's sentence-only format.
 - Page skills in the summary sheet turn the page into key points, a simpler explanation or action items. Switch while it writes, and copy the result; Apple Intelligence still works only on the device, with Handoff turned on.
 - The bundled page used by the summary UI tests is left out of Release builds.
 - On iPhone and iPad, Summarize Page opens a summary over the page, written as Apple Intelligence reads it on the device. Copy its words or continue to Handoff; nothing is sent anywhere. It is offered only with Handoff turned on and Apple Intelligence available, never on protected sign-in pages. The page menu, command bar and ⌃⌥U open it.

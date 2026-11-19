@@ -18,9 +18,9 @@ enum PageSkill: String, CaseIterable {
     var instruction: String {
         switch self {
         case .summary: ""
-        case .keyPoints: "For the about answer, list the page's key points as short bullet points. Use only facts in the page."
-        case .explainSimply: "For the about answer, explain the page in simple, everyday words for a reader new to the topic. Keep its meaning and do not add facts."
-        case .actionItems: "For the about answer, list concrete action items supported by the page as short bullet points. If there are none, say so; do not invent tasks."
+        case .keyPoints: "Read the page brief and list its key points using only its facts, in the page's language. Return plain text with one short • bullet per line, starting each line with ‘• ’. No heading or other Markdown."
+        case .explainSimply: "Read the page brief and explain it in simple, everyday words for a reader new to the topic, in the page's language. Use only its facts and keep its meaning. Return plain text without Markdown."
+        case .actionItems: "Read the page brief and list concrete action items supported by its facts, in the page's language. Return plain text with one short • bullet per line, starting each line with ‘• ’. No heading or other Markdown. If there are no action items, say so; do not invent tasks."
         }
     }
 }
@@ -263,8 +263,33 @@ private final class OnDevicePageMind: PageMind {
     /// and the picks, so it is what is written first.
     private func ask(_ model: SystemLanguageModel, _ brief: String, picture: CGImage?, picks: Bool, skill: PageSkill,
                      writing: @escaping @MainActor (String) -> Void) async -> PageAnswer? {
-        var instructions = Handoff.kindInstructions + (picks ? Handoff.pickInstructions : "")
-        if skill != .summary { instructions += "\n\n" + skill.instruction }
+        if skill != .summary {
+            let session = LanguageModelSession(model: model, instructions: skill.instruction)
+            let options = GenerationOptions(samplingMode: .greedy)
+            let stream: LanguageModelSession.ResponseStream<String>
+            if #available(iOS 27.0, macOS 27.0, *), let picture {
+                stream = session.streamResponse(options: options) {
+                    brief
+                    Attachment(picture)
+                }
+            } else {
+                stream = session.streamResponse(to: brief, options: options)
+            }
+            var last: String?
+            do {
+                for try await snapshot in stream {
+                    guard !Task.isCancelled else { return nil }
+                    last = snapshot.content
+                    writing(snapshot.content)
+                }
+            } catch {
+                return nil
+            }
+            guard let last, !last.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  !Task.isCancelled else { return nil }
+            return PageAnswer(kind: .other, about: last)
+        }
+        let instructions = Handoff.kindInstructions + (picks ? Handoff.pickInstructions : "")
         let session = LanguageModelSession(model: model, instructions: instructions)
         let options = GenerationOptions(samplingMode: .greedy)
         if picks {
