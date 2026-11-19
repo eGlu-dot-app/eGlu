@@ -58,6 +58,35 @@ final class PageSummaryUITests: XCTestCase {
         XCTAssertTrue(app.buttons["summary-handoff"].exists)
     }
 
+    private func continueToHandoff(_ app: XCUIApplication) {
+        app.buttons["summary-handoff"].tap()
+        XCTAssertTrue(app.staticTexts["Give an assistant this page's context."].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["Handoff"].exists)
+        XCTAssertFalse(app.staticTexts["summary-page-title"].exists)
+        XCTAssertFalse(app.buttons["summary-close"].exists)
+        XCTAssertFalse(app.buttons["summary-handoff"].exists)
+    }
+
+    func testHandoffAfterSummaryFinishes() {
+        let app = launch()
+        openSummary(app)
+        let text = app.staticTexts["summary-text"]
+        expectation(for: NSPredicate(format: "label == %@", summary), evaluatedWith: text)
+        waitForExpectations(timeout: 15)
+        XCTAssertFalse(app.descendants(matching: .any)["summary-progress"].firstMatch.exists)
+        continueToHandoff(app)
+    }
+
+    func testHandoffWhileSummaryIsStreaming() {
+        let app = launch()
+        openSummary(app)
+        let text = app.staticTexts["summary-text"]
+        XCTAssertTrue(text.waitForExistence(timeout: 10))
+        XCTAssertNotEqual(text.label, summary)
+        XCTAssertTrue(app.descendants(matching: .any)["summary-progress"].firstMatch.exists)
+        continueToHandoff(app)
+    }
+
     func testEmptyAnswerIsNotPresentedAsASummary() {
         let app = launch(["-UITestPageMindEmpty"])
         openSummary(app)
