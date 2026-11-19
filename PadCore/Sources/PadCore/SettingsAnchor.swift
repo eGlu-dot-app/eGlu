@@ -91,7 +91,7 @@ public enum SettingsAnchor: String, CaseIterable, Sendable {
         case .addressBar: return ["show address", "show title", "url", "page title"]
         case .window:
             return ["layout", "compact", "separate", "tab layout", "hide tab bar", "show tab bar", "window", "sidebar",
-                    "vertical tabs",
+                    "vertical tabs", "horizontal tabs", "tabs along the top", "tabs on top", "tabs in a sidebar",
                     "show address", "show title", "url"]
         case .spaces: return ["manage spaces", "edit spaces", "rename space", "delete space", "reorder spaces", "profiles"]
         case .memory: return ["light tabs", "tabs kept open", "freeze tabs", "frozen tabs", "background tabs", "ram"]
