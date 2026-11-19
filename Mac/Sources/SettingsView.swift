@@ -23,40 +23,42 @@ struct MacSettings: View {
 
     var body: some View {
         NavigationSplitView {
-            // One list for the panes and for what a search finds.
-            List(selection: row) {
-                if query.isEmpty {
-                    ForEach(SettingsPane.sidebar, id: \.self) { item in
-                        Label {
-                            Text(item.title)
-                        } icon: {
-                            SymbolTile(symbol: item.symbol, color: item.tint)
-                        }
-                        .tag(SidebarRow.pane(item))
-                    }
-                } else {
-                    SettingsResults(matches: SettingsPane.search.find(query), query: query)
-                }
-            }
-            // A list of its own for each search, starting at its top: one list
-            // kept for search after search came a little further up under the
-            // field with each, its rows changed under where it was scrolled.
-            // The field, outside it, keeps the focus.
-            .id(query)
-            // A new search starts with nothing chosen, so its first click goes there.
-            .onChange(of: query) { picked = nil }
             // The field over the sidebar's list, as System Settings has it:
             // AppKit's, as Return reached SwiftUI's sidebar search field's
-            // submit action only from some places in the view tree.
-            .safeAreaInset(edge: .top, spacing: 0) {
+            // submit action only from some places in the view tree. Above
+            // the list, not in its room: the list, a new one for each search,
+            // would have made the field anew with it, taking its focus.
+            VStack(spacing: 0) {
                 SidebarSearchField(text: $query, step: step) {
                     // Return goes to the first part found, as the command bar's does.
                     if let first = SettingsPane.search.find(query).first { show(first.anchor) }
                 }
                 .padding(.horizontal, 10)
                 .padding(.bottom, 6)
+                // One list for the panes and for what a search finds.
+                List(selection: row) {
+                    if query.isEmpty {
+                        ForEach(SettingsPane.sidebar, id: \.self) { item in
+                            Label {
+                                Text(item.title)
+                            } icon: {
+                                SymbolTile(symbol: item.symbol, color: item.tint)
+                            }
+                            .tag(SidebarRow.pane(item))
+                        }
+                    } else {
+                        SettingsResults(matches: SettingsPane.search.find(query), query: query)
+                    }
+                }
+                // A list of its own for each search, starting at its top: one list
+                // kept for search after search came a little further up under the
+                // field with each, its rows changed under where it was scrolled.
+                // The field, outside it, keeps the focus.
+                .id(query)
+                // A new search starts with nothing chosen, so its first click goes there.
+                .onChange(of: query) { picked = nil }
+                .listStyle(.sidebar)
             }
-            .listStyle(.sidebar)
             // One width, as System Settings' sidebar has. The Settings window
             // goes by neither column width at first (it gave the sidebar 144
             // points); a frame it can't go under, it does.
