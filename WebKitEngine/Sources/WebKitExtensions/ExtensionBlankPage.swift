@@ -26,7 +26,7 @@ public final class ExtensionBlankPage: NSObject, WKNavigationDelegate {
         guard base.scheme == scheme else { return false }
         let ready = await withCheckedContinuation { done in
             loaded = done
-            view.loadHTMLString("<!doctype html>", baseURL: base)
+            self.view.loadHTMLString("<!doctype html>", baseURL: base)
             DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
                 MainActor.assumeIsolated { self?.finish(false) }
             }

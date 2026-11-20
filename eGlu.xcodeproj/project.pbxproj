@@ -375,6 +375,7 @@
 		DA74924D4E0115B4BD4B088C /* WritingLists.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60E0E184FDC4719DE7A49AAF /* WritingLists.swift */; };
 		DA89263D29A09D85BE06D62B /* MacPageEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C0D6A936868AA273D3E06B8 /* MacPageEngine.swift */; };
 		DAF70D4E61B9013063FF520C /* TabRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0808B6070C3D95EC5BF66566 /* TabRow.swift */; };
+		DC40170D18F681CAB232230A /* CommandBarTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 592B884D5D84BAB7EB080E79 /* CommandBarTests.swift */; };
 		DCA1726AACC1B5BBAE7D86C1 /* Bars.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AAA52F03DA564A02BC99D3A /* Bars.swift */; };
 		DD96B195863E803B1322AA33 /* MeasureChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0DF1060B96AAB063281BCA3 /* MeasureChannel.swift */; };
 		DDAFB0026D44F8248F1679B0 /* WorkspacePersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = B65AB179CB6A243492A55644 /* WorkspacePersistence.swift */; };
@@ -583,6 +584,7 @@
 		56B22088799D385DFE1245CD /* WebInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebInspector.swift; sourceTree = "<group>"; };
 		58732C60740025BEA4DDEE84 /* PhoneBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneBar.swift; sourceTree = "<group>"; };
 		58E0FB552996C2816E62272B /* Menus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Menus.swift; sourceTree = "<group>"; };
+		592B884D5D84BAB7EB080E79 /* CommandBarTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandBarTests.swift; sourceTree = "<group>"; };
 		598FB39889FA6F8541B5096F /* ExtensionBrowserAnswerHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionBrowserAnswerHost.swift; sourceTree = "<group>"; };
 		5A4ABCA9A5A3F97E6F086EBD /* Design.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Design.swift; sourceTree = "<group>"; };
 		5F57EF6B25A3B579A9BB7CC9 /* StoreButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreButton.swift; sourceTree = "<group>"; };
@@ -1150,6 +1152,7 @@
 		EE2FDC4E1BB7CD688730A31A /* MacPage */ = {
 			isa = PBXGroup;
 			children = (
+				592B884D5D84BAB7EB080E79 /* CommandBarTests.swift */,
 				E9478617D34AE80447D8EEA7 /* PageBackTests.swift */,
 				A2651210A29B6D9EF1AB7B19 /* PageChannelTests.swift */,
 				196B9C2481AEA1990A739D2A /* PageChildTests.swift */,
@@ -1644,6 +1647,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DC40170D18F681CAB232230A /* CommandBarTests.swift in Sources */,
 				880065BDAAACC4524DA8A57F /* PageBackTests.swift in Sources */,
 				727A3DFB837C34D247AC6987 /* PageChannelTests.swift in Sources */,
 				4F63240070531B74004F6B2B /* PageChildTests.swift in Sources */,
