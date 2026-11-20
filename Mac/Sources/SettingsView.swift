@@ -391,7 +391,10 @@ final class SettingsReveal: ObservableObject {
         fading = Task {
             try? await Task.sleep(for: .seconds(2))
             guard !Task.isCancelled else { return }
-            withAnimation(.easeOut(duration: 0.6)) { lit = nil }
+            let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            var fade = Transaction(animation: reduceMotion ? nil : .easeOut(duration: 0.2))
+            fade.disablesAnimations = reduceMotion
+            withTransaction(fade) { lit = nil }
         }
     }
 

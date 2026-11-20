@@ -7,6 +7,7 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 - The summary sheet's Copy button uses a circular glass button on current iOS, with the standard bordered button on earlier releases.
 - The summary sheet's Copy button matches the height of the Handoff button.
 - On the Mac, the command bar has a clickable Open/Search action and a visible Cancel button. The action always submits what you typed; Return still takes the selected suggestion. Sending the unchanged address reloads the page.
+- Settings search highlights keep their two-second reading pause, then fade out more quickly on iPhone, iPad and Mac; with Reduce Motion they clear without animation.
 - Settings has a search field on iPhone, iPad and Mac: it finds a part of Settings by its name or by what is changed there, as the address bar does, and goes to its section. On the Mac it sits over the sidebar; Return goes to the first part found. The Mac's command bar now finds every part of Settings, not only App Icon, and opens Settings at that section.
 - Extension messages release their fallback timers as soon as an answer arrives, avoiding unnecessary wakeups after the message is settled.
 - Pages with the content blocker on spend less time before they show: its hiding rules are weighed once for each page and frame, not again for every image, script and request the page loads. Lists are made again once, on the first launch after the update.
