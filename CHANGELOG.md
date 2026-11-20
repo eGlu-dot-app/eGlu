@@ -4,6 +4,7 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+- Extension messages release their fallback timers as soon as an answer arrives, avoiding unnecessary wakeups after the message is settled.
 - On iPhone and iPad, setup shows when it is saving and keeps an actionable retry if saving fails. Bookmark import uses one footer action for choosing, recovering and continuing. VoiceOver follows setup headings and routed Settings, import and meaningful sync results are announced once, and a routed Settings section has a non-colour marker.
 - On iPhone and iPad, setup resumes at the step and Space where it was left. Skip Setup declines the remaining prompts, including writing, without turning anything on; those choices stay in Settings. A visible step label tracks progress, and step changes are instant for keyboard and touch alike, including under Reduce Motion.
 - Pages with the content blocker on spend less time before they show: its hiding rules are weighed once for each page and frame, not again for every image, script and request the page loads. Lists are made again once, on the first launch after the update.
