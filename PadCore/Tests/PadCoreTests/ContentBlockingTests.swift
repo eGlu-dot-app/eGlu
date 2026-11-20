@@ -230,6 +230,18 @@ final class ContentBlockingTests: XCTestCase {
         XCTAssertEqual(hiding.first { $0.action.selector == ".y" }?.trigger.ifDomain, ["*mail.test"])
     }
 
+    func testHidingIsToldByDocumentsOnly() {
+        let hiding = FilterConverter.convert("""
+        @@||mail.test^$generichide
+        ##.ad
+        ##.banner
+        mail.test#@#.banner
+        news.test##.promo
+        """).hiding
+        XCTAssertEqual(hiding.count, 3)
+        XCTAssertTrue(hiding.allSatisfy { $0.trigger.resourceType == ["document"] })
+    }
+
     func testTheHeaderSaysTheVersionAndHowLongItKeeps() {
         let converted = FilterConverter.convert("""
         [Adblock Plus 2.0]
