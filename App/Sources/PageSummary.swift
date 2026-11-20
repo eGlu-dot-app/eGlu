@@ -152,11 +152,17 @@ struct PageSummarySheet: View {
                             UIPasteboard.general.string = job.text
                             copied = true
                         } label: {
-                            Label(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
-                                .frame(maxWidth: .infinity)
+                            Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundStyle(Palette.ink.opacity(job.state == .ready ? 1 : 0.4))
+                                .frame(width: 44, height: 44)
+                                .background(Palette.ink.opacity(job.state == .ready ? 0.15 : 0.07),
+                                            in: RoundedRectangle(cornerRadius: 12))
+                                .contentShape(.rect)
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.plain)
                         .disabled(job.state != .ready)
+                        .accessibilityLabel(copied ? "Copied" : "Copy summary")
                         .accessibilityIdentifier("summary-copy")
                         Button(action: handoff) {
                             Label("Handoff…", systemImage: Command.handoff.symbol)
