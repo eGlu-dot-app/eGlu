@@ -1,3 +1,13 @@
+"Show All (%ld)" = "모두 보기 (%ld)";
+"Show all %ld open tabs" = "열린 탭 %ld개 모두 보기";
+"Show all %ld spaces" = "스페이스 %ld개 모두 보기";
+"Show all %ld commands" = "명령 %ld개 모두 보기";
+"Show all %ld settings" = "설정 %ld개 모두 보기";
+"Show all %ld tabs from other devices" = "다른 기기의 탭 %ld개 모두 보기";
+"Show all %ld bookmarks" = "북마크 %ld개 모두 보기";
+"Show all %ld history entries" = "방문 기록 %ld개 모두 보기";
+"Show all %ld local servers" = "로컬 서버 %ld개 모두 보기";
+"Show all %ld searches" = "검색 %ld개 모두 보기";
 "%1$@ %2$@" = "%1$@ %2$@";
 "%1$@ · %2$@" = "%1$@ · %2$@";
 "%1$@%2$@" = "%1$@%2$@";

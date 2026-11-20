@@ -1387,8 +1387,10 @@ final class WindowModel: ObservableObject, PageHost {
 
     /// A row of the command bar, chosen.
     func run(_ suggestion: Suggestion, purpose: CommandBarPurpose) {
+        if suggestions.expand(suggestion) { return }
         commandBar = nil
         switch suggestion.action {
+        case .showAll: return
         case .tab(let id): select(id)
         case .open(let url):
             HistoryRecorder.shared.expect(.typed, url)

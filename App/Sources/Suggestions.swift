@@ -19,6 +19,17 @@ import UIKit
 @MainActor
 final class Suggestions: ObservableObject {
     @Published private(set) var rows: [Suggestion] = []
+    private var listingState = PaletteListing()
+    private var allRows: [Suggestion] = []
+
+    func expand(_ row: Suggestion) -> Bool {
+        guard listing, case .showAll(let section) = row.action else { return false }
+        let first = listingState.expand(section, in: allRows)
+        rows = listingState.rows(allRows, listing: true).map(\.suggestion)
+        selection = rows.firstIndex { $0.id == first }
+        if let selected { KeyboardSelectionEvent(row: selected).announce() }
+        return true
+    }
     /// The row ↑ and ↓ have chosen; nil for the text as typed.
     @Published private(set) var selection: Int?
     /// The rows are everything there is, nothing typed yet: they show under
@@ -97,6 +108,8 @@ final class Suggestions: ObservableObject {
 
     /// Typing is over, sent or not.
     func end() {
+        listingState = PaletteListing()
+        allRows = []
         sources.end()
         index = nil
         wide = false
@@ -159,7 +172,8 @@ final class Suggestions: ObservableObject {
             ? Autocomplete.history(sources.remembered.pages, query: query, shown: local, tabs: index?.made.tabs ?? [:], stale: !recalled) : []
         // The row ↑ and ↓ chose stays chosen as rows come in around it.
         let chosen = selected?.id
-        rows = Autocomplete.rows(local: local, history: history, meant: meant, engine: engine, wide: wide)
+        allRows = Autocomplete.rows(local: local, history: history, meant: meant, engine: engine, wide: wide)
+        rows = listingState.rows(allRows, listing: listing).map(\.suggestion)
         if let chosen { selection = rows.firstIndex { $0.id == chosen } }
     }
 
@@ -363,6 +377,10 @@ private struct RowPress: ButtonStyle {
 /// what else there is to say under it; and at the end where it came from,
 /// or a command's keys where there is a keyboard to press them on.
 private struct SuggestionRow: View {
+    private var expanding: Bool {
+        if case .showAll = row.action { return true }
+        return false
+    }
     let row: Suggestion
     let selected: Bool
     /// The row says where it came from; not under a heading that does.
@@ -378,6 +396,7 @@ private struct SuggestionRow: View {
     /// Where the row came from, when the heading over it doesn't already
     /// say: a device's name is the row's own.
     private var showsSource: Bool {
+        if expanding { return false }
         if named { return true }
         switch row.source {
         case .device: return true
@@ -389,12 +408,14 @@ private struct SuggestionRow: View {
         HStack(spacing: 10) {
             icon
                 .frame(width: 20, height: 20)
+                .opacity(expanding ? 0 : 1)
             VStack(alignment: .leading, spacing: 1) {
                 phrase
+                    .foregroundStyle(expanding ? .secondary : .primary)
                     .font(.subheadline)
                     .lineLimit(2)
                 // A command's second line is its keys, which are drawn at the end.
-                if !row.detail.isEmpty, keys == nil {
+                if !expanding, !row.detail.isEmpty, keys == nil {
                     Text(row.detail)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -431,9 +452,9 @@ private struct SuggestionRow: View {
         .contentShape(Rectangle())
         .hoverEffect(.highlight)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(row.byMeaning ? "\(row.phrase), \(row.source.label), found by Apple Intelligence"
+        .accessibilityLabel(expanding ? row.detail : row.byMeaning ? "\(row.phrase), \(row.source.label), found by Apple Intelligence"
                                           : "\(row.phrase), \(row.source.label)")
-        .accessibilityValue(row.detail)
+        .accessibilityValue(expanding ? "" : row.detail)
         .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
     }
 
@@ -463,6 +484,7 @@ private struct SuggestionRow: View {
     /// The typed letters plain, the rest of the phrase in bold: what the row
     /// adds to what was typed.
     private var phrase: Text {
+        if expanding { return Text(verbatim: row.phrase).fontWeight(.regular).foregroundStyle(Color.secondary) }
         let letters = Array(row.phrase)
         let typed = row.typed
             .map { $0.clamped(to: 0..<letters.count) }

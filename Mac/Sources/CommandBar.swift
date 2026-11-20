@@ -16,6 +16,16 @@ import SwiftUI
 @MainActor
 final class Suggestions: ObservableObject {
     @Published private(set) var rows: [Suggestion] = []
+    private var listingState = PaletteListing()
+    private var allRows: [Suggestion] = []
+
+    func expand(_ row: Suggestion) -> Bool {
+        guard listing, case .showAll(let section) = row.action else { return false }
+        let first = listingState.expand(section, in: allRows)
+        rows = listingState.rows(allRows, listing: true).map(\.suggestion)
+        selection = rows.firstIndex { $0.id == first }
+        return true
+    }
     /// The row ↑ and ↓ have chosen; nil for the text as typed.
     @Published private(set) var selection: Int?
     /// The rows are everything there is, nothing typed yet: they show under headings.
@@ -82,6 +92,8 @@ final class Suggestions: ObservableObject {
     }
 
     func end() {
+        listingState = PaletteListing()
+        allRows = []
         sources.end()
         index = nil
         wide = false
@@ -143,7 +155,8 @@ final class Suggestions: ObservableObject {
             ? LocalServers.filter(sources.served.rows, for: query).map(server) : []
         // The row ↑ and ↓ chose stays chosen as rows come in around it.
         let chosen = selected?.id
-        rows = Autocomplete.rows(local: local + servers, history: history, meant: meant, engine: engine, wide: wide)
+        allRows = Autocomplete.rows(local: local + servers, history: history, meant: meant, engine: engine, wide: wide)
+        rows = listingState.rows(allRows, listing: listing).map(\.suggestion)
         if let chosen { selection = rows.firstIndex { $0.id == chosen } }
     }
 
@@ -511,6 +524,10 @@ struct SuggestionRows: View {
 /// the end where it came from, or a command's keys. The chosen row is filled
 /// with the space's colour, as Arc's is with the theme's.
 private struct SuggestionRow: View {
+    private var expanding: Bool {
+        if case .showAll = row.action { return true }
+        return false
+    }
     let row: Suggestion
     let selected: Bool
     var named = true
@@ -524,6 +541,7 @@ private struct SuggestionRow: View {
     }
 
     private var showsSource: Bool {
+        if expanding { return false }
         if named { return true }
         switch row.source {
         case .device: return true
@@ -535,11 +553,13 @@ private struct SuggestionRow: View {
         HStack(spacing: 10) {
             icon
                 .frame(width: 18, height: 18)
+                .opacity(expanding ? 0 : 1)
             VStack(alignment: .leading, spacing: 1) {
                 phrase
+                    .foregroundStyle(expanding ? .secondary : .primary)
                     .font(.system(size: 13))
                     .lineLimit(1)
-                if !row.detail.isEmpty, keys == nil {
+                if !expanding, !row.detail.isEmpty, keys == nil {
                     Text(row.detail)
                         .font(.system(size: 11))
                         .foregroundStyle(selected ? ink.opacity(0.75) : Color.secondary)
@@ -576,9 +596,9 @@ private struct SuggestionRow: View {
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(row.byMeaning ? String(localized: "\(row.phrase), \(row.source.label), found by Apple Intelligence")
+        .accessibilityLabel(expanding ? row.detail : row.byMeaning ? String(localized: "\(row.phrase), \(row.source.label), found by Apple Intelligence")
                                           : String(localized: "\(row.phrase), \(row.source.label)"))
-        .accessibilityValue(row.detail)
+        .accessibilityValue(expanding ? "" : row.detail)
         .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
     }
 
@@ -608,6 +628,7 @@ private struct SuggestionRow: View {
     /// The typed letters plain, the rest of the phrase in bold: what the row
     /// adds to what was typed.
     private var phrase: Text {
+        if expanding { return Text(verbatim: row.phrase).fontWeight(.regular).foregroundStyle(selected ? ink : Color.secondary) }
         let letters = Array(row.phrase)
         let typed = row.typed
             .map { $0.clamped(to: 0..<letters.count) }

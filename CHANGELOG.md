@@ -8,6 +8,7 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 - The summary sheet's Copy button matches the height of the Handoff button.
 - On the Mac, the command bar has a clickable Open/Search action and a visible Cancel button. The action always submits what you typed; Return still takes the selected suggestion. Sending the unchanged address reloads the page.
 - Extension messages release their fallback timers as soon as an answer arrives, avoiding unnecessary wakeups after the message is settled.
+- On Mac, iPhone and iPad, the empty command bar shows five of each kind of result, with Show All for the rest. The arrow keys reach Show All too; Return opens out that part of the list without leaving the bar.
 - Pages with the content blocker on spend less time before they show: its hiding rules are weighed once for each page and frame, not again for every image, script and request the page loads. Lists are made again once, on the first launch after the update.
 - On iPhone with iOS 27, the pinned tabs' list opens out of the pinned tab's button as the system's menus open out of theirs: the button's glass grows into the list and, put away, goes back into the button. The system places the list and draws its card, without the dimmed page behind it; held open, it still follows the finger from row to row. Before iOS 27 it is as it was.
 - On iPhone and iPad, fix a build failure caused by the pinned panel's rows sharing a type name with the shared pinned layout. Nothing changes in use.
