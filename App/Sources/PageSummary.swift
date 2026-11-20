@@ -155,7 +155,7 @@ struct PageSummarySheet: View {
                             Image(systemName: copied ? "checkmark" : "doc.on.doc")
                                 .font(.system(size: 16, weight: .medium))
                                 .foregroundStyle(Palette.ink.opacity(job.state == .ready ? 1 : 0.4))
-                                .frame(width: 44, height: 44)
+                                .frame(width: 48, height: 48)
                                 .background(Palette.ink.opacity(job.state == .ready ? 0.15 : 0.07),
                                             in: RoundedRectangle(cornerRadius: 12))
                                 .contentShape(.rect)
