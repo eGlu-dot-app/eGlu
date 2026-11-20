@@ -59,11 +59,15 @@ final class SpaceBarTests: PageTestCase {
     }
 
     func testRevealsSelectionWhenFittingRowBecomesOverflow() async throws {
-        let model = WindowModel(space: spaces[40].id)
-        show(SpaceBar(model: model), width: 1400)
-        window?.setContentSize(NSSize(width: 220, height: 44))
-        try await atEnd()
+        spaces = Array(spaces.prefix(5))
+        Session.shared.change { $0 = Workspace(spaces: spaces) }
+        let model = WindowModel(space: spaces[4].id)
+        show(SpaceBar(model: model), width: 420)
+        host?.layoutSubtreeIfNeeded()
+        XCTAssertNil(overflow, "The five-Space row initially fits without scrolling")
         window?.setContentSize(NSSize(width: 180, height: 44))
+        try await atEnd()
+        window?.setContentSize(NSSize(width: 160, height: 44))
         try await atEnd()
     }
 
@@ -72,11 +76,19 @@ final class SpaceBarTests: PageTestCase {
         show(TopTabBar(model: model), width: 1000)
         try await atEnd()
         let scroll = try XCTUnwrap(overflow)
-        XCTAssertLessThan(scroll.frame.width, 260)
+        XCTAssertLessThan(scroll.frame.width, 170)
         let host = try XCTUnwrap(host)
         let frame = scroll.convert(scroll.bounds, to: host)
         XCTAssertGreaterThanOrEqual(frame.minX, 0)
         XCTAssertLessThanOrEqual(frame.maxX, host.bounds.maxX)
+    }
+
+    func testSidebarKeepsOverflowCompactWhenWidened() async throws {
+        let model = WindowModel(space: spaces[40].id)
+        show(SpaceBar(model: model), width: 420)
+        try await atEnd()
+        let scroll = try XCTUnwrap(overflow)
+        XCTAssertLessThan(scroll.frame.width, 170)
     }
 
     private func show<Content: View>(_ content: Content, width: CGFloat) {

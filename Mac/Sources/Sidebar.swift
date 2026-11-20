@@ -1374,6 +1374,7 @@ struct SpaceBar: View {
                     spaces(compact: true)
                     scrollingSpaces
                 }
+                .frame(maxWidth: 160)
                 // In the row, a gap from the plain buttons either side, which are 2 points from each other.
                 .padding(.horizontal, inRow ? Metrics.gap - 2 : 0)
                 .transition(.opacity)
@@ -1409,6 +1410,8 @@ struct SpaceBar: View {
         ScrollViewReader { reader in
             ScrollView(.horizontal) { spaces(compact: true, glass: false) }
                 .scrollIndicators(.never)
+                // Only the icons fade, not the glass; an end with no more spaces stays whole.
+                .feathered(.horizontal, length: 12)
                 .onAppear {
                     DispatchQueue.main.async { revealSpace(using: reader) }
                 }

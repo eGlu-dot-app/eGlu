@@ -120,7 +120,7 @@ struct TopTabBar: View {
                 PlainIcon("plus", help: String(localized: "New Tab (⌘T)")) { model.perform(.newTab) }
                 SpaceBar(model: model, inRow: true)
                     // Leave the address and navigation room before the spaces fall back to scrolling.
-                    .frame(maxWidth: min(260, width / 4))
+                    .frame(maxWidth: min(220, width / 4))
                     .fixedSize(horizontal: false, vertical: true)
                 // Extensions (ExtensionBar.swift): the puzzle button and its list.
                 ExtensionsButton(model: model)
