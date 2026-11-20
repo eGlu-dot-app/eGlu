@@ -92,9 +92,7 @@ struct PageSummarySheet: View {
             copied = true
         } label: {
             Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                .font(.system(size: 16, weight: .medium))
-                .frame(width: 48, height: 48)
-                .contentShape(Circle())
+                .font(.system(size: 14, weight: .medium))
         }
         .disabled(job.state != .ready)
         .accessibilityLabel("Copy summary")
