@@ -52,6 +52,10 @@ final class HistoryTests: XCTestCase {
         XCTAssertFalse(History.searchIsCapped(count: 0))
         XCTAssertFalse(History.searchIsCapped(count: History.searchLimit - 1))
         XCTAssertTrue(History.searchIsCapped(count: History.searchLimit))
+        XCTAssertEqual(History.nextSearchLimit(after: 100), 200)
+        XCTAssertEqual(History.nextSearchLimit(after: 200), 300)
+        XCTAssertFalse(History.searchIsCapped(count: 100, limit: 200))
+        XCTAssertTrue(History.searchIsCapped(count: 200, limit: 200))
     }
 
     func testWordsForWhenAreTakenOutAndNameAStretchOfTime() {
@@ -209,12 +213,22 @@ final class HistoryTests: XCTestCase {
 
     func testHistorySearchUsesTheSharedLimit() async throws {
         let history = try store()
-        for index in 0...History.searchLimit {
+        for index in 0..<250 {
             try await history.record(try visit("https://example.com/match/\(index)", title: "Match \(index)"), now: now)
         }
         let matches = try await history.search(space: space, query: HistoryQuery(words: "match"), limit: History.searchLimit)
         XCTAssertEqual(matches.count, History.searchLimit)
         XCTAssertTrue(History.searchIsCapped(count: matches.count))
+        let secondLimit = History.nextSearchLimit(after: History.searchLimit)
+        let second = try await history.search(space: space, query: HistoryQuery(words: "match"), limit: secondLimit)
+        XCTAssertEqual(second.count, 200)
+        XCTAssertEqual(Array(second.prefix(matches.count)), matches)
+        XCTAssertTrue(History.searchIsCapped(count: second.count, limit: secondLimit))
+        let lastLimit = History.nextSearchLimit(after: secondLimit)
+        let last = try await history.search(space: space, query: HistoryQuery(words: "match"), limit: lastLimit)
+        XCTAssertEqual(last.count, 250)
+        XCTAssertEqual(Array(last.prefix(second.count)), second)
+        XCTAssertFalse(History.searchIsCapped(count: last.count, limit: lastLimit))
         let empty = try await history.search(space: space, query: HistoryQuery(words: "absent"), limit: History.searchLimit)
         XCTAssertFalse(History.searchIsCapped(count: empty.count))
     }

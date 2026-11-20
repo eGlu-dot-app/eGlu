@@ -1,6 +1,24 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Show More" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Show More" } }
+      }
+    },
+    "Show %lld more pages" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Show %lld more pages" } }
+      }
+    },
+    "Show %lld more handoffs" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Show %lld more handoffs" } }
+      }
+    },
     "Showing the first %lld page matches" : {
       "extractionState" : "manual",
       "localizations" : {
