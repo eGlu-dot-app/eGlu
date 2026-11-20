@@ -119,7 +119,8 @@ final class PageSummaryUITests: XCTestCase {
         XCTAssertEqual(copy.frame.width, copy.frame.height, accuracy: 1)
         XCTAssertGreaterThanOrEqual(copy.frame.width, 44)
         copy.tap()
-        XCTAssertEqual(copy.label, "Copied")
+        XCTAssertEqual(copy.label, "Copy summary")
+        XCTAssertEqual(copy.value as? String, "Copied")
         XCTAssertTrue(app.buttons["summary-handoff"].exists)
         // Reading can wait for permission; keep the test free to answer it.
         let reading = Task.detached { UIPasteboard.general.string }
