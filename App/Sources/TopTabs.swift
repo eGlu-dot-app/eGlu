@@ -339,6 +339,7 @@ private struct TopTab: View {
                     Text(address ? (window.insecure ? String(localized: "Address, \(shown), Not secure") : String(localized: "Address, \(shown)")) : tab.label)
                 }
                 .accessibilityHint(address ? "Type a new address or a search" : "")
+                .accessibilityIdentifier(address ? "page-address" : "tab-\(tab.id)")
                 .accessibilityAddTraits(selected ? .isSelected : [])
             }
             // Always there, for a finger, which has no pointer to bring them out.
