@@ -66,7 +66,9 @@ final class Session: ObservableObject {
         if PageMindTesting.enabled {
             let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
                 ?? FileManager.default.temporaryDirectory
-            return support.appendingPathComponent("SafienceSummaryUITests", isDirectory: true)
+            let identifier = ProcessInfo.processInfo.arguments.first { $0.hasPrefix("-UITestDataID=") }
+                .map { String($0.dropFirst("-UITestDataID=".count)) }
+            return support.appendingPathComponent("SafienceSummaryUITests-\(identifier ?? "default")", isDirectory: true)
         }
         #endif
         #if DEBUG && targetEnvironment(simulator)
@@ -94,6 +96,13 @@ final class Session: ObservableObject {
         if PageMindTesting.enabled {
             initialPreferences.handoff = !ProcessInfo.processInfo.arguments.contains("-UITestHandoffOff")
             initialPreferences.iCloudSync = false
+            if ProcessInfo.processInfo.arguments.contains("-UITestTabsTop") {
+                initialPreferences.tabsPlacement = .top
+                initialPreferences.tabBar = true
+            } else if ProcessInfo.processInfo.arguments.contains("-UITestTabsSidebar") {
+                initialPreferences.tabsPlacement = .sidebar
+                initialPreferences.tabBar = true
+            }
         }
         preferences = initialPreferences
         if PageMindTesting.enabled { hasIntelligence = true }

@@ -5,17 +5,44 @@ import UIKit
 final class PageSummaryUITests: XCTestCase {
     private let summary = "A quieter way to browse. Keep related pages in spaces, find what matters, and carry on without losing your place."
 
-    private func launch(_ arguments: [String] = []) -> XCUIApplication {
+    private func launch(_ arguments: [String] = [], opensMenu: Bool = true) -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launchArguments = ["-UITestPageMind", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"] + arguments
+        app.launchArguments = ["-UITestPageMind", "-UITestDataID=\(UUID().uuidString)",
+                              "-AppleLanguages", "(en)", "-AppleLocale", "en_US"] + arguments
         app.launchEnvironment["EGLU_ISOLATED_QA"] = "1"
         app.launch()
         XCTAssertTrue(app.webViews.staticTexts["A quieter way to browse"].firstMatch.waitForExistence(timeout: 15))
         let menu = app.buttons["page-menu"].firstMatch
         XCTAssertTrue(menu.waitForExistence(timeout: 5))
-        menu.tap()
+        if opensMenu { menu.tap() }
         return app
+    }
+
+    private func verifyTabCloseAccessibility(layout: String) {
+        let app = launch([layout], opensMenu: false)
+        let unselectedTab = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label == %@", "tab-", "New Tab")).firstMatch
+        XCTAssertTrue(unselectedTab.waitForExistence(timeout: 5), app.debugDescription)
+        XCTAssertFalse(unselectedTab.isSelected)
+
+        let close = app.buttons["Close A quieter way to browse"].firstMatch
+        XCTAssertTrue(close.waitForExistence(timeout: 5), app.debugDescription)
+        let closeID = close.identifier
+        XCTAssertTrue(closeID.hasPrefix("close-tab-"))
+        close.tap()
+
+        XCTAssertTrue(app.buttons["Close New Tab"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons[closeID].exists)
+        XCTAssertFalse(app.webViews.staticTexts["A quieter way to browse"].exists)
+    }
+
+    func testTopTabCloseAccessibility() {
+        verifyTabCloseAccessibility(layout: "-UITestTabsTop")
+    }
+
+    func testSidebarTabCloseAccessibility() {
+        verifyTabCloseAccessibility(layout: "-UITestTabsSidebar")
     }
 
     private func openSummary(_ app: XCUIApplication) {
