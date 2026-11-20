@@ -73,11 +73,13 @@ struct TopTabBar: View {
             GeometryReader { box in
                 let widths = TabWidths.widths(count: others.count + (barOnScreen == nil ? 0 : 1), room: box.size.width, gap: 4,
                                               address: barOnScreen != nil || others.contains { $0.id == model.tabID })
+                // The address must fit whole even when the other tabs need to scroll.
+                let currentWidth = min(widths.current, max(0, box.size.width))
                 ScrollViewReader { reader in
                     ScrollView(.horizontal) {
                         HStack(spacing: 4) {
                             if let barOnScreen {
-                                TopTab(model: model, tab: barOnScreen, width: widths.current)
+                                TopTab(model: model, tab: barOnScreen, width: currentWidth)
                                     .id(barOnScreen.id)
                                     .transition(.opacity)
                             }
@@ -85,7 +87,7 @@ struct TopTabBar: View {
                                 // A split's two side by side on a ground of their own, as one place in the row.
                                 HStack(spacing: 0) {
                                     ForEach(item) { tab in
-                                        TopTab(model: model, tab: tab, width: tab.id == model.tabID ? widths.current : widths.each)
+                                        TopTab(model: model, tab: tab, width: tab.id == model.tabID ? currentWidth : widths.each)
                                             .id(tab.id)
                                     }
                                 }
@@ -107,13 +109,13 @@ struct TopTabBar: View {
                     .feathered(.horizontal)
                     .padding(-Self.rim)
                     // The tab on screen is always in view, however it came to be on screen.
-                    .onAppear {
-                        DispatchQueue.main.async { model.tabID.map { reader.scrollTo($0, anchor: .center) } }
-                    }
-                    .onChange(of: model.tabID) { _, tab in
-                        withAnimation(.bar) { tab.map { reader.scrollTo($0) } }
-                    }
+                    .onAppear { revealTab(using: reader) }
+                    .onChange(of: model.tabID) { revealTab(using: reader) }
+                    .onChange(of: others.map(\.id)) { revealTab(using: reader) }
+                    .onChange(of: box.size.width) { revealTab(using: reader) }
                 }
+                // A different Space has different scroll targets, not the old row's position.
+                .id(model.spaceID)
             }
             .frame(height: Metrics.control)
             HStack(spacing: 2) {
@@ -133,6 +135,14 @@ struct TopTabBar: View {
                 .gesture(WindowDragGesture())
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+    }
+
+    private func revealTab(using reader: ScrollViewProxy) {
+        // A new or restored Space's tab targets must be laid out before revealing its address.
+        DispatchQueue.main.async {
+            guard let tab = model.tabID else { return }
+            withAnimation(nil) { reader.scrollTo(tab, anchor: .center) }
+        }
     }
 }
 

@@ -4,7 +4,7 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
-- On the Mac, overflowing Space controls keep the selected Space in view when you switch by keyboard, menu or search. The narrower bar fades at either edge only where more Spaces are hidden. In the top layout, many Spaces scroll instead of pushing navigation and the address out of the window.
+- On the Mac, overflowing Space controls keep the selected Space in view when you switch by keyboard, menu or search. The narrower bar fades at either edge only where more Spaces are hidden. In the top layout, many Spaces scroll instead of pushing navigation and the address out of the window. The active address stays visible when tabs are added, the window narrows or you return to a Space.
 - On the Mac, the command bar has a clickable Open/Search action and a visible Cancel button. The action always submits what you typed; Return still takes the selected suggestion. Sending the unchanged address reloads the page.
 - Extension messages release their fallback timers as soon as an answer arrives, avoiding unnecessary wakeups after the message is settled.
 - Pages with the content blocker on spend less time before they show: its hiding rules are weighed once for each page and frame, not again for every image, script and request the page loads. Lists are made again once, on the first launch after the update.
