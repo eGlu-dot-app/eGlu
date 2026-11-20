@@ -4,14 +4,20 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+- The summary sheet's Copy button uses a circular glass button on current iOS, with the standard bordered button on earlier releases.
+- The summary sheet's Copy button matches the height of the Handoff button.
+- On the Mac, the command bar has a clickable Open/Search action and a visible Cancel button. The action always submits what you typed; Return still takes the selected suggestion. Sending the unchanged address reloads the page.
 - On iPad, navigation controls are grouped, icon-only Space buttons use the Mac's minimal marks and stay in view after resize, and narrow top bars keep the current tab, a legible empty-tab prompt and its actions readable. The address, navigation and Space surfaces share a compact height with air above page content, retaining 44-point touch cells. Mac controls keep their density.
 - Extension messages release their fallback timers as soon as an answer arrives, avoiding unnecessary wakeups after the message is settled.
 - Pages with the content blocker on spend less time before they show: its hiding rules are weighed once for each page and frame, not again for every image, script and request the page loads. Lists are made again once, on the first launch after the update.
 - On iPhone with iOS 27, the pinned tabs' list opens out of the pinned tab's button as the system's menus open out of theirs: the button's glass grows into the list and, put away, goes back into the button. The system places the list and draws its card, without the dimmed page behind it; held open, it still follows the finger from row to row. Before iOS 27 it is as it was.
+- On iPhone and iPad, fix a build failure caused by the pinned panel's rows sharing a type name with the shared pinned layout. Nothing changes in use.
 - The Engineer icon in satin chrome: a terminal window bevelled along every edge on a green dot-matrix screen, with a mint neon line just inside the screen's edge. The e globe and the I-beam keep their pixel drawings, the beam's cells in chrome, and the window's three lights are Liquid Glass.
 - eGlu's icon in dark: the system's own dark ground shows through under the fluted glass, with no milky veil on the glass.
 - On iPad, and on the iPhone Duo with the sidebar, two fingers on the trackpad or one finger swept sideways across the sidebar go to the next or the previous space, as on the Mac; a sweep that sets out up or down still scrolls the tabs. With more spaces than the sidebar has room for, the row of spaces scrolls and keeps the one you are in at its middle.
 - On iPad and Mac, a space's tabs come in from its side of the row of spaces: from the right going to a space on the right, from the left going back, whether it is chosen by its button, a sweep or Next and Previous Space. Before, on the Mac they always came in from the right, and on iPad they didn't slide at all. Under Reduce Motion they only fade.
+- On iPhone and iPad, Summarize Page opens a summary over the page, written as Apple Intelligence reads it on the device. Copy its words or continue to Handoff; nothing is sent anywhere. It is offered only with Handoff turned on and Apple Intelligence available, never on protected sign-in pages. The page menu, command bar and ⌃⌥U open it.
+- The bundled page used by the summary UI tests is left out of Release builds.
 
 ## 1.1.3
 

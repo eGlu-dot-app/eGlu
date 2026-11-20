@@ -372,6 +372,7 @@ struct SidePageMenu: View {
             }
         }
         .accessibilityLabel("Page Menu")
+        .accessibilityIdentifier("page-menu")
     }
 
     @ViewBuilder
