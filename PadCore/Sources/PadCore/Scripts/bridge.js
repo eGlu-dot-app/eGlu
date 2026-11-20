@@ -465,7 +465,7 @@
   function focusables(doc) {
     const view = doc.defaultView;
     const all = Array.from(doc.querySelectorAll(tabbable)).filter((element) => {
-      if (element.tabIndex < 0 || element.disabled) return false;
+      if (element.tabIndex < 0 || element.matches(':disabled')) return false;
       if (element.hasAttribute('contenteditable') && !element.isContentEditable && element.tabIndex === 0
           && !/^(a|area|button|input|select|textarea|iframe|summary)$/i.test(element.tagName)) return false;
       if (element.tagName === 'INPUT' && (element.getAttribute('type') || '').toLowerCase() === 'hidden') return false;

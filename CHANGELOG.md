@@ -4,6 +4,7 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+- Tab and Shift-Tab skip controls disabled by a fieldset, while keeping enabled controls in its first legend reachable.
 - The summary sheet's Copy button uses a circular glass button on current iOS, with the standard bordered button on earlier releases.
 - The summary sheet's Copy button matches the height of the Handoff button.
 - On the Mac, the command bar has a clickable Open/Search action and a visible Cancel button. The action always submits what you typed; Return still takes the selected suggestion. Sending the unchanged address reloads the page.

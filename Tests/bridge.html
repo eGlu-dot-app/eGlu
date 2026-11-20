@@ -360,6 +360,35 @@
   bridge.key({ key: 'Tab', code: 'Tab', shift: true });
   check('⇧Tab goes back', document.activeElement === a);
 
+  const disabledTraversal = document.createElement('div');
+  disabledTraversal.innerHTML = '<input id="before-disabled">'
+    + '<fieldset disabled><legend><input id="legend-enabled"></legend><input id="fieldset-disabled"></fieldset>'
+    + '<input id="disabled-direct" disabled><input id="after-disabled">';
+  document.getElementById('form').appendChild(disabledTraversal);
+  const beforeDisabled = disabledTraversal.querySelector('#before-disabled');
+  const legendEnabled = disabledTraversal.querySelector('#legend-enabled');
+  const afterDisabled = disabledTraversal.querySelector('#after-disabled');
+  beforeDisabled.focus();
+  bridge.key({ key: 'Tab', code: 'Tab' });
+  check('Tab reaches an enabled control in a disabled fieldset first legend', document.activeElement === legendEnabled);
+  bridge.key({ key: 'Tab', code: 'Tab' });
+  check('Tab skips inherited and directly disabled controls', document.activeElement === afterDisabled,
+    document.activeElement && document.activeElement.id);
+  afterDisabled.focus();
+  bridge.key({ key: 'Tab', code: 'Tab', shift: true });
+  check('⇧Tab skips inherited and directly disabled controls', document.activeElement === legendEnabled,
+    document.activeElement && document.activeElement.id);
+  legendEnabled.focus();
+  bridge.key({ key: 'Tab', code: 'Tab', shift: true });
+  check('⇧Tab leaves the enabled first-legend control reachable', document.activeElement === beforeDisabled);
+  disabledTraversal.remove();
+
+  document.body.inert = true;
+  const focusWithNoTargets = document.activeElement;
+  outcome = bridge.key({ key: 'Tab', code: 'Tab' });
+  check('Tab with no eligible targets leaves focus unchanged', outcome === 'default' && document.activeElement === focusWithNoTargets);
+  document.body.inert = false;
+
   // A field inside a shadow root, between a and b: Tab goes on to b, not
   // back to the page's first field.
   const pocket = document.createElement('div');
