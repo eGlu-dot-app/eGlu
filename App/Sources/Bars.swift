@@ -440,7 +440,7 @@ struct MenuEntry {
     var enabled = true
     let run: () -> Void
 
-    /// Find, Share and Handoff, which act on the page as it is: side by side in one row.
+    /// The page's own actions, side by side in one row.
     static func pageRow(_ window: WindowModel, act: @escaping (BarAction) -> Void) -> [MenuEntry] {
         guard window.url != nil else { return [] }
         var row = [
@@ -448,6 +448,7 @@ struct MenuEntry {
             MenuEntry(title: BrowserText.localized("Share"), symbol: "square.and.arrow.up") { act(.command(.share)) },
         ]
         if window.canHandoff {
+            row.append(MenuEntry(title: Command.summarizePage.title, symbol: Command.summarizePage.symbol) { act(.command(.summarizePage)) })
             row.append(MenuEntry(title: BrowserText.localized("Handoff"), symbol: Command.handoff.symbol) { act(.command(.handoff)) })
         }
         return row
@@ -580,6 +581,7 @@ struct MenuButtons: View {
         ForEach(entries, id: \.title) { entry in
             Button(entry.title, systemImage: entry.symbol, role: entry.destructive ? .destructive : nil, action: entry.run)
                 .disabled(!entry.enabled)
+                .accessibilityIdentifier(entry.title == Command.summarizePage.title ? "summarize-page" : entry.title)
         }
     }
 }
@@ -658,6 +660,7 @@ private struct AddressSummary: View {
         .accessibilityValue(window.blocking == false ? String(localized: "Ads allowed on this site") : "")
         .accessibilityHint("Type a new address or a search")
         .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("page-address")
         .accessibilityAction { act(.editAddress) }
     }
 }
