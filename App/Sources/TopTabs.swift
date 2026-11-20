@@ -35,7 +35,7 @@ struct TopTabs: View {
                 }
             }
             .background {
-                Capsule().fill(Side.wash).padding(.vertical, 5)
+                Capsule().fill(Side.wash).padding(.vertical, Metrics.ring)
             }
             if !compact {
                 let barShown = session.preferences.bookmarksBar
@@ -102,7 +102,9 @@ struct TopTabs: View {
                                     }
                                     .background {
                                         if item.tabs.count > 1 {
-                                            RoundedRectangle(cornerRadius: TopTab.corner, style: .continuous).fill(Side.wash)
+                                            RoundedRectangle(cornerRadius: TopTab.corner, style: .continuous)
+                                                .fill(Side.wash)
+                                                .padding(.vertical, Metrics.ring)
                                         }
                                     }
                                 }
@@ -363,9 +365,13 @@ private struct TopTab: View {
         .frame(width: width, height: Side.control)
         .background {
             if selected {
-                Color.clear.liquidGlass(reacting: false, in: mark, otherwise: Palette.card).padding(inset)
+                Color.clear.liquidGlass(reacting: false, in: mark, otherwise: Palette.card)
+                    .padding(inset)
+                    .padding(.vertical, Metrics.ring)
             } else {
-                mark.fill(hovering ? Side.hover : .clear).padding(inset)
+                mark.fill(hovering ? Side.hover : .clear)
+                    .padding(inset)
+                    .padding(.vertical, Metrics.ring)
             }
         }
         .contentShape(shape)

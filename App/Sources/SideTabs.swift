@@ -1048,7 +1048,7 @@ struct SideSpaces: View {
                     }
                     .frame(minWidth: Side.control + 6)
                     .padding(.horizontal, 3)
-                    .background { spaceGlass(compact: true) }
+                    .background { spaceGlass() }
                 }
                 .padding(.horizontal, inRow ? Side.gap - 2 : 0)
             }
@@ -1086,15 +1086,15 @@ struct SideSpaces: View {
         // Under Reduce Motion the disc is at the chosen space at once, not slid there.
         .animation(reduceMotion ? nil : .bar, value: window.spaceID)
         if glass {
-            row.padding(.horizontal, 3).background { spaceGlass(compact: compact) }
+            row.padding(.horizontal, 3).background { spaceGlass() }
         } else {
             row
         }
     }
 
-    private func spaceGlass(compact: Bool) -> some View {
+    private func spaceGlass() -> some View {
         Color.clear
-            .frame(height: compact ? 34 : 38)
+            .frame(height: Metrics.control)
             .liquidGlass(reacting: false, in: Capsule(), otherwise: Palette.wash)
     }
 }
@@ -1115,12 +1115,12 @@ private struct SideSpaceButton: View {
 
     var body: some View {
         let chosen = window.spaceID == space.id
-        let side: CGFloat = compact ? 28 : 32
+        let side: CGFloat = compact ? 22 : 26
         Button {
             act(.switchSpace(space.id))
         } label: {
             Image(systemName: space.symbol)
-                .font(.system(size: compact ? 13 : 14, weight: .semibold))
+                .font(.system(size: compact ? 10 : 12, weight: .semibold))
                 .foregroundStyle(chosen ? space.color.ink : hovering ? Palette.ink : Side.secondary)
                 .frame(width: side, height: side)
                 .matchedGeometryEffect(id: Self.place(space.id, compact: compact), in: places, isSource: true)

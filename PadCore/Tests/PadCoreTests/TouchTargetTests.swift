@@ -40,9 +40,29 @@ struct TouchTargetTests {
             #expect(cell.lowerBound < shape.lowerBound, "\(name) hit-tests its whole allocated cell")
             #expect(!body.contains("Circle().inset(by: -6)"))
         }
-        #expect(side.contains("let side: CGFloat = compact ? 28 : 32"))
-        #expect(side.contains(".frame(height: compact ? 34 : 38)"))
         #expect(side.contains("row.padding(.horizontal, 3).background"))
+    }
+
+    @Test func spaceMarksUseDesktopScaleInsideFullTouchCells() throws {
+        let side = try source("App/Sources/SideTabs.swift")
+        #expect(side.contains("let side: CGFloat = compact ? 22 : 26"))
+        #expect(side.contains(".font(.system(size: compact ? 10 : 12, weight: .semibold))"))
+        let glass = try #require(side.range(of: "private func spaceGlass() -> some View {"))
+        let surface = side[glass.upperBound...].prefix(250)
+        #expect(surface.contains(".frame(height: Metrics.control)"))
+        #expect(!side.contains(".frame(height: compact ? 34 : 38)"))
+    }
+
+    @Test func topTabSurfacesLeaveAirInsideTheirFullTouchCells() throws {
+        let top = try source("App/Sources/TopTabs.swift")
+        #expect(top.contains("Capsule().fill(Side.wash).padding(.vertical, Metrics.ring)"))
+        let tab = try #require(top.range(of: "private struct TopTab: View {"))
+        let surfaceStart = try #require(top[tab.upperBound...].range(of: ".frame(width: width, height: Side.control)"))
+        let surfaceEnd = try #require(top[surfaceStart.upperBound...].range(of: ".contentShape(shape)"))
+        let surface = top[surfaceStart.upperBound..<surfaceEnd.lowerBound]
+        #expect(surface.components(separatedBy: ".padding(.vertical, Metrics.ring)").count == 3)
+        let design = try source("App/Sources/Design.swift")
+        #expect(design.contains("static let ring: CGFloat = (target - control) / 2"))
     }
 
     @Test func overflowingSpacesCannotPushTheTopToolbarOffscreen() throws {
