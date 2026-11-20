@@ -3,6 +3,26 @@ import PadCore
 import SwiftUI
 import UIKit
 
+/// A local filter, not a web search: every word must occur in the tab's
+/// displayed name or one of its addresses, without changing the stored order.
+struct TabOverviewFilter {
+    let terms: [String]
+
+    init(_ text: String) {
+        terms = text.split(whereSeparator: \.isWhitespace).map(String.init)
+    }
+
+    var isEmpty: Bool { terms.isEmpty }
+
+    func matches(_ tab: TabRecord) -> Bool {
+        let addresses = [tab.url, tab.pinned].compactMap { $0?.absoluteString }
+        let text = [tab.label] + addresses + addresses.compactMap(\.removingPercentEncoding)
+        return terms.allSatisfy { term in
+            text.contains { $0.localizedStandardContains(term) }
+        }
+    }
+}
+
 /// The space's tabs as a grid, on the sheet the phone bar turns into
 /// (TabSheet), as Safari and Comet show theirs: each tab as a picture of its
 /// page with its name under it. The pinned tabs sit apart, in a dock at the bottom as the iPhone's apps do,
@@ -15,7 +35,7 @@ import UIKit
 /// scrolls up and down is a matter of which gesture gets the touch, and
 /// UIKit lets each one say.
 @MainActor
-final class TabOverviewController: UIViewController, UICollectionViewDelegate {
+final class TabOverviewController: UIViewController, UICollectionViewDelegate, UISearchBarDelegate {
     // The data source compares these off the main actor.
     nonisolated private enum Section: Hashable {
         case tabs
@@ -31,6 +51,12 @@ final class TabOverviewController: UIViewController, UICollectionViewDelegate {
     private let done: (BarAction?) -> Void
 
     private let header = UIView()
+    private let search = UISearchBar()
+    private let emptyView = UIContentUnavailableView(configuration: UIContentUnavailableConfiguration.empty())
+    private enum EmptyKind { case noTabs, pinnedOnly, noMatches }
+    private var emptyKind: EmptyKind?
+    private var filter: TabOverviewFilter { TabOverviewFilter(search.text ?? "") }
+    private var keyboardFrame: CGRect?
     /// The space's button, with its name, in the middle of the header (SpaceHeading).
     private var heading: UIHostingController<SpaceHeading>!
     private lazy var collection = UICollectionView(frame: .zero, collectionViewLayout: layout())
@@ -50,6 +76,7 @@ final class TabOverviewController: UIViewController, UICollectionViewDelegate {
     private var scrolledToCurrent = false
 
     private static var headerHeight: CGFloat { max(52, UIFont.preferredFont(forTextStyle: .headline).lineHeight + 20) }
+    private static var searchHeight: CGFloat { max(56, UIFont.preferredFont(forTextStyle: .body).lineHeight + 28) }
     private static var barHeight: CGFloat { max(64, UIFont.preferredFont(forTextStyle: .body).lineHeight + 30) }
     /// The grid fades out under the heading and at the sheet's foot, where
     /// more of it is past them, rather than being cut off there; whole
@@ -101,7 +128,26 @@ final class TabOverviewController: UIViewController, UICollectionViewDelegate {
         fade.colors = [UIColor.black.cgColor, UIColor.black.cgColor, UIColor.black.cgColor, UIColor.black.cgColor]
         collection.layer.mask = fade
         view.addSubview(collection)
+        collection.keyboardDismissMode = .onDrag
+        emptyView.isScrollEnabled = true
+        emptyView.accessibilityIdentifier = "allTabs.empty"
+        view.addSubview(emptyView)
         view.addSubview(header)
+        search.searchBarStyle = .minimal
+        search.placeholder = String(localized: "Filter Tabs")
+        search.searchTextField.accessibilityLabel = String(localized: "Filter Tabs")
+        search.searchTextField.accessibilityHint = String(localized: "Filters tabs in this Space by title or address.")
+        search.searchTextField.accessibilityIdentifier = "allTabs.filter"
+        search.searchTextField.font = .preferredFont(forTextStyle: .body)
+        search.searchTextField.adjustsFontForContentSizeCategory = true
+        search.autocapitalizationType = .none
+        search.autocorrectionType = .no
+        search.returnKeyType = .done
+        search.delegate = self
+        view.addSubview(search)
+        for name in [UIResponder.keyboardWillChangeFrameNotification, UIResponder.keyboardDidChangeFrameNotification] {
+            NotificationCenter.default.addObserver(self, selector: #selector(keyboardChanged(_:)), name: name, object: nil)
+        }
 
         newTab.configuration = Self.glass(symbol: "plus")
         newTab.accessibilityLabel = String(localized: "New Tab")
@@ -140,33 +186,100 @@ final class TabOverviewController: UIViewController, UICollectionViewDelegate {
         // tools stand over the sheet, or a small iPhone's edges turned.
         let safe = view.safeAreaInsets
         let bounds = view.bounds.inset(by: UIEdgeInsets(top: 0, left: safe.left, bottom: 0, right: safe.right))
+        let bottom = visibleBottom(in: bounds)
+        let docked = !dock.isHidden
+        // A landscape keyboard cannot fit a heading, filter, dock and footer
+        // stacked vertically. Keep the filter first and share one tools row.
+        let compact = bottom < bounds.maxY - 1 &&
+            bottom < Self.headerHeight + Self.searchHeight + Self.barHeight + (docked ? PinnedDock.height + 20 : 8) + 80
+        header.isHidden = compact
         header.frame = CGRect(x: bounds.minX, y: 0, width: bounds.width, height: Self.headerHeight)
         let face = heading.view.intrinsicContentSize
         let width = min(face.width, bounds.width - 32)
         heading.view.frame = CGRect(x: ((bounds.width - width) / 2).rounded(), y: ((Self.headerHeight - face.height) / 2).rounded(),
                                     width: width, height: face.height)
-        collection.frame = CGRect(x: bounds.minX, y: Self.headerHeight, width: bounds.width, height: max(0, bounds.height - Self.headerHeight))
-        let y = bounds.height - Self.barHeight + 10
-        let docked = !dock.isHidden
+        search.frame = CGRect(x: bounds.minX + 8, y: compact ? 0 : Self.headerHeight, width: max(0, bounds.width - 16), height: Self.searchHeight)
+        let gridTop = search.frame.maxY
+        collection.frame = CGRect(x: bounds.minX, y: gridTop, width: bounds.width, height: max(0, bottom - gridTop))
+        let footerHeight = compact && docked ? max(Self.barHeight, PinnedDock.height + 20) : Self.barHeight
+        let controlHeight = Self.barHeight - 20
+        let fits = doneButton.sizeThatFits(CGSize(width: bounds.width - 100, height: controlHeight))
+        newTab.frame = CGRect(x: bounds.minX + 16, y: bottom - footerHeight + (footerHeight - 44) / 2, width: 44, height: 44)
+        doneButton.frame = CGRect(x: bounds.maxX - 16 - max(fits.width, 72), y: bottom - footerHeight + (footerHeight - controlHeight) / 2,
+                                  width: max(fits.width, 72), height: controlHeight)
         // As wide as the bar's buttons reach, and as far above them as they are apart from its own edge.
-        dock.frame = CGRect(x: bounds.minX + 16, y: bounds.height - Self.barHeight - PinnedDock.height, width: bounds.width - 32,
+        dock.frame = CGRect(x: bounds.minX + 16, y: bottom - Self.barHeight - PinnedDock.height, width: bounds.width - 32,
                             height: PinnedDock.height)
+        if compact {
+            dock.frame = CGRect(x: newTab.frame.maxX + 12, y: bottom - footerHeight + (footerHeight - PinnedDock.height) / 2,
+                                width: max(0, doneButton.frame.minX - 12 - (newTab.frame.maxX + 12)), height: PinnedDock.height)
+        }
+        let emptyBottom = docked && !compact ? dock.frame.minY - 12 : bottom - footerHeight
+        emptyView.frame = CGRect(x: bounds.minX, y: gridTop, width: bounds.width, height: max(0, emptyBottom - gridTop))
+        // The dock speaks for itself here; its explanatory text would only
+        // have a clipped sliver of room above the shared tools row.
+        emptyView.isHidden = emptyKind == nil || (compact && emptyKind == .pinnedOnly)
         // The grid's last row clears the dock, which floats over the grid
         // as it scrolls, with room to spare.
-        let below = Self.barHeight + (docked ? PinnedDock.height + 20 : 8)
+        let below = footerHeight + (docked && !compact ? PinnedDock.height + 20 : 8)
         collection.contentInset.bottom = below
         collection.verticalScrollIndicatorInsets.bottom = below
         fadeEdges()
-        newTab.frame = CGRect(x: bounds.minX + 16, y: y, width: 44, height: 44)
-        let controlHeight = Self.barHeight - 20
-        let fits = doneButton.sizeThatFits(CGSize(width: bounds.width - 100, height: controlHeight))
-        doneButton.frame = CGRect(x: bounds.maxX - 16 - max(fits.width, 72), y: y, width: max(fits.width, 72), height: controlHeight)
         // The tab on screen in the middle, once there is a grid to put it in.
-        if !scrolledToCurrent, collection.bounds.height > 0, let current = window.tabID,
+        if filter.isEmpty, !scrolledToCurrent, collection.bounds.height > 0, let current = window.tabID,
            let path = source.indexPath(for: .tab(current)) {
             scrolledToCurrent = true
             collection.layoutIfNeeded()
             collection.scrollToItem(at: path, at: .centeredVertically, animated: false)
+        }
+    }
+
+    /// This controller is also a manually laid-out child of TabSheet, where
+    /// a keyboard guide alone does not trigger another layout pass.
+    @objc private func keyboardChanged(_ note: Notification) {
+        keyboardFrame = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect
+        view.setNeedsLayout()
+        let duration = note.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0
+        let curve = note.userInfo?[UIResponder.keyboardAnimationCurveUserInfoKey] as? UInt ?? 7
+        UIView.animate(withDuration: duration, delay: 0,
+                       options: [.beginFromCurrentState, UIView.AnimationOptions(rawValue: curve << 16)]) {
+            self.view.layoutIfNeeded()
+        }
+    }
+
+    private func visibleBottom(in bounds: CGRect) -> CGFloat {
+        guard let keyboardFrame, let window = view.window else { return bounds.maxY }
+        let frame = view.convert(window.convert(keyboardFrame, from: window.screen.coordinateSpace), from: window)
+        let overlap = bounds.intersection(frame)
+        // Floating/undocked keyboards must not collapse the whole grid.
+        guard !overlap.isNull, overlap.width >= bounds.width - 1, frame.maxY >= bounds.maxY - 1 else { return bounds.maxY }
+        return max(bounds.minY, frame.minY)
+    }
+
+    // Filtering is immediate, without list animations or moving keyboard focus.
+    func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
+        apply(animated: false)
+        collection.setContentOffset(.zero, animated: false)
+    }
+
+    func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
+        searchBar.resignFirstResponder()
+    }
+
+    override var keyCommands: [UIKeyCommand]? {
+        let escape = UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(escapeFilter))
+        escape.wantsPriorityOverSystemBehavior = true
+        return [escape]
+    }
+
+    @objc private func escapeFilter() {
+        if !(search.text ?? "").isEmpty {
+            search.text = ""
+            apply(animated: false)
+        } else if search.searchTextField.isFirstResponder {
+            search.resignFirstResponder()
+        } else {
+            done(nil)
         }
     }
 
@@ -294,12 +407,13 @@ final class TabOverviewController: UIViewController, UICollectionViewDelegate {
         }
     }
 
-    private func apply() {
+    private func apply(animated: Bool = true) {
         guard source != nil else { return }
         // A pinned tab hidden on this device in Settings › Pinned Tabs stays
         // out of the dock, as out of the pinned list and the swipe, unless
         // it is the tab on screen (PageSlide).
-        let tabs = space?.tabs ?? []
+        let filter = filter
+        let tabs = (space?.tabs ?? []).filter { filter.matches($0) }
         let pinned = tabs.filter { $0.isPinned && ($0.id == window.tabID || session.preferences.shows($0)) }
         let others = tabs.filter { !$0.isPinned }
         // The space's name, and so its button's width, may have changed.
@@ -307,6 +421,10 @@ final class TabOverviewController: UIViewController, UICollectionViewDelegate {
 
         dock.isHidden = pinned.isEmpty
         dock.show(pinned, current: window.tabID, color: spaceColor)
+        // A filtered index is not a position in the whole space. Keep menus
+        // and closing available, but only reorder when all cards are visible.
+        collection.dragInteractionEnabled = filter.isEmpty
+        showEmpty(others.isEmpty ? (pinned.isEmpty ? (filter.isEmpty ? .noTabs : .noMatches) : .pinnedOnly) : nil)
 
         var snapshot = NSDiffableDataSourceSnapshot<Section, Item>()
         snapshot.appendSections([.tabs])
@@ -314,8 +432,42 @@ final class TabOverviewController: UIViewController, UICollectionViewDelegate {
         // What a card says (its name, the ring of the tab on screen) can
         // change without the card coming or going.
         snapshot.reconfigureItems(snapshot.itemIdentifiers)
-        source.apply(snapshot, animatingDifferences: shown && !UIAccessibility.isReduceMotionEnabled)
+        source.apply(snapshot, animatingDifferences: animated && filter.isEmpty && shown && !UIAccessibility.isReduceMotionEnabled)
         shown = true
+    }
+
+    private func showEmpty(_ kind: EmptyKind?) {
+        emptyView.isHidden = kind == nil
+        collection.isHidden = kind != nil
+        guard kind != emptyKind else { return }
+        emptyKind = kind
+        guard let kind else { return }
+        var configuration = UIContentUnavailableConfiguration.empty()
+        configuration.image = UIImage(systemName: kind == .noMatches ? "magnifyingglass" : "square.on.square")
+        switch kind {
+        case .noTabs:
+            configuration.text = String(localized: "No tabs to show")
+            configuration.secondaryText = String(localized: "Open a new tab to get started in this Space.")
+        case .pinnedOnly:
+            configuration.text = String(localized: "Pinned tabs")
+            configuration.secondaryText = String(localized: "Choose a pinned tab below or open a new tab.")
+        case .noMatches:
+            configuration.text = String(localized: "No matching tabs")
+            configuration.secondaryText = String(localized: "Try another title or address.")
+        }
+        configuration.button = .bordered()
+        configuration.button.title = kind == .noMatches ? String(localized: "Clear Filter") : String(localized: "New Tab")
+        configuration.buttonProperties.primaryAction = UIAction { [weak self] _ in
+            guard let self else { return }
+            if kind == .noMatches {
+                search.text = ""
+                apply(animated: false)
+                search.becomeFirstResponder()
+            } else {
+                done(.command(.newTab))
+            }
+        }
+        emptyView.configuration = configuration
     }
 
     // MARK: Taps and menus
@@ -789,7 +941,7 @@ extension TabOverviewController: UICollectionViewDragDelegate, UICollectionViewD
     /// A tab's card, lifted from its menu's hold (another device's tabs stay where they are).
     func collectionView(_ collectionView: UICollectionView, itemsForBeginning drag: UIDragSession,
                         at path: IndexPath) -> [UIDragItem] {
-        guard case .tab(let id) = source.itemIdentifier(for: path) else { return [] }
+        guard filter.isEmpty, case .tab(let id) = source.itemIdentifier(for: path) else { return [] }
         let item = UIDragItem(itemProvider: NSItemProvider())
         item.localObject = id
         return [item]
@@ -802,7 +954,7 @@ extension TabOverviewController: UICollectionViewDragDelegate, UICollectionViewD
     /// Among this space's tabs only, and only a card from this sheet.
     func collectionView(_ collectionView: UICollectionView, dropSessionDidUpdate drop: UIDropSession,
                         withDestinationIndexPath path: IndexPath?) -> UICollectionViewDropProposal {
-        guard drop.localDragSession != nil, let id = drop.items.first?.localObject as? UUID,
+        guard filter.isEmpty, drop.localDragSession != nil, let id = drop.items.first?.localObject as? UUID,
               session.workspace.spaceID(of: id) != nil,
               let path, case .tabs = source.sectionIdentifier(for: path.section) else {
             return UICollectionViewDropProposal(operation: .cancel)
@@ -815,7 +967,7 @@ extension TabOverviewController: UICollectionViewDragDelegate, UICollectionViewD
     /// follow the workspace, as for any other change. A drop that changes
     /// nothing (a pane within its own pair) is let go where it was.
     func collectionView(_ collectionView: UICollectionView, performDropWith coordinator: UICollectionViewDropCoordinator) {
-        guard let destination = coordinator.destinationIndexPath, let item = coordinator.items.first,
+        guard filter.isEmpty, let destination = coordinator.destinationIndexPath, let item = coordinator.items.first,
               let id = item.dragItem.localObject as? UUID,
               let origin = session.workspace.spaceID(of: id) else { return }
         if origin != window.spaceID {
