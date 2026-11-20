@@ -471,6 +471,7 @@ private struct TopPinnedTab: View {
         .animation(.bar, value: selected)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(tab.title.isEmpty ? String(localized: "Pinned Tab") : tab.title)
+        .accessibilityValue(Pinned.isOpen(tab) ? String(localized: "Open") : String(localized: "Unloaded"))
         .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
     }
 }

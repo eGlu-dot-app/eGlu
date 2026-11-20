@@ -1,6 +1,24 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Unloaded" : {
+      "comment" : "Accessibility state of a pinned tab that remains pinned but has released its page from memory.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unloaded"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "메모리 해제됨"
+          }
+        }
+      }
+    },
     "Not included, %@ characters" : {
       "extractionState" : "manual",
       "localizations" : {
