@@ -8,7 +8,7 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 - Page skills in the summary sheet turn the page into key points, a simpler explanation or action items. Switch while it writes, and copy the result; Apple Intelligence still works only on the device, with Handoff turned on.
 - The bundled page used by the summary UI tests is left out of Release builds.
 - On iPhone and iPad, Summarize Page opens a summary over the page, written as Apple Intelligence reads it on the device. Copy its words or continue to Handoff; nothing is sent anywhere. It is offered only with Handoff turned on and Apple Intelligence available, never on protected sign-in pages. The page menu, command bar and ⌃⌥U open it.
-
+- Pages with the content blocker on spend less time before they show: its hiding rules are weighed once for each page and frame, not again for every image, script and request the page loads. Lists are made again once, on the first launch after the update.
 - On iPhone with iOS 27, the pinned tabs' list opens out of the pinned tab's button as the system's menus open out of theirs: the button's glass grows into the list and, put away, goes back into the button. The system places the list and draws its card, without the dimmed page behind it; held open, it still follows the finger from row to row. Before iOS 27 it is as it was.
 - The Engineer icon in satin chrome: a terminal window bevelled along every edge on a green dot-matrix screen, with a mint neon line just inside the screen's edge. The e globe and the I-beam keep their pixel drawings, the beam's cells in chrome, and the window's three lights are Liquid Glass.
 - eGlu's icon in dark: the system's own dark ground shows through under the fluted glass, with no milky veil on the glass.
