@@ -4,6 +4,8 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+- On the Mac, iPhone and iPad, the bookmarks bar is named "Bookmarks Bar" in the Bookmark Manager (its side list, its title, Move to and the paths of what a search finds) and on a new tab's page, as the menus and buttons already name it; before, those read "Bookmarks bar". In a file eGlu exports the bar keeps Chrome's own name, so Chrome, Firefox and Safari still take it as their bar.
+- On iPhone and iPad, swiping a row in the Bookmark Manager offers "Rename…" for a folder and "Edit…" for a bookmark, as the row's menu does; before, both read "Edit".
 - The summary sheet's Copy button uses a circular glass button on current iOS, with the standard bordered button on earlier releases.
 - The summary sheet's Copy button matches the height of the Handoff button.
 - On the Mac, the command bar has a clickable Open/Search action and a visible Cancel button. The action always submits what you typed; Return still takes the selected suggestion. Sending the unchanged address reloads the page.
