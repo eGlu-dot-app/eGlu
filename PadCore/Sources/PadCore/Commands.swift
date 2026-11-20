@@ -40,6 +40,7 @@ public enum Command: String, CaseIterable, Sendable {
     case contentBlocking
     case linkMenu
     case find
+    case summarizePage
     case handoff
     /// A file's handoff ("Handoff File…"), its chooser's way in: on
     /// ⌃⌥⇧H, beside the page's ⌃⌥H.
@@ -88,6 +89,7 @@ public enum Command: String, CaseIterable, Sendable {
         case .contentBlocking: return BrowserText.localized("Block or Allow Ads on This Site")
         case .linkMenu: return BrowserText.localized("Site Link Menus")
         case .find: return BrowserText.localized("Find on Page…")
+        case .summarizePage: return BrowserText.localized("Summarize Page")
         case .handoff: return BrowserText.localized("Handoff…")
         case .handoffFile: return BrowserText.localized("Handoff File…")
         case .history: return BrowserText.localized("Show All History")
@@ -135,6 +137,7 @@ public enum Command: String, CaseIterable, Sendable {
         case .contentBlocking: return ["ad blocker", "adblock", "trackers", "content blocker", "easylist", "turn off", "allow ads"]
         case .linkMenu: return ["context menu", "right click", "long press", "link menu", "open in new tab", "callout"]
         case .find: return ["search", "text", "look for", "in page", "word"]
+        case .summarizePage: return ["summary", "summarise", "read", "apple intelligence", "on device"]
         case .handoff:
             return ["ai", "ask", "assistant", "claude", "chatgpt", "gemini", "markdown", "summarize", "summarise",
                     "send", "hand off"]
@@ -236,7 +239,7 @@ public enum ShortcutGroup: String, CaseIterable, Sendable {
         switch self {
         case .go:
             return [.address, .everything, .back, .forward, .history, .reload, .stop, .share, .copyLink, .handoff, .handoffFile, .siteMode,
-                    .contentBlocking, .linkMenu, .find, .acceptWritingSuggestion]
+                    .contentBlocking, .linkMenu, .find, .summarizePage, .acceptWritingSuggestion]
         case .tabs: return [.newTab, .closeTab, .reopenTab, .pinTab, .splitTab, .bookmark, .bookmarkManager, .nextTab, .previousTab]
         case .spaces: return [.nextSpace, .previousSpace, .newSpace, .spaceSettings, .importBookmarks, .newWindow, .closeWindow]
         // The developer tools, as the Mac's Developer menu and the
@@ -284,6 +287,7 @@ public enum Shortcuts {
         .contentBlocking: Chord(.character("a"), shift: true),
         .linkMenu: Chord(.character("l"), shift: true),
         .find: Chord(.character("f")),
+        .summarizePage: Chord(.character("u")),
         .handoff: Chord(.character("h")),
         .handoffFile: Chord(.character("h"), shift: true),
         .history: Chord(.character("y")),

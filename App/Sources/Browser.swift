@@ -55,9 +55,22 @@ enum StripEdge: Equatable {
 @Observable
 final class WindowModel {
     var spaceID: UUID {
-        // Another space's bookmarks are not the ones asked for: they go.
-        didSet { if spaceID != oldValue, bookmarksOpen { bookmarksOpen = false } }
+        didSet {
+            defer { stepping = nil }
+            guard spaceID != oldValue else { return }
+            // Another space's bookmarks are not the ones asked for: they go.
+            if bookmarksOpen { bookmarksOpen = false }
+            spaceSide = stepping ?? Session.shared.workspace.side(of: spaceID, from: oldValue)
+        }
     }
+    /// The way along the row of spaces the last change of space went, for
+    /// what shows the space to come in from that side (SideTabs): 1 toward
+    /// the row's end, -1 toward its start, 0 where there was no way between
+    /// (the space left is gone).
+    private(set) var spaceSide = 0
+    /// A step to the space beside (Browser.stepSpace) says its way before it
+    /// goes: from the last space round to the first is still on toward the end.
+    @ObservationIgnored var stepping: Int?
     var tabID: UUID?
     var url: URL?
     var title = ""
@@ -278,6 +291,8 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
     /// The tabs down the window's side, in place of the row along the top
     /// and the address bar (Settings › Tabs).
     private var sideTabs: UIHostingController<SideTabs>?
+    /// A sweep sideways across the sidebar goes to the space beside, as on the Mac.
+    private var sidebarSwipe: SidebarSwipe?
     /// The hover card is a window child so it can extend past the sidebar.
     private var tabHoverCard: UIHostingController<TabHoverCard>?
     private var hoveredTab: TabHover?
@@ -558,6 +573,9 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
     /// welcome's role, and the device can check (Decided 7). It can't be
     /// swiped away by accident; Not Now and Check My Writing end it.
     func askAboutWritingIfNeeded() {
+        #if DEBUG
+        if PageMindTesting.enabled { return }
+        #endif
         guard connected, presentedViewController == nil,
               WritingAsk.decision(welcomePending: Session.shared.needsWelcome,
                                   asked: WritingAsked.wasAsked) == .sheet,
@@ -633,6 +651,7 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         side.view.isHidden = true
         chromeConstraints.pinSidebar(side.view, to: safe, stack: stack)
         sideTabs = side
+        sidebarSwipe = SidebarSwipe(on: side.view) { [weak self] way in self?.stepSpace(way) }
         let saveStatus = embed(WorkspaceSaveStatusView())
         saveStatus.sizingOptions = .intrinsicContentSize
         saveStatus.view.isHidden = session.persistence.state.failure == nil
@@ -2421,6 +2440,7 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         case .contentBlocking: switchBlocking()
         case .linkMenu: switchOwnMenus()
         case .find: page?.find()
+        case .summarizePage: summarizePage()
         case .handoff: handoff()
         case .handoffFile: chooseHandoffFile()
         case .history: openHistory()
@@ -2493,10 +2513,14 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         }
     }
 
+    /// To the space beside, `direction` along the row (1 the next), going
+    /// round at its ends: Next and Previous Space, and a swipe across the sidebar.
     private func stepSpace(_ direction: Int) {
         guard let next = Session.shared.workspace.spaceNeighbour(of: model.spaceID, by: direction),
               next != model.spaceID else { return }
+        model.stepping = direction
         showSpace(next)
+        model.stepping = nil
     }
 
     /// ⌃⌥1 to ⌃⌥8 the tab in that place in the row, ⌃⌥9 the last.
@@ -3175,6 +3199,29 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
     private func handoff() {
         guard let page, !page.isHandsOff, page.view.url != nil else { return }
         handoff(source: page)
+    }
+
+    private func summarizePage() {
+        guard let page, let url = page.address, model.canHandoff, presentedViewController == nil else { return }
+        let job = PageSummaryJob(source: page, url: url) { [weak self, weak page] in
+            guard let self, let page else { return false }
+            return self.page === page && page.address == url && !page.isHandsOff
+                && Session.shared.preferences.handoff && Session.shared.hasIntelligence
+        }
+        let controller = UIHostingController(rootView: PageSummarySheet(job: job) { [weak self, weak page] in
+            self?.dismiss(animated: true) { [weak self, weak page] in
+                guard let self, let page, self.page === page, page.address == url else { return }
+                self.handoff()
+            }
+        })
+        controller.modalPresentationStyle = .pageSheet
+        controller.preferredContentSize = CGSize(width: 540, height: 580)
+        if let sheet = controller.sheetPresentationController {
+            sheet.detents = [.medium(), .large()]
+            sheet.prefersGrabberVisible = true
+            sheet.prefersScrollingExpandsWhenScrolledToEdge = true
+        }
+        present(controller, animated: true)
     }
 
     /// The page or a file on it handed to another app: a link's file, a
