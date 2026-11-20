@@ -4,6 +4,7 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+- On iPad, narrow split controls now use a compact adaptive header with pane-switch and exit actions.
 - On iPad, switching panes in a narrow split keeps the selected page visible.
 - The summary sheet's Copy button uses a circular glass button on current iOS, with the standard bordered button on earlier releases.
 - The summary sheet's Copy button matches the height of the Handoff button.

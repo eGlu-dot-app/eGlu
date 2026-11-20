@@ -1060,30 +1060,100 @@ struct NarrowSplitControls: View {
 
     var body: some View {
         if window.narrowSplit {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Split View: One Pane Visible").font(.caption).foregroundStyle(Palette.muted)
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 12) { actions }
-                    VStack(alignment: .leading, spacing: 8) { actions }
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) {
+                    status
+                    Spacer(minLength: 8)
+                    actions
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    status
+                    actions
                 }
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 6)
+            .padding(.vertical, 2)
             .frame(maxWidth: .infinity, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
             .background(Palette.ground)
         }
     }
 
-    private var actions: some View {
-        Group {
-            Button("Switch Pane", systemImage: "rectangle.2.swap") { act(.switchPane) }
-            Button("Exit Split", systemImage: "rectangle") {
-                if let tab = window.tabID { act(.separate(tab)) }
+    private var status: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "rectangle.split.2x1")
+                .font(.footnote)
+                .foregroundStyle(Palette.ink)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Split View")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Palette.ink)
+                Text("One pane visible")
+                    .font(.caption2)
+                    .foregroundStyle(Palette.muted)
             }
         }
-        .font(.body)
-        .frame(minHeight: 44)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var actions: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                switchPaneButton
+                exitSplitButton
+            }
+            VStack(alignment: .leading, spacing: 0) {
+                switchPaneButton
+                exitSplitButton
+            }
+        }
+    }
+
+    private var switchPaneButton: some View {
+        Button { act(.switchPane) } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "rectangle.2.swap")
+                    .accessibilityHidden(true)
+                Text("Switch Pane")
+            }
+            .font(.footnote)
+            .foregroundStyle(Palette.ink)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .frame(minWidth: 44, minHeight: 44)
+            .background {
+                RoundedRectangle(cornerRadius: Metrics.corner, style: .continuous)
+                    .fill(Palette.wash)
+                    .padding(.vertical, 6)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PressScale())
+        .hoverEffect(.highlight)
+        .accessibilityLabel("Switch Pane")
+        .accessibilityHint("Shows the other pane in the split.")
+    }
+
+    private var exitSplitButton: some View {
+        Button {
+            if let tab = window.tabID { act(.separate(tab)) }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "rectangle")
+                    .accessibilityHidden(true)
+                Text("Exit Split")
+            }
+            .font(.footnote)
+            .foregroundStyle(Palette.ink)
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PressScale())
+        .hoverEffect(.highlight)
+        .disabled(window.tabID == nil)
+        .accessibilityLabel("Exit Split")
+        .accessibilityHint("Separates this tab from the split.")
     }
 }
 

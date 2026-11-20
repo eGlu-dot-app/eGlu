@@ -1,5 +1,6 @@
 import XCTest
 import UIKit
+import SwiftUI
 import WebKit
 import PadCore
 @testable import eGlu
@@ -79,6 +80,46 @@ final class CrashRegressionTests: XCTestCase {
         XCTAssertTrue(browser.model.narrowSplit)
         XCTAssertFalse(pageA.view.isHidden, "The active pane must remain visible after narrowing")
         XCTAssertTrue(pageB.view.isHidden)
+    }
+
+    func testNarrowSplitControlsFitCompactRowAtRegularWidth() {
+        let model = WindowModel(spaceID: UUID())
+        model.narrowSplit = true
+        let hosting = UIHostingController(rootView: NarrowSplitControls(window: model) { _ in }
+            .environment(\.dynamicTypeSize, .large))
+        hosting.loadViewIfNeeded()
+
+        let size = hosting.sizeThatFits(in: CGSize(width: 576, height: 200))
+        XCTAssertEqual(size.width, 576, accuracy: 0.5)
+        XCTAssertGreaterThanOrEqual(size.height, 48)
+        XCTAssertLessThanOrEqual(size.height, 52)
+    }
+
+    func testNarrowSplitControlsReflowAtAccessibilitySize() {
+        let model = WindowModel(spaceID: UUID())
+        model.narrowSplit = true
+        let hosting = UIHostingController(rootView: NarrowSplitControls(window: model) { _ in }
+            .environment(\.dynamicTypeSize, .accessibility5))
+        hosting.loadViewIfNeeded()
+
+        let size = hosting.sizeThatFits(in: CGSize(width: 320, height: 600))
+        XCTAssertEqual(size.width, 320, accuracy: 0.5)
+        XCTAssertGreaterThan(size.height, 150)
+        XCTAssertLessThan(size.height, 600)
+
+        hosting.view.frame = CGRect(origin: .zero, size: size)
+        hosting.view.setNeedsLayout()
+        hosting.view.layoutIfNeeded()
+        XCTAssertFalse(hosting.view.hasAmbiguousLayout)
+    }
+
+    func testNarrowSplitControlsHaveNoContentOutsideNarrowSplit() {
+        let model = WindowModel(spaceID: UUID())
+        let hosting = UIHostingController(rootView: NarrowSplitControls(window: model) { _ in })
+        hosting.loadViewIfNeeded()
+
+        let size = hosting.sizeThatFits(in: CGSize(width: 576, height: 200))
+        XCTAssertEqual(size.height, 0, accuracy: 0.5)
     }
 
     func testAnsweredDialogDoesNotReplyAgainOnCancellationOrRelease() {
