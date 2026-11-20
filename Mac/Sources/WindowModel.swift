@@ -1330,7 +1330,7 @@ final class WindowModel: ObservableObject, PageHost {
         case .reloadOrigin: toolsPage?.reloadFromOrigin()
         case .measure: page?.toggleMeasuring()
         case .developerMode: toggleDeveloperMode()
-        case .diagnostics, .siteMode, .linkMenu: break
+        case .diagnostics, .siteMode, .linkMenu, .summarizePage: break
         }
     }
 
