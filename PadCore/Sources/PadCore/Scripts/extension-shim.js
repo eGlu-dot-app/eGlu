@@ -1111,8 +1111,9 @@
             if (r !== undefined) return r;
             const waitFor = (ms, until) => new Promise((done) => {
               if (until()) return done();
-              wake = () => { if (until()) done(); };
-              setTimeout(done, ms);
+              const finish = () => { clearTimeout(timer); wake = () => {}; done(); };
+              wake = () => { if (until()) finish(); };
+              const timer = setTimeout(finish, ms);
             });
             await waitFor(300, () => saidSo || gotAnswer);
             if (saidSo && !gotAnswer) await waitFor(30000, () => gotAnswer);
@@ -1140,6 +1141,7 @@
         // The tab's own page, as the tab says, should its frames leave it out.
         const top = (wanted === null || wanted === 0) && typeof tabs.get === "function"
           ? Promise.resolve(tabs.get(tabId)).then((tab) => tab && tab.url, () => null) : Promise.resolve(null);
+        let settled = false, cancel = () => {};
         const framed = Promise.all([frames, top]).then(([list, url]) => {
           const ours = list.filter((f) => f.url && f.url.startsWith(ownPlace) && (wanted === null || f.frameId === wanted));
           const urls = ours.map((f) => f.url);
@@ -1163,15 +1165,25 @@
             // copy, and the extension's pages it isn't for answer that copy
             // with nothing only after ten seconds (dispatch).
             let claims = framedPage ? 1 : 0, open = true, done = false;
-            const finish = (value) => { if (!done) { done = true; relays.delete(relayed); resolve(value); } };
+            let opening, deadline;
+            const finish = (value) => {
+              if (done) return;
+              done = true;
+              clearTimeout(opening);
+              clearTimeout(deadline);
+              relays.delete(relayed);
+              resolve(value);
+            };
+            cancel = () => finish(undefined);
             const answered = (value) => { if (value !== undefined) finish(value); else if (--claims <= 0 && !open) finish(undefined); };
             relays.set(relayed, {
               answering: () => { claims++; },
               answer: answered,
             });
             natively.then(framedPage ? answered : (value) => { if (value !== undefined) finish(value); });
-            setTimeout(() => { open = false; if (claims <= 0) finish(undefined); }, 300);
-            setTimeout(() => finish(undefined), 30000);
+            opening = setTimeout(() => { open = false; if (claims <= 0) finish(undefined); }, 300);
+            deadline = setTimeout(() => finish(undefined), 30000);
+            if (settled) cancel();
           });
         }, () => undefined);
         return new Promise((resolve, reject) => {
@@ -1179,7 +1191,7 @@
           const none = () => { if (--left === 0) failed ? reject(failed) : resolve(undefined); };
           answer.then((v) => v !== undefined ? resolve(v) : none(), (e) => { failed = e; none(); });
           framed.then((v) => v !== undefined ? resolve(v) : none(), () => none());
-        });
+        }).finally(() => { settled = true; cancel(); });
       };
       put(tabs, "sendMessage", (tabId, message, options, callback) => {
         if (typeof options === "function") { callback = options; options = undefined; }

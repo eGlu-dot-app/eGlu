@@ -23,37 +23,42 @@ struct MacSettings: View {
 
     var body: some View {
         NavigationSplitView {
-            // One list for the panes and for what a search finds.
-            List(selection: row) {
-                if query.isEmpty {
-                    ForEach(SettingsPane.sidebar, id: \.self) { item in
-                        Label {
-                            Text(item.title)
-                        } icon: {
-                            SymbolTile(symbol: item.symbol, color: item.tint)
-                        }
-                        .tag(SidebarRow.pane(item))
-                    }
-                } else {
-                    SettingsResults(matches: SettingsPane.search.find(query), query: query)
-                }
-            }
-            // A new search starts with nothing chosen, so its first click goes there.
-            .onChange(of: query) { picked = nil }
-            // The field over the sidebar's list, as System Settings has it.
-            // SwiftUI's sidebar search field, while it had the focus, let the
-            // list go up under it a little more with each part chosen, and
-            // Return reached its submit action only from some places in the
-            // view tree; this one is AppKit's, kept in the list's own room.
-            .safeAreaInset(edge: .top, spacing: 0) {
-                SidebarSearchField(text: $query) {
+            // The field over the sidebar's list, as System Settings has it:
+            // AppKit's, as Return reached SwiftUI's sidebar search field's
+            // submit action only from some places in the view tree. Above
+            // the list, not in its room: the list, a new one for each search,
+            // would have made the field anew with it, taking its focus.
+            VStack(spacing: 0) {
+                SidebarSearchField(text: $query, step: step) {
                     // Return goes to the first part found, as the command bar's does.
                     if let first = SettingsPane.search.find(query).first { show(first.anchor) }
                 }
                 .padding(.horizontal, 10)
                 .padding(.bottom, 6)
+                // One list for the panes and for what a search finds.
+                List(selection: row) {
+                    if query.isEmpty {
+                        ForEach(SettingsPane.sidebar, id: \.self) { item in
+                            Label {
+                                Text(item.title)
+                            } icon: {
+                                SymbolTile(symbol: item.symbol, color: item.tint)
+                            }
+                            .tag(SidebarRow.pane(item))
+                        }
+                    } else {
+                        SettingsResults(matches: SettingsPane.search.find(query), query: query)
+                    }
+                }
+                // A list of its own for each search, starting at its top: one list
+                // kept for search after search came a little further up under the
+                // field with each, its rows changed under where it was scrolled.
+                // The field, outside it, keeps the focus.
+                .id(query)
+                // A new search starts with nothing chosen, so its first click goes there.
+                .onChange(of: query) { picked = nil }
+                .listStyle(.sidebar)
             }
-            .listStyle(.sidebar)
             // One width, as System Settings' sidebar has. The Settings window
             // goes by neither column width at first (it gave the sidebar 144
             // points); a frame it can't go under, it does.
@@ -127,6 +132,17 @@ struct MacSettings: View {
             case nil: break
             }
         }
+    }
+
+    /// Down and Up in the search field go to the next and the previous part
+    /// found, the field keeping the focus, as System Settings' does.
+    private func step(_ by: Int) {
+        let found = SettingsPane.search.find(query)
+        guard !found.isEmpty else { return }
+        let at = picked.flatMap { picked in found.firstIndex { $0.anchor == picked } }
+        let next = at.map { min(max($0 + by, 0), found.count - 1) } ?? (by > 0 ? 0 : found.count - 1)
+        picked = found[next].anchor
+        show(found[next].anchor)
     }
 
     /// A part the sidebar's search found: its pane, kept for Back as one
@@ -218,6 +234,7 @@ enum SettingsPane: String, CaseIterable {
 /// Escape clearing it as a search field's does.
 private struct SidebarSearchField: NSViewRepresentable {
     @Binding var text: String
+    let step: (Int) -> Void
     let submit: () -> Void
 
     func makeNSView(context: Context) -> NSSearchField {
@@ -256,8 +273,12 @@ private struct SidebarSearchField: NSViewRepresentable {
         }
 
         func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
-            guard selector == #selector(NSResponder.insertNewline(_:)) else { return false }
-            parent.submit()
+            switch selector {
+            case #selector(NSResponder.insertNewline(_:)): parent.submit()
+            case #selector(NSResponder.moveDown(_:)): parent.step(1)
+            case #selector(NSResponder.moveUp(_:)): parent.step(-1)
+            default: return false
+            }
             return true
         }
     }
