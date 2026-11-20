@@ -1395,8 +1395,7 @@ final class WindowModel: ObservableObject, PageHost {
             open(url, newTab: purpose == .newTab)
         case .space(let id): showSpace(id)
         case .command(let command): perform(command)
-        case .setting(.appIcon): DockIcon.shared.showInSettings()
-        case .setting: Session.shared.openSettings?()
+        case .setting(let anchor): SettingsPane.show(anchor)
         case .go(let text): go(text, newTab: purpose == .newTab)
         }
     }

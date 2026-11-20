@@ -23,6 +23,9 @@ public enum SettingsAnchor: String, CaseIterable, Sendable {
     case diagnostics
     case developer
     case shortcuts
+    /// The Mac's own panes: the iPhone and iPad have neither.
+    case pinnedTabs
+    case extensions
 
     /// The section, as its row names it.
     public var title: String {
@@ -45,6 +48,8 @@ public enum SettingsAnchor: String, CaseIterable, Sendable {
         case .diagnostics: return BrowserText.localized("Developer diagnostics")
         case .developer: return BrowserText.localized("Developer")
         case .shortcuts: return BrowserText.localized("Shortcuts")
+        case .pinnedTabs: return BrowserText.localized("Pinned Tabs")
+        case .extensions: return BrowserText.localized("Extensions")
         }
     }
 
@@ -69,6 +74,8 @@ public enum SettingsAnchor: String, CaseIterable, Sendable {
         case .diagnostics: return BrowserText.localized("The panel over the page")
         case .developer: return BrowserText.localized("Sites, keys and JSON for developer mode")
         case .shortcuts: return BrowserText.localized("Every command's keys")
+        case .pinnedTabs: return BrowserText.localized("Each space's pinned tabs, in their order")
+        case .extensions: return BrowserText.localized("Installed extensions and what they may do")
         }
     }
 
@@ -84,7 +91,7 @@ public enum SettingsAnchor: String, CaseIterable, Sendable {
         case .addressBar: return ["show address", "show title", "url", "page title"]
         case .window:
             return ["layout", "compact", "separate", "tab layout", "hide tab bar", "show tab bar", "window", "sidebar",
-                    "vertical tabs",
+                    "vertical tabs", "horizontal tabs", "tabs along the top", "tabs on top", "tabs in a sidebar",
                     "show address", "show title", "url"]
         case .spaces: return ["manage spaces", "edit spaces", "rename space", "delete space", "reorder spaces", "profiles"]
         case .memory: return ["light tabs", "tabs kept open", "freeze tabs", "frozen tabs", "background tabs", "ram"]
@@ -105,6 +112,9 @@ public enum SettingsAnchor: String, CaseIterable, Sendable {
             return ["developer mode", "devtools", "web inspector", "localhost", "json", "element picture",
                     "developer tools keys"]
         case .shortcuts: return ["shortcuts", "cheat sheet", "cheatsheet", "keys", "hotkeys", "key commands"]
+        case .pinnedTabs: return ["pinned", "pin tab", "unpin", "reorder pinned"]
+        case .extensions:
+            return ["extension", "add-on", "addon", "plugin", "chrome web store", "install extension", "remove extension"]
         }
     }
 
@@ -117,10 +127,14 @@ public enum SettingsAnchor: String, CaseIterable, Sendable {
     /// Whether Settings has the section where windows take the phone's
     /// layout, the iPad's, or either: the iPhone Duo and a large iPhone have
     /// both, as they open or turn (Docs/iPhoneDuoPlan.md, decisions 5 and 9).
-    public func isOffered(phoneLayout: Bool, padLayout: Bool) -> Bool {
+    /// A keyboard with keys brings a phone layout the keyboard's parts, as
+    /// it brings their groups (SettingsGroup.isOffered(padLayout:keyboard:)).
+    public func isOffered(phoneLayout: Bool, padLayout: Bool, keyboard: Bool = false) -> Bool {
         switch self {
         case .desktopView, .addressBar: return phoneLayout
-        case .window, .trackpad, .shortcuts: return padLayout
+        case .window: return padLayout
+        case .trackpad, .shortcuts: return padLayout || keyboard
+        case .pinnedTabs, .extensions: return false
         default: return true
         }
     }
@@ -171,8 +185,8 @@ public extension SettingsAnchor {
     var group: SettingsGroup {
         switch self {
         case .defaultBrowser, .appIcon: return .general
-        case .sync, .spaces: return .spaces
-        case .desktopView, .addressBar, .window, .memory, .linkMenu: return .browsing
+        case .sync, .spaces, .pinnedTabs: return .spaces
+        case .desktopView, .addressBar, .window, .memory, .linkMenu, .extensions: return .browsing
         case .search, .history, .blocking, .handoff: return .privacy
         case .writing: return .writing
         case .trackpad: return .input

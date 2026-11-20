@@ -107,13 +107,27 @@ enum Device {
     /// Icon only where the system lets an app change it, Handoff only where
     /// the device has Apple Intelligence, Diagnostics only in a build from Xcode.
     @MainActor static func offers(_ anchor: SettingsAnchor, compact: Bool) -> Bool {
+        let layouts = settingsLayouts(compact: compact)
+        return offers(anchor, phoneLayout: layouts.phone, padLayout: layouts.pad)
+    }
+
+    /// Whether Settings has that part with these layouts' parts (offers).
+    @MainActor static func offers(_ anchor: SettingsAnchor, phoneLayout: Bool, padLayout: Bool,
+                                  keyboard: Bool = false) -> Bool {
         if anchor == .appIcon, !UIApplication.shared.supportsAlternateIcons { return false }
         if anchor == .handoff, !Session.shared.hasIntelligence { return false }
         if anchor == .diagnostics, !diagnostics { return false }
         // No developer mode on an iPhone (the Mac's and the iPad's).
         if anchor == .developer, phone { return false }
-        let layouts = settingsLayouts(compact: compact)
-        return anchor.isOffered(phoneLayout: layouts.phone, padLayout: layouts.pad)
+        return anchor.isOffered(phoneLayout: phoneLayout, padLayout: padLayout, keyboard: keyboard)
+    }
+
+    /// The parts of Settings a search finds in a window with these layouts'
+    /// parts: Settings' own search field's and the address bar's.
+    @MainActor static func settingsSearch(phoneLayout: Bool, padLayout: Bool, keyboard: Bool = false) -> SettingsSearch {
+        SettingsSearch(anchors: SettingsAnchor.allCases.filter {
+            offers($0, phoneLayout: phoneLayout, padLayout: padLayout, keyboard: keyboard)
+        })
     }
 
     /// "iPhone" or "iPad", for what the app says about this device.
