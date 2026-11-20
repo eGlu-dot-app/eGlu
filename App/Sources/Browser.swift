@@ -368,7 +368,7 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
     /// over the page while an address is typed (placeCommandBar).
     private var commandBar: UIHostingController<CommandBar>?
     private var commandBarTop: NSLayoutConstraint?
-    private var commandBarShown = false
+    private let commandBarMotion = CommandBarMotion()
     private weak var addressDismissTap: UITapGestureRecognizer?
     private var topBarHeight: NSLayoutConstraint?
     private var addressBarHeight: NSLayoutConstraint?
@@ -1108,39 +1108,24 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         if shows { suggestionHeight?.constant = height }
     }
 
-    /// An iPad's command bar, while an address is typed: it comes up out of
-    /// the page a little smaller and fades in, and fades out faster than it
-    /// came, so the page is back at once.
+    /// Keep the phone's separate bar/keyboard choreography unchanged.
+    private func changeCommandBar(usingKeyboard: Bool = false, _ changes: () -> Void) {
+        guard !model.phone else { changes(); return }
+        commandBarMotion.change(usingKeyboard: usingKeyboard, changes)
+    }
+
+    /// An iPad's command bar: immediate from the keys or under Reduce Motion,
+    /// gently introduced by touch. Neither path waits to enable its controls.
     private func placeCommandBar() {
         guard let bar = commandBar?.view else { return }
         let shows = model.editingAddress && !model.phone
-        guard shows != commandBarShown else { return }
-        commandBarShown = shows
-        bar.accessibilityViewIsModal = shows
-        for background in [stage, topBar?.view, addressBar?.view, sideTabs?.view, bookmarksStrip?.view].compactMap({ $0 }) {
-            background.accessibilityElementsHidden = shows
-        }
-        if shows {
-            // From where it is when it was still going (⌘T with the bar
-            // already open puts it away and brings it back in one turn).
-            if bar.isHidden {
-                bar.isHidden = false
-                bar.alpha = 0
-                // Only the fade under Reduce Motion.
-                bar.transform = UIAccessibility.isReduceMotionEnabled ? .identity
-                    : CGAffineTransform(translationX: 0, y: -8).scaledBy(x: 0.97, y: 0.97)
-            }
-            UIView.animate(springDuration: 0.28, bounce: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
-                bar.alpha = 1
-                bar.transform = .identity
-            }
-        } else {
-            UIView.animate(withDuration: 0.14, delay: 0, options: [.beginFromCurrentState, .curveEaseOut]) {
-                bar.alpha = 0
-            } completion: { [weak self] _ in
-                if self?.commandBarShown == false { bar.isHidden = true }
+        if shows != commandBarMotion.shown {
+            bar.accessibilityViewIsModal = shows
+            for background in [stage, topBar?.view, addressBar?.view, sideTabs?.view, bookmarksStrip?.view].compactMap({ $0 }) {
+                background.accessibilityElementsHidden = shows
             }
         }
+        commandBarMotion.setShown(shows, in: bar)
     }
 
     /// The bars and the strip under the status bar in the colour along the
@@ -2249,16 +2234,18 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
 
     @objc func browserCommand(_ sender: UICommand) {
         guard let raw = sender.propertyList as? String, let command = Command(rawValue: raw) else { return }
-        perform(command)
+        // Native menu commands share the keyboard's immediate utility path;
+        // in-app touch buttons continue through act(_:).
+        changeCommandBar(usingKeyboard: true) { perform(command) }
     }
 
     @objc func browserTab(_ sender: UICommand) {
         guard let number = sender.propertyList as? Int else { return }
-        selectTab(number: number)
+        changeCommandBar(usingKeyboard: true) { selectTab(number: number) }
     }
 
     @objc private func cancelAddress() {
-        act(.cancelAddress)
+        changeCommandBar(usingKeyboard: true) { act(.cancelAddress) }
     }
 
     @objc private func suggestionUp() {
@@ -2553,6 +2540,13 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
 
     /// Everything the bars and the empty space can ask for.
     func act(_ action: BarAction) {
+        // .go is the field's Return, not a pointer click on Go or a result.
+        let submitted: Bool
+        if case .go = action { submitted = true } else { submitted = false }
+        changeCommandBar(usingKeyboard: submitted) { handle(action) }
+    }
+
+    private func handle(_ action: BarAction) {
         let session = Session.shared
         switch action {
         case .hoverTab(let item): beginTabHover(item); return

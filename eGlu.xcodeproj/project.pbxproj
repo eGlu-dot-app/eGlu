@@ -125,6 +125,7 @@
 		41E5A1E1B37E4058D2410423 /* PageMind.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3952C9D2525F5A5A03FE520D /* PageMind.swift */; };
 		4219D8D41EB8B2E10F4EE0AD /* Controls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 268FEAD7A20DFD6A75D22FA5 /* Controls.swift */; };
 		42E0F721582F38DD32C48D6A /* TopTabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = A24EC5EDA42F21F933A49A16 /* TopTabs.swift */; };
+		42EA52817B42740A3EB55044 /* CommandBarMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = D77A8A06BD11D101EAA443E8 /* CommandBarMotion.swift */; };
 		4315A9AEF08A97B08E9FC50A /* WritingChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = C616BF3DD906A7B37D7BD28D /* WritingChecker.swift */; };
 		43774ABDC78EC3D9CF54637D /* FrontField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60FD80068EF66D29D4896606 /* FrontField.swift */; };
 		4479AA012D15160E7C342DED /* MeasureModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FB6ECB59757E936A3E514FF /* MeasureModel.swift */; };
@@ -155,6 +156,7 @@
 		52F3C417852BBDC0255229E6 /* DeveloperBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E20BDB914E83BD7060BB461 /* DeveloperBar.swift */; };
 		531F2AAB5AA835DE49FF8411 /* Design.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A4ABCA9A5A3F97E6F086EBD /* Design.swift */; };
 		5337B3C732EC735C3546398A /* PageSwipe.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCCF96E8E646BB3BE834BB1 /* PageSwipe.swift */; };
+		53E59B816084B17CA33DD5AB /* CommandBarMotionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE62DDD43FD259EE953159DE /* CommandBarMotionTests.swift */; };
 		540C82A173188D8B4F69E64F /* WorkspaceBookmarkImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71AB2073EE8A5C3C04DCE734 /* WorkspaceBookmarkImport.swift */; };
 		56188181AAB71E04969E6D4C /* Stores.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDFE00C3523F162439D9FECE /* Stores.swift */; };
 		5690C52240A78C0BAC8B17C2 /* WebEngineAppKit in Frameworks */ = {isa = PBXBuildFile; productRef = 82732B4A68198DD72079C498 /* WebEngineAppKit */; };
@@ -325,6 +327,7 @@
 		BE5F42954D0BA3650D4BA64C /* ExtensionSidePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DD32861463C3576F820119D /* ExtensionSidePanel.swift */; };
 		BEB525659B21128EB3312AD5 /* Dialogs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67BABC09431CB541651EF0FB /* Dialogs.swift */; };
 		C01B6258BD81075C0CEFFD06 /* Design.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4603EDA1129218A8E10248FF /* Design.swift */; };
+		C1E74A2B3AF7CC665B9324A8 /* CommandBarMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = D77A8A06BD11D101EAA443E8 /* CommandBarMotion.swift */; };
 		C24F448C884416DEDD494184 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2E395EB3FD425859B64EB5CD /* Assets.xcassets */; };
 		C2C8C12DDCE819558D0C5AA8 /* WritingScript.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4839EEAB8E817B4166E6DDDE /* WritingScript.swift */; };
 		C2D72CE71A45ADD64DF80222 /* DocumentsPlugin in Frameworks */ = {isa = PBXBuildFile; productRef = F63A3A7E62B2245826074C59 /* DocumentsPlugin */; };
@@ -640,6 +643,7 @@
 		8C0D6A936868AA273D3E06B8 /* MacPageEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacPageEngine.swift; sourceTree = "<group>"; };
 		8D8EE6F279FA3A9B803774D0 /* WorkspaceSaveStatusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceSaveStatusView.swift; sourceTree = "<group>"; };
 		8E5FA694AF278CACA21F3E92 /* Plugins.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Plugins.swift; sourceTree = "<group>"; };
+		8E78F3D5DC6AA772A5476793 /* eGlu Command Bar Motion Tests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = "eGlu Command Bar Motion Tests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		8FF53A38CF55B10BACD7A187 /* PageStorageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageStorageTests.swift; sourceTree = "<group>"; };
 		9012B2178643217C8CFC93D0 /* ElsewhereChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ElsewhereChecker.swift; sourceTree = "<group>"; };
 		905513BDE88D793B2A06F935 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -672,6 +676,7 @@
 		AB63AE2B9FB76026D5827683 /* LittleWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LittleWindow.swift; sourceTree = "<group>"; };
 		ABCCF96E8E646BB3BE834BB1 /* PageSwipe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageSwipe.swift; sourceTree = "<group>"; };
 		ACCD104C392A6B5BD6806621 /* FieldGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FieldGeometry.swift; sourceTree = "<group>"; };
+		AE62DDD43FD259EE953159DE /* CommandBarMotionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandBarMotionTests.swift; sourceTree = "<group>"; };
 		AE90A53C4F0EA2D2E3804F74 /* DockTile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockTile.swift; sourceTree = "<group>"; };
 		AED29C8711170E56E994C381 /* Engines */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Engines; path = Engines; sourceTree = SOURCE_ROOT; };
 		AFB3006F20C44C6968165A89 /* ExtensionAnswers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionAnswers.swift; sourceTree = "<group>"; };
@@ -705,6 +710,7 @@
 		D090D72F0C6C3A560B1A11B3 /* Welcome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Welcome.swift; sourceTree = "<group>"; };
 		D1151121F9FD7091DD5CF7E0 /* CommandBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandBar.swift; sourceTree = "<group>"; };
 		D6C29F462B558C1494B60B1E /* BrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserView.swift; sourceTree = "<group>"; };
+		D77A8A06BD11D101EAA443E8 /* CommandBarMotion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandBarMotion.swift; sourceTree = "<group>"; };
 		D80D6278E40F4CDF398DAEE3 /* LocalServers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalServers.swift; sourceTree = "<group>"; };
 		D81C5D86805A7A62B79C4176 /* PageUIDelegateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageUIDelegateTests.swift; sourceTree = "<group>"; };
 		D896D70ADD5EAC460A0FC79D /* ChromeConstraints.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeConstraints.swift; sourceTree = "<group>"; };
@@ -971,6 +977,7 @@
 		B06105E670E5DE1D5B1FF70F /* Tests */ = {
 			isa = PBXGroup;
 			children = (
+				AE62DDD43FD259EE953159DE /* CommandBarMotionTests.swift */,
 				1A23DF8DB256F464D8F6D74E /* SiteIconsTests.swift */,
 				EE2FDC4E1BB7CD688730A31A /* MacPage */,
 				8299AD9A6A3CB655863261D6 /* PageSummaryUI */,
@@ -1015,6 +1022,7 @@
 				87930B53944FBD7C4B4F4134 /* Browser.swift */,
 				D896D70ADD5EAC460A0FC79D /* ChromeConstraints.swift */,
 				3D9C68923A8768BAA0AB769E /* CommandBar.swift */,
+				D77A8A06BD11D101EAA443E8 /* CommandBarMotion.swift */,
 				2F50FC2DEC29500EDEB132F0 /* DefaultBrowser.swift */,
 				4603EDA1129218A8E10248FF /* Design.swift */,
 				677BEFA22271235E2AB37C24 /* DesktopPad.swift */,
@@ -1060,6 +1068,7 @@
 		C088F5E4E70A27299996026B /* Products */ = {
 			isa = PBXGroup;
 			children = (
+				8E78F3D5DC6AA772A5476793 /* eGlu Command Bar Motion Tests.xctest */,
 				82C00BE906347AD4CFD18369 /* eGlu Dock Tile.bundle */,
 				75F696893FA4631D9BC29459 /* eGlu Mac Direct.app */,
 				31726A2872E8F3D96FA9616C /* eGlu Mac Page Tests.xctest */,
@@ -1340,6 +1349,23 @@
 			productReference = 399707CDDDB91841856589D7 /* eGlu.app */;
 			productType = "com.apple.product-type.application";
 		};
+		9094FC377B4936BC9C5E81DD /* eGlu Command Bar Motion Tests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3B4BF22AA7CF16CCFBA83EC2 /* Build configuration list for PBXNativeTarget "eGlu Command Bar Motion Tests" */;
+			buildPhases = (
+				562AC36C425E010D606D6B10 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "eGlu Command Bar Motion Tests";
+			packageProductDependencies = (
+			);
+			productName = "eGlu Command Bar Motion Tests";
+			productReference = 8E78F3D5DC6AA772A5476793 /* eGlu Command Bar Motion Tests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		E6E265E4D4C2659DE77958E9 /* eGlu Mac Page Tests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = ADB8C634B810F83C55C01A33 /* Build configuration list for PBXNativeTarget "eGlu Mac Page Tests" */;
@@ -1436,6 +1462,7 @@
 				FDF93AA12748F1084E76ABE0 /* eGlu Dock Tile */,
 				454CCA10CF2DEE55F4B798B4 /* Site Icons Tests */,
 				52291F661A4518DE2F52CCE9 /* eGlu Summary UI Tests */,
+				9094FC377B4936BC9C5E81DD /* eGlu Command Bar Motion Tests */,
 				E6E265E4D4C2659DE77958E9 /* eGlu Mac Page Tests */,
 				006DFBE71CA87B99F5F3BA1E /* eGlu Mac */,
 				2B6BAA258BAAFCFB949DAEEC /* eGlu Mac Direct */,
@@ -1692,6 +1719,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		562AC36C425E010D606D6B10 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				42EA52817B42740A3EB55044 /* CommandBarMotion.swift in Sources */,
+				53E59B816084B17CA33DD5AB /* CommandBarMotionTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		5B5E142351E2AD49DBCAA9FB /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -1904,6 +1940,7 @@
 				B174748623F73BD563B09544 /* Browser.swift in Sources */,
 				4F3E8B02D0942D47B38DB531 /* ChromeConstraints.swift in Sources */,
 				7AF31EA5C0076A632C0B490B /* CommandBar.swift in Sources */,
+				C1E74A2B3AF7CC665B9324A8 /* CommandBarMotion.swift in Sources */,
 				58220E1ED7C49D6B4EB73E1D /* ContentBlocker.swift in Sources */,
 				6C15686481A0F0ED1CA4D021 /* DefaultBrowser.swift in Sources */,
 				368FA1AB24D6048643DBC493 /* Deflate.swift in Sources */,
@@ -2040,6 +2077,24 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_STRICT_CONCURRENCY = complete;
+			};
+			name = Release;
+		};
+		0F52E4AB1E1D1D146F32C261 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = net.taehee.safience.commandbarmotiontests;
+				SDKROOT = iphoneos;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
 		};
@@ -2594,6 +2649,42 @@
 			};
 			name = Test;
 		};
+		9DF0FC766BE779F3C04B4008 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = net.taehee.safience.commandbarmotiontests;
+				SDKROOT = iphoneos;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		B718EBBA0B3C35332B49BA79 /* Test */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = net.taehee.safience.commandbarmotiontests;
+				SDKROOT = iphoneos;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Test;
+		};
 		C1D86596DE523EB2F1850889 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -2719,6 +2810,16 @@
 				EB4FDD92846D27A7D49FCD1B /* Debug */,
 				1EBFDDE16D45CA1DD6D94A5B /* Release */,
 				7C8E841D0DD666FAC4A86925 /* Test */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		3B4BF22AA7CF16CCFBA83EC2 /* Build configuration list for PBXNativeTarget "eGlu Command Bar Motion Tests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9DF0FC766BE779F3C04B4008 /* Debug */,
+				0F52E4AB1E1D1D146F32C261 /* Release */,
+				B718EBBA0B3C35332B49BA79 /* Test */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
