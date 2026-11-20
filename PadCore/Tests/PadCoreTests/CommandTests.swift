@@ -13,6 +13,7 @@ final class ShortcutTests: XCTestCase {
     }
 
     func testLabels() {
+        XCTAssertEqual(Shortcuts.chord(for: .summarizePage)?.label, "⌃⌥U")
         XCTAssertEqual(Shortcuts.chord(for: .everything)?.label, "⌃⌥K")
         XCTAssertEqual(Shortcuts.chord(for: .newSpace)?.label, "⌃⌥⇧N")
         XCTAssertEqual(Shortcuts.chord(for: .nextSpace)?.label, "⌃⌥↓")
@@ -34,6 +35,12 @@ final class ShortcutTests: XCTestCase {
         for command in Command.allCases {
             XCTAssertFalse(command.title.isEmpty)
         }
+    }
+
+    func testPageSummaryIsNamedAndHandoffRemainsOptIn() {
+        XCTAssertEqual(Command.summarizePage.title, "Summarize Page")
+        XCTAssertTrue(Command.summarizePage.keywords.contains("summary"))
+        XCTAssertFalse(Preferences().handoff)
     }
 
     /// The keys one by one, as a cheat sheet draws them, are the label's.
