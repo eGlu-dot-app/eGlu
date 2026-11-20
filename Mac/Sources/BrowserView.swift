@@ -250,8 +250,8 @@ struct BrowserView: View {
                     .onTapGesture(perform: dismissCommandBar)
                     .accessibilityHidden(true)
                 let top = max(box.size.height * 0.16, 48)
-                // The rows have what is left under the field, down to a margin at the window's foot.
-                CommandBar(model: model, purpose: purpose, room: max(box.size.height - top - 56 - 24, 120))
+                // Leave room for the field and its explicit action, down to the window's foot.
+                CommandBar(model: model, purpose: purpose, room: max(box.size.height - top - CommandBar.controlsHeight - 24, 120))
                     .id(purpose)
                     .frame(width: min(660, box.size.width - 48))
                     .padding(.top, top)
@@ -268,8 +268,7 @@ struct BrowserView: View {
 
     private func dismissCommandBar() {
         guard model.commandBar != nil else { return }
-        model.commandBar = nil
-        model.focusPage()
+        model.dismissCommandBar()
     }
 }
 
