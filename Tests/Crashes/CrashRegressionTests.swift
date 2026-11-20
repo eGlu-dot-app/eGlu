@@ -17,6 +17,70 @@ final class CrashRegressionTests: XCTestCase {
         XCTAssertEqual(values, [false])
     }
 
+    func testNarrowSplitSwitchAndResizeKeepActivePagesVisible() throws {
+        let session = Session.shared
+        let first = TabRecord(url: nil, title: "Split A")
+        let second = TabRecord(url: nil, title: "Split B")
+        let space = Space(name: "Narrow split visibility regression", symbol: "square", tabs: [first, second])
+        let split = session.change { workspace in
+            workspace.spaces.append(space)
+            return workspace.split(first.id, with: second.id)
+        }
+        XCTAssertTrue(split)
+
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        let container = UIViewController()
+        window.rootViewController = container
+        window.makeKeyAndVisible()
+        let browser = Browser(state: WindowState(space: space.id, tab: first.id))
+        container.addChild(browser)
+        browser.view.frame = CGRect(x: 0, y: 0, width: 500, height: 800)
+        container.view.addSubview(browser.view)
+        browser.didMove(toParent: container)
+        defer {
+            browser.disconnect()
+            session.pages.close(first.id)
+            session.pages.close(second.id)
+            session.change { $0.spaces.removeAll { $0.id == space.id } }
+            window.isHidden = true
+        }
+
+        container.view.layoutIfNeeded()
+        browser.view.layoutIfNeeded()
+        let pageA = try XCTUnwrap(browser.page)
+        let pageB = try XCTUnwrap(browser.partner)
+        XCTAssertTrue(browser.model.narrowSplit)
+        XCTAssertFalse(pageA.view.isHidden)
+        XCTAssertTrue(pageB.view.isHidden)
+
+        browser.show(tab: second.id, inSpace: space.id)
+        XCTAssertEqual(browser.model.tabID, second.id)
+        XCTAssertTrue(browser.page === pageB)
+        XCTAssertFalse(pageB.view.isHidden, "Selected pane B must be visible in a narrow split")
+        XCTAssertTrue(pageA.view.isHidden)
+
+        browser.show(tab: first.id, inSpace: space.id)
+        XCTAssertEqual(browser.model.tabID, first.id)
+        XCTAssertTrue(browser.page === pageA)
+        XCTAssertFalse(pageA.view.isHidden, "Selected pane A must be visible after switching back")
+        XCTAssertTrue(pageB.view.isHidden)
+
+        browser.view.frame = CGRect(x: 0, y: 0, width: 1_100, height: 800)
+        browser.view.setNeedsLayout()
+        browser.view.layoutIfNeeded()
+        XCTAssertFalse(browser.model.narrowSplit)
+        XCTAssertFalse(pageA.view.isHidden)
+        XCTAssertFalse(pageB.view.isHidden, "Both panes must be visible in a wide split")
+
+        browser.view.frame = CGRect(x: 0, y: 0, width: 500, height: 800)
+        browser.view.setNeedsLayout()
+        browser.view.layoutIfNeeded()
+        XCTAssertTrue(browser.model.narrowSplit)
+        XCTAssertFalse(pageA.view.isHidden, "The active pane must remain visible after narrowing")
+        XCTAssertTrue(pageB.view.isHidden)
+    }
+
     func testAnsweredDialogDoesNotReplyAgainOnCancellationOrRelease() {
         var values: [String?] = []
         autoreleasepool {

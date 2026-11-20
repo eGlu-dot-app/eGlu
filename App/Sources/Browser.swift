@@ -1499,6 +1499,7 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
     /// the one with the keys, as the Mac's.
     private func layoutPanes() {
         let bounds = pageRoom
+        page?.view.isHidden = false
         var main = bounds
         var cards: [CGRect]?
         let split = model.tabID.flatMap { Session.shared.workspace.split(containing: $0) }
