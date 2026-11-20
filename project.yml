@@ -170,6 +170,10 @@ targets:
       configs:
         Release:
           EXCLUDED_SOURCE_FILE_NAMES: "$(inherited) SummaryFixture.html"
+        # Hosted iOS layout tests use their own sandbox and preferences.
+        Test:
+          PRODUCT_BUNDLE_IDENTIFIER: net.taehee.safience.suggestiontests
+          CODE_SIGN_ENTITLEMENTS: ""
   # eGlu's tile in the Dock while eGlu isn't open, a plug-in the Dock loads
   # from both Mac apps (Mac/DockTile/DockTile.swift): the icon chosen in
   # Settings › General › App Icon.
@@ -220,6 +224,21 @@ targets:
         SWIFT_STRICT_CONCURRENCY: complete
         SWIFT_APPROACHABLE_CONCURRENCY: YES
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+  eGlu Suggestion Tests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests/Suggestions
+    dependencies:
+      - target: eGlu
+      - package: PadCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: net.taehee.safience.suggestiontests.tests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/eGlu.app/eGlu
+        BUNDLE_LOADER: $(TEST_HOST)
+        TARGETED_DEVICE_FAMILY: "1,2"
   eGlu Summary UI Tests:
     type: bundle.ui-testing
     platform: iOS
@@ -302,6 +321,14 @@ targets:
           plutil -replace SUPublicEDKey -string "$SPARKLE_PUBLIC_KEY" "$plist"
           plutil -replace SUEnableAutomaticChecks -bool YES "$plist"
 schemes:
+  eGlu Suggestion Tests:
+    build:
+      targets:
+        eGlu Suggestion Tests: [test]
+    test:
+      config: Test
+      targets:
+        - eGlu Suggestion Tests
   Site Icons Tests:
     build:
       targets:

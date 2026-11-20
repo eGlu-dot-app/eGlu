@@ -353,6 +353,7 @@
 		CE458E66FA8ED812669B4469 /* Sync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F8E7D1B1FAF141A29D2AA29 /* Sync.swift */; };
 		CEC40219A8132535C63C6523 /* ExtensionDispatchHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2839C2612E31F822EF7B0471 /* ExtensionDispatchHost.swift */; };
 		CFCE9786AE6510AA313EFC5F /* Sync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F8E7D1B1FAF141A29D2AA29 /* Sync.swift */; };
+		D0518D9ECF348A4B5194152A /* PadCore in Frameworks */ = {isa = PBXBuildFile; productRef = 6B89FEEBBAF2B78AB689688D /* PadCore */; };
 		D065467D032B1B11F08FEF9D /* ExtensionCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AA47374F100620B5D221A40 /* ExtensionCapture.swift */; };
 		D0F8A3BF7AFDA0ABB3509837 /* Plugins.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E5FA694AF278CACA21F3E92 /* Plugins.swift */; };
 		D1696AE5166D8BB76780DA0D /* StartTiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B592DC91C456C1B951C4C1E /* StartTiles.swift */; };
@@ -429,6 +430,7 @@
 		F68C66964CE0BBA852DFDA61 /* ExtensionPopupWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1F2F878F154521F64EF667 /* ExtensionPopupWindow.swift */; };
 		F6BFEE2E4044D2FC585071AD /* ExtensionRuntimeAnswerHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7305845E0C5BF44C2C6DCB4 /* ExtensionRuntimeAnswerHost.swift */; };
 		F6FB3E2E3F01BFE37994DE36 /* HandoffVision.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6BF0EC052F669AB4A77EAA1 /* HandoffVision.swift */; };
+		F80EECB6234C97A414302624 /* SuggestionSizingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96FB88DAFFA485BF2A4A35D4 /* SuggestionSizingTests.swift */; };
 		F815F81763FBF44CEA2613B9 /* BookmarkImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B74FED0AD192E3766DF8BC9 /* BookmarkImport.swift */; };
 		F83D448965370FCB87E5726F /* HandoffSpeech.swift in Sources */ = {isa = PBXBuildFile; fileRef = 175C837A0864F7FFAB8BA56D /* HandoffSpeech.swift */; };
 		F89C24434B16340F6AD92122 /* PageCommandTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D36C6CE512B1C7506C63C09 /* PageCommandTests.swift */; };
@@ -472,6 +474,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = 006DFBE71CA87B99F5F3BA1E;
 			remoteInfo = "eGlu Mac";
+		};
+		CCE319376294B5BDC153C4E7 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 28C23036FA74CEF06FAF32E3 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7126FC58004C2B43A2826F45;
+			remoteInfo = eGlu;
 		};
 		FFBEA6C037BD9FED67E2069C /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -647,6 +656,7 @@
 		947839FC8E1213549F1416C8 /* ExtensionInstallHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionInstallHost.swift; sourceTree = "<group>"; };
 		96454C4458CB7CB240807E73 /* Peek.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Peek.swift; sourceTree = "<group>"; };
 		96E92723163A15A7900BF501 /* PageWritingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageWritingTests.swift; sourceTree = "<group>"; };
+		96FB88DAFFA485BF2A4A35D4 /* SuggestionSizingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestionSizingTests.swift; sourceTree = "<group>"; };
 		979AD767A1E50195F11316AD /* PinnedLook.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinnedLook.swift; sourceTree = "<group>"; };
 		9A6A5A6DB770BCC4BE191C79 /* ExtensionBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionBar.swift; sourceTree = "<group>"; };
 		9AAA52F03DA564A02BC99D3A /* Bars.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Bars.swift; sourceTree = "<group>"; };
@@ -742,6 +752,7 @@
 		F48CF69692EE6A8B7C05EF7D /* ExtensionCompatibilityHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionCompatibilityHost.swift; sourceTree = "<group>"; };
 		F4996B7C50A6BD2F6DF4BC27 /* Intelligence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Intelligence.swift; sourceTree = "<group>"; };
 		F62E29110C1CE10DA506CB2C /* TopTabBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopTabBar.swift; sourceTree = "<group>"; };
+		F62FDFFE1207B16C2DC74B06 /* eGlu Suggestion Tests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = "eGlu Suggestion Tests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		F74A481F35078203E6778C29 /* eGlu.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = eGlu.icon; sourceTree = "<group>"; };
 		FACBDD63DFA307B2CA9CCC0B /* eGlu Summary UI Tests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = "eGlu Summary UI Tests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		FBAC2A3AFBBF56D7DCA93E4C /* Astro.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = Astro.icon; sourceTree = "<group>"; };
@@ -752,6 +763,14 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		0560D712FCD4255F0734FBC8 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D0518D9ECF348A4B5194152A /* PadCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		4E0D6B8AA310216D73B7323B /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -929,6 +948,14 @@
 			path = Writing;
 			sourceTree = "<group>";
 		};
+		64BF311E3BF71316094C34A4 /* Suggestions */ = {
+			isa = PBXGroup;
+			children = (
+				96FB88DAFFA485BF2A4A35D4 /* SuggestionSizingTests.swift */,
+			);
+			path = Suggestions;
+			sourceTree = "<group>";
+		};
 		8299AD9A6A3CB655863261D6 /* PageSummaryUI */ = {
 			isa = PBXGroup;
 			children = (
@@ -974,6 +1001,7 @@
 				1A23DF8DB256F464D8F6D74E /* SiteIconsTests.swift */,
 				EE2FDC4E1BB7CD688730A31A /* MacPage */,
 				8299AD9A6A3CB655863261D6 /* PageSummaryUI */,
+				64BF311E3BF71316094C34A4 /* Suggestions */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -1064,6 +1092,7 @@
 				75F696893FA4631D9BC29459 /* eGlu Mac Direct.app */,
 				31726A2872E8F3D96FA9616C /* eGlu Mac Page Tests.xctest */,
 				10496D9AD4F6CDEF628F68D1 /* eGlu Mac.app */,
+				F62FDFFE1207B16C2DC74B06 /* eGlu Suggestion Tests.xctest */,
 				FACBDD63DFA307B2CA9CCC0B /* eGlu Summary UI Tests.xctest */,
 				399707CDDDB91841856589D7 /* eGlu.app */,
 				C11B86EA360AE983B440F527 /* Site Icons Tests.xctest */,
@@ -1340,6 +1369,26 @@
 			productReference = 399707CDDDB91841856589D7 /* eGlu.app */;
 			productType = "com.apple.product-type.application";
 		};
+		CDE2B1D153172319AB703D93 /* eGlu Suggestion Tests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CE40CDCA8594E89BF3C7313E /* Build configuration list for PBXNativeTarget "eGlu Suggestion Tests" */;
+			buildPhases = (
+				2A846E1615DC16AB5289E056 /* Sources */,
+				0560D712FCD4255F0734FBC8 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				5E0CD946456D7F19F1777402 /* PBXTargetDependency */,
+			);
+			name = "eGlu Suggestion Tests";
+			packageProductDependencies = (
+				6B89FEEBBAF2B78AB689688D /* PadCore */,
+			);
+			productName = "eGlu Suggestion Tests";
+			productReference = F62FDFFE1207B16C2DC74B06 /* eGlu Suggestion Tests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		E6E265E4D4C2659DE77958E9 /* eGlu Mac Page Tests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = ADB8C634B810F83C55C01A33 /* Build configuration list for PBXNativeTarget "eGlu Mac Page Tests" */;
@@ -1435,6 +1484,7 @@
 				7126FC58004C2B43A2826F45 /* eGlu */,
 				FDF93AA12748F1084E76ABE0 /* eGlu Dock Tile */,
 				454CCA10CF2DEE55F4B798B4 /* Site Icons Tests */,
+				CDE2B1D153172319AB703D93 /* eGlu Suggestion Tests */,
 				52291F661A4518DE2F52CCE9 /* eGlu Summary UI Tests */,
 				E6E265E4D4C2659DE77958E9 /* eGlu Mac Page Tests */,
 				006DFBE71CA87B99F5F3BA1E /* eGlu Mac */,
@@ -1689,6 +1739,14 @@
 				99A3920D3D21EDC4511FEA39 /* WritingQuestion.swift in Sources */,
 				C2C8C12DDCE819558D0C5AA8 /* WritingScript.swift in Sources */,
 				019BFF0D346FD80F3FA57C85 /* WritingWords.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2A846E1615DC16AB5289E056 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F80EECB6234C97A414302624 /* SuggestionSizingTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1994,6 +2052,11 @@
 			target = FDF93AA12748F1084E76ABE0 /* eGlu Dock Tile */;
 			targetProxy = FFBEA6C037BD9FED67E2069C /* PBXContainerItemProxy */;
 		};
+		5E0CD946456D7F19F1777402 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 7126FC58004C2B43A2826F45 /* eGlu */;
+			targetProxy = CCE319376294B5BDC153C4E7 /* PBXContainerItemProxy */;
+		};
 		925412B760A52720B71F77A8 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = FDF93AA12748F1084E76ABE0 /* eGlu Dock Tile */;
@@ -2066,6 +2129,23 @@
 				SPARKLE_FEED_URL = "https://github.com/eGlu-dot-app/eGlu/releases/latest/download/appcast.xml";
 				SPARKLE_PUBLIC_KEY = "rK6S7D1ycM2mnd6WoTripO25xn0wVuV6ymEeI/+jlrc=";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DIRECT";
+			};
+			name = Debug;
+		};
+		17DF538F1D594FA1D3B25395 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = net.taehee.safience.suggestiontests.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/eGlu.app/eGlu";
 			};
 			name = Debug;
 		};
@@ -2485,6 +2565,23 @@
 			};
 			name = Test;
 		};
+		85BF8052C684FCBAF13A9B0C /* Test */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = net.taehee.safience.suggestiontests.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/eGlu.app/eGlu";
+			};
+			name = Test;
+		};
 		8E3C7890BB78F95B641C4A1B /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -2569,6 +2666,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "Astro Designer Engineer Globe Hardcover Punk Signal Vista";
 				ASSETCATALOG_COMPILER_APPICON_NAME = eGlu;
+				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				ENABLE_PREVIEWS = NO;
@@ -2583,6 +2681,7 @@
 					"-weak_framework",
 					FoundationModels,
 				);
+				PRODUCT_BUNDLE_IDENTIFIER = net.taehee.safience.suggestiontests;
 				SDKROOT = iphoneos;
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
@@ -2631,6 +2730,23 @@
 				TEST_TARGET_NAME = eGlu;
 			};
 			name = Debug;
+		};
+		C70D55A1A0C05EDEFB48A416 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = net.taehee.safience.suggestiontests.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/eGlu.app/eGlu";
+			};
+			name = Release;
 		};
 		D6862FB9F61474BFEBC41557 /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -2753,6 +2869,16 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
+		CE40CDCA8594E89BF3C7313E /* Build configuration list for PBXNativeTarget "eGlu Suggestion Tests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				17DF538F1D594FA1D3B25395 /* Debug */,
+				C70D55A1A0C05EDEFB48A416 /* Release */,
+				85BF8052C684FCBAF13A9B0C /* Test */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		CF2FB88664D4EC8B89306533 /* Build configuration list for PBXNativeTarget "Site Icons Tests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -2861,6 +2987,10 @@
 		6B2A0B9DF8EC2F65E1890B90 /* WebKitExtensions */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = WebKitExtensions;
+		};
+		6B89FEEBBAF2B78AB689688D /* PadCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = PadCore;
 		};
 		6FBCB2D5231ECDB74F048C6E /* WebKitSupport */ = {
 			isa = XCSwiftPackageProductDependency;

@@ -831,7 +831,12 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         stage.addSubview(splitDrop)
 
         // Over everything else, the bars included: a phone's rows, over its bar.
-        let list = embed(SuggestionList(window: model) { [weak self] row in self?.act(.suggestion(row)) },
+        let list = embed(SuggestionList(window: model, heightChanged: { [weak self] height in
+            // The rendered content reports again when text size, width or rows
+            // change. Required edge constraints still leave room for the keyboard.
+            guard let constraint = self?.suggestionHeight, constraint.constant != height else { return }
+            constraint.constant = height
+        }) { [weak self] row in self?.act(.suggestion(row)) },
                          inStack: false)
         list.view.translatesAutoresizingMaskIntoConstraints = false
         list.view.isHidden = true
@@ -855,13 +860,9 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         bar.view.translatesAutoresizingMaskIntoConstraints = false
         bar.sizingOptions = .intrinsicContentSize
         bar.view.isHidden = true
-        let barWidth = bar.view.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -32)
-        barWidth.priority = .defaultHigh
+        chromeConstraints.pinCommandBar(bar.view, to: stack)
         let barTop = bar.view.topAnchor.constraint(equalTo: safe.topAnchor, constant: 96)
         NSLayoutConstraint.activate([
-            bar.view.centerXAnchor.constraint(equalTo: stack.centerXAnchor),
-            bar.view.widthAnchor.constraint(lessThanOrEqualToConstant: 680),
-            barWidth,
             barTop,
             bar.view.bottomAnchor.constraint(lessThanOrEqualTo: view.keyboardLayoutGuide.topAnchor, constant: -12),
         ])
@@ -1102,10 +1103,8 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
     /// address is typed.
     private func placeSuggestions() {
         guard let list = suggestionList else { return }
-        let height = SuggestionRows.height(of: model.suggestions)
-        let shows = model.phone && model.editingAddress && height > 0
+        let shows = model.phone && model.editingAddress && !model.suggestions.rows.isEmpty
         if list.view.isHidden == shows { list.view.isHidden = !shows }
-        if shows { suggestionHeight?.constant = height }
     }
 
     /// An iPad's command bar, while an address is typed: it comes up out of
