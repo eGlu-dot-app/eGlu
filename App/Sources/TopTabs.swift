@@ -332,15 +332,14 @@ private struct TopTab: View {
             }
             .buttonStyle(.plain)
             .accessibilityRepresentation {
-                Button {
-                    act(address ? .editAddress : .select(tab.id))
-                } label: {
-                    let shown = window.url.map(Destination.pretty) ?? String(localized: "none")
-                    Text(address ? (window.insecure ? String(localized: "Address, \(shown), Not secure") : String(localized: "Address, \(shown)")) : tab.label)
+                if tab.isPinned {
+                    accessibilityTab
+                } else {
+                    accessibilityTab
+                        .accessibilityAction(named: Text(String(localized: "Close \(tab.label)"))) {
+                            act(.close(tab.id))
+                        }
                 }
-                .accessibilityHint(address ? "Type a new address or a search" : "")
-                .accessibilityIdentifier(address ? "page-address" : "tab-\(tab.id)")
-                .accessibilityAddTraits(selected ? .isSelected : [])
             }
             // Always there, for a finger, which has no pointer to bring them out.
             if address {
@@ -348,7 +347,8 @@ private struct TopTab: View {
             }
             // A pinned tab's address has no ✕: the tab stays, as its tile does.
             if selected || hovering, !tab.isPinned {
-                SideClose { act(.close(tab.id)) }
+                SideClose(label: String(localized: "Close \(tab.label)"),
+                          accessibilityIdentifier: "close-tab-\(tab.id)") { act(.close(tab.id)) }
                     .transition(.opacity)
             }
         }
@@ -380,6 +380,18 @@ private struct TopTab: View {
         }
         .animation(.bar, value: selected)
         .accessibilityElement(children: .contain)
+    }
+
+    private var accessibilityTab: some View {
+        Button {
+            act(address ? .editAddress : .select(tab.id))
+        } label: {
+            let shown = window.url.map(Destination.pretty) ?? String(localized: "none")
+            Text(address ? (window.insecure ? String(localized: "Address, \(shown), Not secure") : String(localized: "Address, \(shown)")) : tab.label)
+        }
+        .accessibilityHint(address ? "Type a new address or a search" : "")
+        .accessibilityIdentifier(address ? "page-address" : "tab-\(tab.id)")
+        .accessibilityAddTraits(tab.id == window.tabID ? .isSelected : [])
     }
 
     /// Where the page on screen is, as the address said it before

@@ -938,10 +938,15 @@ private struct SideTab: View {
             .buttonStyle(.plain)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(tab.label)
+            .accessibilityIdentifier("tab-\(tab.id)")
             .accessibilityAddTraits(selected ? .isSelected : [])
+            .accessibilityAction(named: Text(String(localized: "Close \(tab.label)"))) {
+                act(.close(tab.id))
+            }
             // Under the pointer, as the Mac's; on the tab on screen too, for a finger, which has no pointer.
             if selected || hovering {
-                SideClose { act(.close(tab.id)) }
+                SideClose(label: String(localized: "Close \(tab.label)"),
+                          accessibilityIdentifier: "close-tab-\(tab.id)") { act(.close(tab.id)) }
                     .transition(.opacity)
             }
         }
@@ -980,11 +985,13 @@ private struct SideTab: View {
 /// under the pointer, quiet until it is pointed at.
 struct SideClose: View {
     var label = String(localized: "Close Tab")
+    var accessibilityIdentifier: String? = nil
     let action: () -> Void
     @State private var hovering = false
 
+    @ViewBuilder
     var body: some View {
-        Button(action: action) {
+        let close = Button(action: action) {
             Image(systemName: "xmark")
                 .font(.system(size: 10, weight: .bold))
                 .frame(width: 20, height: 20)
@@ -995,6 +1002,11 @@ struct SideClose: View {
         .foregroundStyle(hovering ? Palette.ink : Side.secondary)
         .onHover { hovering = $0 }
         .accessibilityLabel(label)
+        if let accessibilityIdentifier {
+            close.accessibilityIdentifier(accessibilityIdentifier)
+        } else {
+            close
+        }
     }
 }
 
