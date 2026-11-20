@@ -1,7 +1,7 @@
 import PadCore
 import SwiftUI
 
-/// Navigation, the tab strip and the named Space picker on iPad. In a narrow
+/// Navigation, the tab strip and icon-only Space buttons on iPad. In a narrow
 /// window the address stands alone so its menu and close cell stay visible;
 /// All Tabs opens the other tabs. Wide windows also show pinned tiles and
 /// the full tab strip, with the current address raised in glass.
@@ -143,7 +143,7 @@ struct TopTabs: View {
                         }
                     }
                 SideSpaces(session: session, window: window, act: act, inRow: true)
-                    .fixedSize(horizontal: true, vertical: false)
+                    .frame(maxWidth: max(width / 4, Side.control * 2 + Side.gap * 4))
                     .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { spacesWidth = $0 }
             }
         }
@@ -324,7 +324,7 @@ private struct TopTab: View {
                             .font(.subheadline)
                             .lineLimit(1)
                             // The end of the host is who you are talking to: it is the part kept.
-                            .truncationMode(.head)
+                            .truncationMode(window.url == nil ? .tail : .head)
                     } else {
                         Text(tab.label)
                             .font(.subheadline.weight(selected ? .semibold : .regular))
@@ -403,7 +403,7 @@ private struct TopTab: View {
                     .foregroundStyle(Palette.ink)
             }
         } else {
-            Text(AddressEditor.placeholder)
+            Text(compact ? String(localized: "Search or address") : AddressEditor.placeholder)
                 .foregroundStyle(Side.secondary)
         }
     }

@@ -40,24 +40,21 @@ struct TouchTargetTests {
             #expect(cell.lowerBound < shape.lowerBound, "\(name) hit-tests its whole allocated cell")
             #expect(!body.contains("Circle().inset(by: -6)"))
         }
-        #expect(side.contains("let side: CGFloat = compact ? 24 : 28"))
-        #expect(side.contains(".frame(height: compact ? 30 : 34)"))
+        #expect(side.contains("let side: CGFloat = compact ? 28 : 32"))
+        #expect(side.contains(".frame(height: compact ? 34 : 38)"))
         #expect(side.contains("row.padding(.horizontal, 3).background"))
     }
 
     @Test func overflowingSpacesCannotPushTheTopToolbarOffscreen() throws {
         let top = try source("App/Sources/TopTabs.swift")
-        #expect(top.contains(".fixedSize(horizontal: true, vertical: false)"))
+        #expect(top.contains(".frame(maxWidth: max(width / 4, Side.control * 2 + Side.gap * 4))"))
         let side = try source("App/Sources/SideTabs.swift")
-        #expect(side.contains("if inRow, let space {"))
-        #expect(side.contains("spacePicker(space)"))
-        #expect(side.contains(".frame(width: 152, height: 34)"))
-        #expect(side.contains(".accessibilityValue(current.name)"))
-        #expect(side.contains("Picker(\"Space\", selection:"))
-        #expect(side.contains("Label(space.name, systemImage: space.symbol).tag(space.id)"))
-        // The sidebar keeps its directly selectable, scrollable Space cells.
+        #expect(!side.contains("spacePicker"))
+        #expect(side.contains(".frame(minWidth: Side.control + 6)"))
+        // Main's icon-only, directly selectable Space cells remain on both bars.
         #expect(side.contains("ScrollView(.horizontal) { spaces(compact: true, glass: false) }"))
         #expect(side.contains("reader.scrollTo(space, anchor: .center)"))
+        #expect(side.contains("DispatchQueue.main.async { reader.scrollTo(window.spaceID, anchor: .center) }"))
     }
 
     @Test func compactTopBarKeepsCurrentTabAndItsActionsOutsideTheScroller() throws {
@@ -73,5 +70,12 @@ struct TouchTargetTests {
         #expect(side.contains("if compactToolbar {"))
         #expect(side.contains("Label(\"Show Bookmarks Bar\", systemImage:"))
         #expect(side.contains("Section { AppItems(act: act) }"))
+    }
+
+    @Test func compactEmptyTabUsesALegiblePromptWithoutChangingTheCommandField() throws {
+        let top = try source("App/Sources/TopTabs.swift")
+        #expect(top.contains("Text(compact ? String(localized: \"Search or address\") : AddressEditor.placeholder)"))
+        #expect(top.contains(".truncationMode(window.url == nil ? .tail : .head)"))
+        #expect(top.contains(".accessibilityHint(address ? \"Type a new address or a search\" : \"\")"))
     }
 }

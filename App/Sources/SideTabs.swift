@@ -1028,9 +1028,7 @@ struct SideSpaces: View {
         let space = session.workspace.space(window.spaceID)
         let unpinned = space?.otherTabs.map(\.id) ?? []
         HStack(spacing: 2) {
-            if inRow, let space {
-                spacePicker(space)
-            } else if session.workspace.spaces.count > 1 {
+            if session.workspace.spaces.count > 1 {
                 ViewThatFits(in: .horizontal) {
                     spaces(compact: false)
                     spaces(compact: true)
@@ -1044,10 +1042,15 @@ struct SideSpaces: View {
                             .onChange(of: window.spaceID) { _, space in
                                 withAnimation(reduceMotion ? nil : .bar) { reader.scrollTo(space, anchor: .center) }
                             }
+                            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { _ in
+                                DispatchQueue.main.async { reader.scrollTo(window.spaceID, anchor: .center) }
+                            }
                     }
+                    .frame(minWidth: Side.control + 6)
                     .padding(.horizontal, 3)
                     .background { spaceGlass(compact: true) }
                 }
+                .padding(.horizontal, inRow ? Side.gap - 2 : 0)
             }
             if !inRow {
                 Spacer(minLength: Side.gap)
@@ -1062,51 +1065,6 @@ struct SideSpaces: View {
         .frame(height: Side.field)
     }
 
-    private func spacePicker(_ current: Space) -> some View {
-        Menu {
-            Picker("Space", selection: Binding(get: { window.spaceID }, set: { act(.switchSpace($0)) })) {
-                ForEach(session.workspace.spaces) { space in
-                    Label(space.name, systemImage: space.symbol).tag(space.id)
-                }
-            }
-            Section {
-                Button("Space Settings…", systemImage: "slider.horizontal.3") { act(.spaceSettings(current.id)) }
-                if window.makesWindows {
-                    Button("Open in New Window", systemImage: "macwindow.badge.plus") { act(.spaceInNewWindow(current.id)) }
-                }
-                Button("New Space…", systemImage: "plus") { act(.command(.newSpace)) }
-                if session.workspace.spaces.count > 1 {
-                    Button("Remove Space…", systemImage: "trash", role: .destructive) { act(.removeSpace(current.id)) }
-                }
-            }
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: current.symbol)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(current.color.ink)
-                    .frame(width: 28, height: 28)
-                    .background(current.color.color, in: Circle())
-                Text(current.name)
-                    .font(.system(size: 13, weight: .medium))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(Side.secondary)
-            }
-            .foregroundStyle(Palette.ink)
-            .padding(.horizontal, 7)
-            .frame(width: 152, height: 34)
-            .background(Side.wash, in: Capsule())
-            .frame(height: Side.control)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Switch Space")
-        .accessibilityValue(current.name)
-        .accessibilityHint("Shows all spaces")
-    }
 
     @ViewBuilder
     private func spaces(compact: Bool, glass: Bool = true) -> some View {
@@ -1136,7 +1094,7 @@ struct SideSpaces: View {
 
     private func spaceGlass(compact: Bool) -> some View {
         Color.clear
-            .frame(height: compact ? 30 : 34)
+            .frame(height: compact ? 34 : 38)
             .liquidGlass(reacting: false, in: Capsule(), otherwise: Palette.wash)
     }
 }
@@ -1157,12 +1115,12 @@ private struct SideSpaceButton: View {
 
     var body: some View {
         let chosen = window.spaceID == space.id
-        let side: CGFloat = compact ? 24 : 28
+        let side: CGFloat = compact ? 28 : 32
         Button {
             act(.switchSpace(space.id))
         } label: {
             Image(systemName: space.symbol)
-                .font(.system(size: compact ? 10 : 12, weight: .semibold))
+                .font(.system(size: compact ? 13 : 14, weight: .semibold))
                 .foregroundStyle(chosen ? space.color.ink : hovering ? Palette.ink : Side.secondary)
                 .frame(width: side, height: side)
                 .matchedGeometryEffect(id: Self.place(space.id, compact: compact), in: places, isSource: true)

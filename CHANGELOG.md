@@ -4,7 +4,7 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
-- On iPad, navigation controls are grouped, the Space picker names the active space and shows every space in its menu, and narrow top bars keep the current tab and its actions readable. Controls retain 44-point touch cells with compact, consistent symbols and surfaces. Mac controls keep their density.
+- On iPad, navigation controls are grouped, icon-only Space buttons stay in view after resize, and narrow top bars keep the current tab, a legible empty-tab prompt and its actions readable. Controls retain 44-point touch cells with compact, consistent symbols and surfaces. Mac controls keep their density.
 - Extension messages release their fallback timers as soon as an answer arrives, avoiding unnecessary wakeups after the message is settled.
 - Pages with the content blocker on spend less time before they show: its hiding rules are weighed once for each page and frame, not again for every image, script and request the page loads. Lists are made again once, on the first launch after the update.
 - On iPhone with iOS 27, the pinned tabs' list opens out of the pinned tab's button as the system's menus open out of theirs: the button's glass grows into the list and, put away, goes back into the button. The system places the list and draws its card, without the dimmed page behind it; held open, it still follows the finger from row to row. Before iOS 27 it is as it was.
