@@ -138,7 +138,7 @@ struct TopTabs: View {
                     }
                 SideSpaces(session: session, window: window, act: act, inRow: true)
                     .frame(maxWidth: max(width / 4, Side.control * 2 + Side.gap * 4))
-                    .layoutPriority(width < 1000 ? -1 : 0)
+                    .frame(maxWidth: width < 1000 ? Side.control * 2 + Side.gap * 4 : nil)
                     .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { spacesWidth = $0 }
             }
         }

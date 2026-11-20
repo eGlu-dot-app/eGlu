@@ -27,9 +27,9 @@ struct WindowControlTests {
         #expect(browser.contains("view.convert(item.anchor, from: topBar?.content.view)"))
     }
 
-    @Test func compactSpaceStripYieldsWidthWithoutLosingItsTouchCell() throws {
+    @Test func compactSpaceStripBoundsWidthWithoutLosingItsTouchCell() throws {
         let top = try source("App/Sources/TopTabs.swift")
-        #expect(top.contains(".layoutPriority(width < 1000 ? -1 : 0)"))
+        #expect(top.contains(".frame(maxWidth: width < 1000 ? Side.control * 2 + Side.gap * 4 : nil)"))
         let side = try source("App/Sources/SideTabs.swift")
         let scroller = try #require(side.range(of: "ScrollViewReader { reader in"))
         #expect(side[scroller.lowerBound...].contains(".frame(minWidth: Side.control + 6)"))
