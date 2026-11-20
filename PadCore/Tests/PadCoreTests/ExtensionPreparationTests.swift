@@ -70,6 +70,63 @@ final class ExtensionPreparationTests: XCTestCase {
         }
     }
 
+    /// Dark Reader's entries: the shim goes in its first one, which runs in
+    /// every frame from the start, and not again in the later one or in an
+    /// entry for where chrome.scripting injects.
+    func testTheShimIsListedOnceWhereAnEarlierEntryRanIt() throws {
+        let manifest = """
+        {
+          "manifest_version": 3, "name": "N", "version": "1.0",
+          "permissions": ["scripting", "storage"],
+          "host_permissions": ["*://*/*"],
+          "content_scripts": [
+            { "matches": ["<all_urls>"], "js": ["proxy.js"], "run_at": "document_start", "all_frames": true, "match_about_blank": true, "world": "MAIN" },
+            { "matches": ["<all_urls>"], "js": ["fallback.js", "index.js"], "run_at": "document_start", "all_frames": true, "match_about_blank": true, "world": "ISOLATED" },
+            { "matches": ["<all_urls>"], "js": ["watcher.js"], "run_at": "document_idle", "all_frames": false }
+          ]
+        }
+        """
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: ExtensionPreparation.manifest(Data(manifest.utf8)).manifest) as? [String: Any])
+        let scripts = try XCTUnwrap(object["content_scripts"] as? [[String: Any]])
+        XCTAssertEqual(scripts.map { $0["js"] as? [String] ?? [] }, [
+            ["proxy.js"], [ExtensionPreparation.shimFile, "fallback.js", "index.js"], ["watcher.js"],
+        ])
+    }
+
+    /// Wherever the earlier entry might not have run the shim first, the
+    /// later one keeps it.
+    func testTheShimStaysWhereNoEarlierEntryRanIt() throws {
+        let later = #"{ "matches": ["https://a.example/*"], "js": ["later.js"], "run_at": "document_end", "all_frames": true, "match_about_blank": true }"#
+        for earlier in [
+            #"{ "matches": ["<all_urls>"], "js": ["e.js"], "run_at": "document_start", "match_about_blank": true }"#,
+            #"{ "matches": ["<all_urls>"], "js": ["e.js"], "run_at": "document_start", "all_frames": true }"#,
+            #"{ "matches": ["<all_urls>"], "js": ["e.js"], "run_at": "document_idle", "all_frames": true, "match_about_blank": true }"#,
+            #"{ "matches": ["https://b.example/*"], "js": ["e.js"], "run_at": "document_start", "all_frames": true, "match_about_blank": true }"#,
+            #"{ "matches": ["<all_urls>"], "exclude_matches": ["https://a.example/x"], "js": ["e.js"], "run_at": "document_start", "all_frames": true, "match_about_blank": true }"#,
+            #"{ "matches": ["<all_urls>"], "include_globs": ["*a*"], "js": ["e.js"], "run_at": "document_start", "all_frames": true, "match_about_blank": true }"#,
+            #"{ "matches": ["<all_urls>"], "js": ["e.js"], "run_at": "document_start", "all_frames": true, "match_about_blank": true, "world": "MAIN" }"#,
+            #"{ "matches": ["<all_urls>"], "css": ["e.css"], "run_at": "document_start", "all_frames": true, "match_about_blank": true }"#,
+        ] {
+            let manifest = #"{"manifest_version": 3, "name": "N", "version": "1", "content_scripts": ["# + earlier + ", " + later + "]}"
+            let object = try XCTUnwrap(JSONSerialization.jsonObject(with: ExtensionPreparation.manifest(Data(manifest.utf8)).manifest) as? [String: Any])
+            let scripts = try XCTUnwrap(object["content_scripts"] as? [[String: Any]])
+            XCTAssertEqual(scripts[1]["js"] as? [String], [ExtensionPreparation.shimFile, "later.js"], earlier)
+        }
+        // The same entry as early, or one for the same addresses, does reach it.
+        let same = #"{"manifest_version": 3, "name": "N", "version": "1", "content_scripts": [{ "matches": ["https://a.example/*"], "js": ["e.js"], "run_at": "document_end", "all_frames": true, "match_about_blank": true }, "# + later + "]}"
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: ExtensionPreparation.manifest(Data(same.utf8)).manifest) as? [String: Any])
+        XCTAssertEqual((object["content_scripts"] as? [[String: Any]])?[1]["js"] as? [String], ["later.js"])
+    }
+
+    /// A scripting extension whose own entry doesn't run the shim in every
+    /// address it may inject on still gets the entry for those.
+    func testAScriptingExtensionKeepsItsShimEntryBeyondItsOwn() throws {
+        let manifest = #"{"manifest_version": 3, "name": "N", "version": "1", "permissions": ["scripting"], "host_permissions": ["*://*/*"], "content_scripts": [{ "matches": ["https://a.example/*"], "js": ["a.js"], "run_at": "document_start" }]}"#
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: ExtensionPreparation.manifest(Data(manifest.utf8)).manifest) as? [String: Any])
+        let scripts = try XCTUnwrap(object["content_scripts"] as? [[String: Any]])
+        XCTAssertEqual(scripts.map { $0["js"] as? [String] ?? [] }, [[ExtensionPreparation.shimFile, "a.js"], [ExtensionPreparation.shimFile]])
+    }
+
     func testBackgroundScriptsGetTheShimFirst() throws {
         let manifest = #"{"manifest_version": 2, "name": "N", "version": "1", "permissions": ["nativeMessaging"], "background": {"scripts": ["one.js"], "persistent": false}}"#
         let edited = try ExtensionPreparation.manifest(Data(manifest.utf8))
