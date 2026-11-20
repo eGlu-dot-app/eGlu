@@ -5,6 +5,7 @@ import SwiftUI
 /// confirmation, not a claim that a newly enabled or offline device is current.
 struct SyncStatusView: View {
     @ObservedObject private var sync = Sync.shared
+    @State private var announcements = SyncResultAnnouncements()
 
     private var title: String {
         switch sync.status.phase {
@@ -54,5 +55,9 @@ struct SyncStatusView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("syncStatus")
+        .onChange(of: sync.status.phase) { _, phase in
+            guard announcements.accepts(phase) else { return }
+            AccessibilityNotification.Announcement(BrowserText.localized(title)).post()
+        }
     }
 }

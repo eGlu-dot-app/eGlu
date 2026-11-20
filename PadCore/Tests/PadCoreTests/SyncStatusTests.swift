@@ -3,6 +3,30 @@ import XCTest
 @testable import PadCore
 
 final class SyncStatusTests: XCTestCase {
+    func testResultAnnouncementsIgnorePollingAndTransientWork() {
+        var announcements = SyncResultAnnouncements()
+        XCTAssertFalse(announcements.accepts(.checkingAccount))
+        XCTAssertFalse(announcements.accepts(.syncing))
+        XCTAssertFalse(announcements.accepts(.waiting(.confirmation)))
+        XCTAssertFalse(announcements.accepts(.waiting(.pendingChanges)))
+        XCTAssertTrue(announcements.accepts(.waiting(.connection)))
+        XCTAssertFalse(announcements.accepts(.retrying))
+        XCTAssertFalse(announcements.accepts(.waiting(.connection)), "Network polling must not repeat the same warning")
+        XCTAssertTrue(announcements.accepts(.completed))
+        XCTAssertFalse(announcements.accepts(.syncing))
+        XCTAssertFalse(announcements.accepts(.completed), "Another unchanged fetch is not a new result")
+        XCTAssertTrue(announcements.accepts(.waiting(.error)))
+        XCTAssertTrue(announcements.accepts(.completed), "Recovery after an error is a meaningful result")
+    }
+
+    func testNewlyEnabledSyncCanAnnounceTheSameAccountProblem() {
+        var announcements = SyncResultAnnouncements()
+        XCTAssertTrue(announcements.accepts(.waiting(.account)))
+        XCTAssertFalse(announcements.accepts(.off))
+        XCTAssertFalse(announcements.accepts(.checkingAccount))
+        XCTAssertTrue(announcements.accepts(.waiting(.account)))
+    }
+
     func testRelaunchRetainsHistoricalDateWithoutClaimingCurrentSync() {
         let previous = Date(timeIntervalSince1970: 10)
         var status = SyncStatus(lastSuccessfulSync: previous)

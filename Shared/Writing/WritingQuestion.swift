@@ -17,6 +17,8 @@ struct WritingQuestion: View {
     /// another way: the welcome's footer buttons do its step's asking, and
     /// mark WritingAsked the same.
     var showsButtons = true
+    var focusesHeading = false
+    var headingProgress = ""
 
     @State private var otherApps = false
 
@@ -38,9 +40,7 @@ struct WritingQuestion: View {
                 .font(.system(size: 32, weight: .medium))
                 .foregroundStyle(.tint)
                 .accessibilityHidden(true)
-            Text("Check your English as you write?")
-                .font(.title2.bold())
-                .multilineTextAlignment(.center)
+            heading
             Text("Harper, a grammar checker, underlines mistakes in what you type in pages and suggests fixes. It works on this device, in English only, and sends nothing anywhere.")
                 .foregroundStyle(Self.note)
                 .multilineTextAlignment(.center)
@@ -73,5 +73,26 @@ struct WritingQuestion: View {
                 .padding(.top, 4)
             }
         }
+    }
+
+    @ViewBuilder private var heading: some View {
+        #if os(iOS)
+        if focusesHeading {
+            ScreenHeading(title: String(localized: "Check your English as you write?"),
+                          progress: headingProgress, style: .title2)
+        } else {
+            headingText
+        }
+        #else
+        headingText
+        #endif
+    }
+
+    private var headingText: some View {
+        Text("Check your English as you write?")
+            .font(.title2.bold())
+            .multilineTextAlignment(.center)
+            .accessibilityAddTraits(.isHeader)
+            .accessibilityValue(headingProgress)
     }
 }

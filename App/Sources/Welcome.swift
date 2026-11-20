@@ -15,7 +15,7 @@ import UniformTypeIdentifiers
 struct Welcome: View {
     @ObservedObject var session: Session
     let spaceID: UUID
-    let done: (SetupProgress.Completion) -> Void
+    let done: (SetupProgress.Completion) async -> Bool
 
     typealias Step = SetupProgress.Step
 
@@ -24,6 +24,8 @@ struct Welcome: View {
     @State private var importing = false
     @State private var imported: BookmarkImportOutcome?
     @State private var importWorking = false
+    @State private var importDestination: UUID?
+    @State private var save = SetupSaveState()
     @ObservedObject private var browser = DefaultBrowser.shared
     @ObservedObject private var sync = Sync.shared
     /// The Writing step exists only where the engine can check (Decided 7).
@@ -34,8 +36,9 @@ struct Welcome: View {
         && WritingAsk.decision(welcomePending: true, asked: WritingAsked.wasAsked) == .welcomeStep
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var phase
+    @Environment(\.dynamicTypeSize) private var typeSize
 
-    init(session: Session, spaceID: UUID, step: Step, done: @escaping (SetupProgress.Completion) -> Void) {
+    init(session: Session, spaceID: UUID, step: Step, done: @escaping (SetupProgress.Completion) async -> Bool) {
         self.session = session
         self.spaceID = spaceID
         _step = State(initialValue: step)
@@ -59,23 +62,53 @@ struct Welcome: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            page
-                .id(step)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                // What scrolls under the button fades out before it, in place of a hard edge.
-                .overlay(alignment: .bottom) {
-                    LinearGradient(colors: [Palette.ground.opacity(0), Palette.ground], startPoint: .top, endPoint: .bottom)
-                        .frame(height: 20)
-                        .allowsHitTesting(false)
+        Group {
+            if typeSize.isAccessibilitySize {
+                // At accessibility sizes a banner and footer can be taller
+                // than the sheet. One scroll keeps every action reachable.
+                ScrollView {
+                    VStack(spacing: 0) {
+                        saveBanner
+                        header
+                        page
+                        footer
+                    }
                 }
-            footer
+                .scrollBounceBehavior(.basedOnSize)
+            } else {
+                VStack(spacing: 0) {
+                    header
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            saveBanner
+                            page
+                        }
+                    }
+                    .scrollBounceBehavior(.basedOnSize)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    // What scrolls under the button fades out before it.
+                    .overlay(alignment: .bottom) {
+                        LinearGradient(colors: [Palette.ground.opacity(0), Palette.ground], startPoint: .top, endPoint: .bottom)
+                            .frame(height: 20)
+                            .allowsHitTesting(false)
+                    }
+                    footer
+                }
+            }
         }
+        // A step is a new accessibility screen, including its controls. Reusing
+        // the activated footer across steps makes VoiceOver restore focus to
+        // that same element under its new label instead of the new heading.
+        .id(step)
         .background(Palette.ground)
         .tint(colour.color)
         .onAppear { name = space?.name ?? "" }
         .onChange(of: name) { _, new in session.change { $0.renameSpace(spaceID, to: new) } }
+        .onChange(of: save) { _, next in
+            if next.retryReason != nil {
+                AccessibilityNotification.Announcement(String(localized: "Setup hasn't finished. Your choices are still here. Retry saving to finish.")).post()
+            }
+        }
         // Back from Settings: the answer may have changed there.
         .onChange(of: phase) { _, new in if new == .active { browser.refresh() } }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.html, .zip]) { result in
@@ -87,11 +120,18 @@ struct Welcome: View {
                 if scoped { file.stopAccessingSecurityScopedResource() }
                 imported = outcome
                 importWorking = false
+                outcome.announceResult()
             }
         }
     }
 
+    private var saveBanner: some View {
+        WorkspaceSaveStatusView(showsRetry: false)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
     private func go(to next: Step) {
+        guard !save.isSaving, !importWorking else { return }
         // SwiftUI's default-action Button does not distinguish Return from
         // a tap. Snap both paths rather than decorate keyboard navigation;
         // the progress geometry and page swap share the same transaction.
@@ -99,16 +139,32 @@ struct Welcome: View {
         transaction.disablesAnimations = true
         withTransaction(transaction) {
             step = next
+            save = SetupSaveState()
             session.visitWelcome(next)
         }
     }
 
     private func advance() {
-        guard let at = steps.firstIndex(of: step), at + 1 < steps.count else { return done(.completed) }
+        guard let at = steps.firstIndex(of: step), at + 1 < steps.count else { return finishSetup(.completed) }
         go(to: steps[at + 1])
     }
 
+    private func finishSetup(_ reason: SetupProgress.Completion) {
+        let intent = save.retryReason ?? reason
+        guard !importWorking, save.begin(intent) else { return }
+        Task { @MainActor in save.acknowledge(await done(intent)) }
+    }
+
+    private var bookmarkAction: SetupBookmarkAction {
+        SetupBookmarkAction.resolve(outcome: imported, working: importWorking,
+                                    hasDestination: importDestination.map { session.workspace.space($0) != nil } == true)
+    }
+
     // MARK: The frame around the pages
+
+    private var stepProgress: String {
+        String(localized: "Step \((steps.firstIndex(of: step) ?? 0) + 1) of \(steps.count)")
+    }
 
     private var header: some View {
         VStack(spacing: 4) {
@@ -138,14 +194,14 @@ struct Welcome: View {
             .buttonStyle(PressScale())
             .accessibilityLabel("Back")
             .opacity(step == .hello ? 0 : 1)
-            .disabled(step == .hello)
+            .disabled(step == .hello || save.isSaving || importWorking)
             Spacer()
-            Button("Skip Setup") { done(.skipped) }
+            Button("Skip Setup") { finishSetup(.skipped) }
                 .font(.body)
                 .frame(minWidth: 44, minHeight: 44)
                 .contentShape(Rectangle())
                 .opacity(step == .finish ? 0 : 1)
-                .disabled(step == .finish || importWorking)
+                .disabled(step == .finish || importWorking || save.isSaving)
         }
         .foregroundStyle(Palette.muted)
         .padding(.horizontal, 12)
@@ -154,8 +210,20 @@ struct Welcome: View {
 
     private var footer: some View {
         VStack(spacing: 4) {
+            if save.retryReason != nil {
+                Label("Setup hasn't finished. Your choices are still here. Retry saving to finish.", systemImage: "exclamationmark.triangle")
+                    .font(.footnote)
+                    .foregroundStyle(Palette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.bottom, 8)
+            }
             Button(action: primaryAction) {
-                Text(primary)
+                HStack(spacing: 8) {
+                    if save.isSaving || importWorking { ProgressView().tint(colour.ink) }
+                    Text(primary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                     .font(.headline)
                     .foregroundStyle(colour.ink)
                     .frame(maxWidth: .infinity, minHeight: 50)
@@ -164,8 +232,9 @@ struct Welcome: View {
             }
             .buttonStyle(PressScale())
             .keyboardShortcut(.defaultAction)
-            .disabled(importWorking || (step == .space && name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                      || (step == .bookmarks && (imported?.parsed != nil || imported?.needsSave == true)))
+            .disabled(save.isSaving || importWorking || (save.retryReason == nil &&
+                      ((step == .space && name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                       || (step == .bookmarks && bookmarkAction == .chooseDestination))))
             // The same height on every page, so the button never moves under the finger.
             // "Not Now" on the Writing step, "Skip This Step" on Bookmarks.
             Button(step == .writing ? String(localized: "Not Now") : String(localized: "Skip This Step")) {
@@ -174,30 +243,64 @@ struct Welcome: View {
                 .font(.body)
                 .frame(maxWidth: .infinity, minHeight: 44)
                 .contentShape(Rectangle())
-                .opacity(step == .bookmarks || step == .writing ? 1 : 0)
-                .disabled((step != .bookmarks && step != .writing) || importWorking)
+                .opacity(showsSecondary ? 1 : 0)
+                .accessibilityHidden(!showsSecondary)
+                .disabled(!showsSecondary || importWorking || save.isSaving)
         }
         .frame(maxWidth: 420)
         .padding(.horizontal, 24)
         .padding(.bottom, 12)
     }
 
+    private var showsSecondary: Bool {
+        save.retryReason == nil && (step == .writing || (step == .bookmarks && imported?.isComplete != true && imported?.needsSave != true))
+    }
+
     private var primary: String {
+        if save.isSaving { return String(localized: "Saving Setup…") }
+        if save.retryReason != nil { return String(localized: "Retry Saving") }
         switch step {
         case .hello, .space: return String(localized: "Continue")
         case .bookmarks:
-            if importWorking { return String(localized: "Importing Bookmarks…") }
-            if imported?.isComplete == true { return String(localized: "Continue") }
-            if imported?.parsed != nil { return String(localized: "Choose a Space Above") }
-            if imported?.needsSave == true { return String(localized: "Save Bookmarks Above") }
-            return imported == nil ? String(localized: "Choose a File…") : String(localized: "Choose Another File…")
+            switch bookmarkAction {
+            case .wait: return String(localized: "Importing Bookmarks…")
+            case .continueSetup: return String(localized: "Continue")
+            case .chooseDestination: return String(localized: "Choose a Space Above")
+            case .importSelected: return String(localized: "Import into Selected Space")
+            case .retrySave: return String(localized: "Retry Saving")
+            case .chooseFile: return imported == nil ? String(localized: "Choose a File…") : String(localized: "Choose Another File…")
+            }
         case .writing: return String(localized: "Check My Writing")
         case .finish: return String(localized: "Start Browsing")
         }
     }
 
     private func primaryAction() {
-        if step == .bookmarks, imported?.isComplete != true { importing = true }
+        guard !save.isSaving, !importWorking else { return }
+        if let reason = save.retryReason { finishSetup(reason) }
+        else if step == .bookmarks {
+            switch bookmarkAction {
+            case .chooseFile: importing = true
+            case .retrySave:
+                guard let imported else { return }
+                importWorking = true
+                session.retryBookmarkImport(imported) { outcome in
+                    self.imported = outcome
+                    importWorking = false
+                    outcome.announceResult()
+                }
+            case .importSelected:
+                guard let parsed = imported?.parsed, let importDestination else { return }
+                importWorking = true
+                session.importBookmarks(parsed, into: importDestination) { outcome in
+                    imported = outcome
+                    importWorking = false
+                    outcome.announceResult()
+                }
+            case .continueSetup: advance()
+            case .wait, .chooseDestination: break
+            }
+        }
         else if step == .writing { answerWriting(true) }
         else { advance() }
     }
@@ -210,32 +313,26 @@ struct Welcome: View {
     }
 
     @ViewBuilder private var page: some View {
-        ScrollView {
-            Group {
-                switch step {
-                case .hello: hello
-                case .space: yourSpace
-                case .bookmarks: bookmarks
-                case .writing: writingAsk
-                case .finish: finish
-                }
+        Group {
+            switch step {
+            case .hello: hello
+            case .space: yourSpace
+            case .bookmarks: bookmarks
+            case .writing: writingAsk
+            case .finish: finish
             }
-            .frame(maxWidth: 420)
-            .padding(.horizontal, 24)
-            .padding(.top, 12)
-            .padding(.bottom, 24)
-            .frame(maxWidth: .infinity)
         }
-        .scrollBounceBehavior(.basedOnSize)
+        .frame(maxWidth: 420)
+        .padding(.horizontal, 24)
+        .padding(.top, 12)
+        .padding(.bottom, 24)
+        .frame(maxWidth: .infinity)
+        .disabled(save.isSaving || importWorking)
     }
 
     private func heading(_ title: String, _ text: String) -> some View {
         VStack(spacing: 8) {
-            Text(title)
-                .font(.title.bold())
-                .accessibilityAddTraits(.isHeader)
-                .tracking(-0.4)
-                .multilineTextAlignment(.center)
+            ScreenHeading(title: title, progress: stepProgress)
             Text(text)
                 .font(.body)
                 .foregroundStyle(Palette.muted)
@@ -327,7 +424,17 @@ struct Welcome: View {
             heading(String(localized: "Bring your bookmarks"),
                     String(localized: "Import a bookmarks file from Chrome, Firefox or Safari into \(space?.name ?? String(localized: "your space")). They show on every new tab."))
             if imported != nil {
-                BookmarkImportStatusView(session: session, outcome: $imported, chooseFile: { importing = true }, showFileChoice: false)
+                VStack(alignment: .leading, spacing: 8) {
+                    BookmarkImportStatusView(session: session, outcome: $imported, chooseFile: { importing = true }, showFileChoice: false, showRecoveryActions: false)
+                    if imported?.parsed != nil {
+                        Picker("Import into", selection: $importDestination) {
+                            Text("Choose a Space").tag(UUID?.none)
+                            ForEach(session.workspace.spaces) { space in
+                                Text(space.name).tag(Optional(space.id))
+                            }
+                        }
+                    }
+                }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(16)
                     .background(Palette.wash, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -352,7 +459,7 @@ struct Welcome: View {
         WritingQuestion(offersOtherApps: false,
                         check: { _ in self.answerWriting(true) },
                         notNow: { self.answerWriting(false) },
-                        showsButtons: false)
+                        showsButtons: false, focusesHeading: true, headingProgress: stepProgress)
     }
 
     // MARK: The default browser and iCloud

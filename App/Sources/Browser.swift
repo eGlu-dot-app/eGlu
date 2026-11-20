@@ -552,18 +552,16 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         Browser.welcomeOwner = self
         let welcome = UIHostingController(rootView: Welcome(session: Session.shared, spaceID: spaceID,
                                                            step: progress.step) { [weak self] reason in
-            guard let self, Browser.welcomeOwner === self else { return }
-            Task { [weak self] in
+            guard let self, Browser.welcomeOwner === self else { return false }
+            guard await Session.shared.finishWelcome(reason), Browser.welcomeOwner === self else { return false }
+            self.dismiss(animated: true) { [weak self] in
                 guard let self else { return }
-                guard await Session.shared.finishWelcome(reason), Browser.welcomeOwner === self else { return }
-                self.dismiss(animated: true) { [weak self] in
-                    guard let self else { return }
-                    if Browser.welcomeOwner === self { Browser.welcomeOwner = nil }
-                    self.focusPage()
-                    self.page?.reviewPendingDialog()
-                }
+                if Browser.welcomeOwner === self { Browser.welcomeOwner = nil }
+                self.focusPage()
+                self.page?.reviewPendingDialog()
             }
-        }.safeAreaInset(edge: .top, spacing: 0) { WorkspaceSaveStatusView() })
+            return true
+        })
         welcome.modalPresentationStyle = .formSheet
         welcome.preferredContentSize = CGSize(width: 520, height: 680)
         welcome.isModalInPresentation = true
@@ -657,9 +655,11 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         sidebarSwipe = SidebarSwipe(on: side.view) { [weak self] way in self?.stepSpace(way) }
         let saveStatus = embed(WorkspaceSaveStatusView())
         saveStatus.sizingOptions = .intrinsicContentSize
-        saveStatus.view.isHidden = session.persistence.state.failure == nil
+        saveStatus.view.isHidden = session.persistence.state.failure == nil || session.needsWelcome
         session.persistence.$state.sink { [weak saveStatus] state in
-            saveStatus?.view.isHidden = state.failure == nil
+            // Setup owns recovery while it is pending. Don't show another
+            // retry behind its modal (or grow the dimmed browser's chrome).
+            saveStatus?.view.isHidden = state.failure == nil || Session.shared.needsWelcome
         }.store(in: &subscriptions)
         let top = embed(TopBar(session: session, window: model) { [weak self] in self?.act($0) })
         topBarHeight = top.view.heightAnchor.constraint(equalToConstant: Metrics.bar)

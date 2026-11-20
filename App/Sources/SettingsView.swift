@@ -92,6 +92,7 @@ private struct SettingsDetail: View {
     @AppStorage(Menus.controlShortcutsKey) private var controlShortcuts = false
     /// The part the address bar sent Settings to, for a moment after it opens there.
     @State private var lit: SettingsAnchor?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Apple Intelligence on this device, as Settings opens (Intelligence.swift).
     private let intelligence = IntelligenceStatus.current
 
@@ -441,6 +442,7 @@ private struct SettingsDetail: View {
                     if scoped { file.stopAccessingSecurityScopedResource() }
                     imported = outcome
                     importWorking = false
+                    outcome.announceResult()
                 }
             }
             .toolbar {
@@ -449,6 +451,7 @@ private struct SettingsDetail: View {
                 }
             }
             .environment(\.settingsLit, lit)
+            .environment(\.settingsTarget, anchor)
             // Sent to a part, the list goes to that section's first row, at
             // the top: its header, just above, would be under the title bar.
             // This much more kept clear there leaves the header in view. (A
@@ -462,10 +465,13 @@ private struct SettingsDetail: View {
                 guard let anchor else { return }
                 // Once the list has its rows: before that there is nowhere to scroll to.
                 try? await Task.sleep(for: .milliseconds(120))
+                guard !Task.isCancelled else { return }
                 scroller.scrollTo(anchor, anchor: .top)
                 lit = anchor
                 try? await Task.sleep(for: .seconds(2))
-                withAnimation(.easeOut(duration: 0.6)) { lit = nil }
+                guard !Task.isCancelled else { return }
+                if reduceMotion { lit = nil }
+                else { withAnimation(.easeOut(duration: 0.6)) { lit = nil } }
             }
             }
     }
@@ -474,6 +480,7 @@ private struct SettingsDetail: View {
 extension EnvironmentValues {
     /// The section highlighted after a direct search result opens it.
     @Entry var settingsLit: SettingsAnchor?
+    @Entry var settingsTarget: SettingsAnchor?
 }
 
 /// A section's header in Settings, which is also a place the address bar
@@ -484,6 +491,8 @@ struct SettingsHeader: View {
     let title: String
     let anchor: SettingsAnchor
     @Environment(\.settingsLit) private var lit
+    @Environment(\.settingsTarget) private var target
+    @AccessibilityFocusState(for: .voiceOver) private var focused: Bool
 
     /// A header's height with the gap over it, about: what the list keeps
     /// clear at its top when it is sent to a section (SettingsView).
@@ -495,10 +504,28 @@ struct SettingsHeader: View {
     }
 
     var body: some View {
-        Text(title)
+        HStack(spacing: 6) {
+            if target == anchor {
+                Image(systemName: "arrow.right.circle")
+                    .accessibilityHidden(true)
+            }
+            Text(title)
+        }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
+            .accessibilityValue(target == anchor ? String(localized: "Opened from search") : "")
+            .accessibilityFocused($focused)
             // Left as the list draws its headers but while it is lit.
             .foregroundStyle(lit == anchor ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.foreground))
             .id(anchor)
+            .task(id: lit) {
+                guard lit == anchor else { return }
+                // The route owner scrolls first, then VoiceOver finishes
+                // activating the search row. Form edits don't move focus.
+                do { try await Task.sleep(for: .milliseconds(250)) }
+                catch { return }
+                focused = true
+            }
     }
 }
 

@@ -17,6 +17,8 @@ struct WorkspaceBackupDocument: FileDocument {
 /// A local disk error remains visible until the latest revision is acknowledged.
 /// Export copies workspace metadata; it never claims to save a website's draft.
 struct WorkspaceSaveStatusView: View {
+    /// Setup keeps its retry in the footer, but still offers backup export.
+    var showsRetry = true
     @ObservedObject private var persistence = Session.shared.persistence
     @State private var backup: WorkspaceBackupDocument?
     @State private var exporting = false
@@ -57,8 +59,10 @@ struct WorkspaceSaveStatusView: View {
 
     private var actions: some View {
         Group {
-            Button(persistence.isSaving ? "Retrying…" : "Retry Save") { Session.shared.retryWorkspaceSave() }
-                .disabled(persistence.isSaving)
+            if showsRetry {
+                Button(persistence.isSaving ? "Retrying…" : "Retry Save") { Session.shared.retryWorkspaceSave() }
+                    .disabled(persistence.isSaving)
+            }
             Button("Export Workspace Backup") {
                 do {
                     backup = try WorkspaceBackupDocument(workspace: Session.shared.workspace)
