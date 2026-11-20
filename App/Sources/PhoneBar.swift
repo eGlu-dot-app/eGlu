@@ -392,6 +392,7 @@ private struct PageMenu: View {
                 .contentShape(Circle())
         }
         .accessibilityLabel("More")
+        .accessibilityIdentifier("page-menu")
         .accessibilityValue(downloads.activeCount > 0 ? String(localized: "Downloads under way: \(downloads.activeCount)") : "")
     }
 }
