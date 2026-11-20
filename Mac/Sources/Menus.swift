@@ -198,6 +198,10 @@ struct BrowserCommands: Commands {
             Button(window?.isBookmarked == true ? String(localized: "Remove Bookmark") : String(localized: "Bookmark This Page")) { window?.toggleBookmark() }
                 .keyboardShortcut("d")
                 .disabled(window?.url == nil)
+            // Chrome's and Safari's ⌥⌘B.
+            Button("Bookmark Manager") { window?.bookmarkManagerShown = true }
+                .keyboardShortcut("b", modifiers: [.option, .command])
+                .disabled(window == nil || !session.canUseWorkspace)
             Button("Duplicate Tab") { window?.duplicate() }
                 .disabled(window?.tab?.url == nil)
             Divider()

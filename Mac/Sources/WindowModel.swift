@@ -17,10 +17,23 @@ enum CommandBarPurpose: Equatable {
 @MainActor
 final class WindowModel: ObservableObject, PageHost {
     @Published private(set) var spaceID: UUID {
-        // Another space's bookmarks are not the ones asked for: they go. The
-        // panel's own watch is in the sidebar's space, which goes with it.
-        didSet { if spaceID != oldValue, bookmarksOpen { bookmarksOpen = false } }
+        didSet {
+            defer { stepping = nil }
+            guard spaceID != oldValue else { return }
+            // Another space's bookmarks are not the ones asked for: they go. The
+            // panel's own watch is in the sidebar's space, which goes with it.
+            if bookmarksOpen { bookmarksOpen = false }
+            spaceSide = stepping ?? Session.shared.workspace.side(of: spaceID, from: oldValue)
+        }
     }
+    /// The way along the row of spaces the last change of space went, for
+    /// the sidebar's tabs to come in from that side (Sidebar): 1 toward the
+    /// row's end, -1 toward its start, 0 where there was no way between
+    /// (the space left is gone).
+    @Published private(set) var spaceSide = 0
+    /// A step to the space beside (`showSpace(by:)`) says its way before it
+    /// goes: from the last space round to the first is still on toward the end.
+    private var stepping: Int?
     @Published private(set) var tabID: UUID?
     /// The tab's page on screen; nil for a tab that has gone nowhere yet,
     /// and for a window whose space has no tab to show.
@@ -121,6 +134,8 @@ final class WindowModel: ObservableObject, PageHost {
     /// The space's history (HistoryView), and Clear History, as sheets over the window.
     @Published var historyShown = false
     @Published var historyClearing = false
+    /// The space's bookmarks to sort out (BookmarkManagerView), as a sheet over the window.
+    @Published var bookmarkManagerShown = false
     /// The puzzle button's list of extensions (ExtensionBar.swift).
     @Published var extensionsShown = false
     /// The handoff being made ready, its sheet over the window while it is (HandoffSheet).
@@ -379,7 +394,9 @@ final class WindowModel: ObservableObject, PageHost {
 
     func showSpace(by offset: Int) {
         guard let next = Session.shared.workspace.spaceNeighbour(of: spaceID, by: offset) else { return }
+        stepping = offset
         showSpace(next)
+        stepping = nil
     }
 
     func showSpace(number: Int) {
@@ -604,6 +621,21 @@ final class WindowModel: ObservableObject, PageHost {
         }
         guard let id = session.change({ $0.openTab(url, in: spaceID) }) else { return }
         withAnimation(.bar) { show(tab: id, inSpace: spaceID) }
+        focusPage()
+    }
+
+    /// Several pages at once (the Bookmark Manager's Open All): the first as
+    /// `open` puts it, into a blank tab on screen if there is one, and each
+    /// of the rest in a tab of its own. Opened one by one, they would all
+    /// load into that blank tab, which stays blank till its page commits.
+    func open(_ urls: [URL], newTab: Bool) {
+        guard let first = urls.first else { return }
+        open(first, newTab: newTab)
+        let session = Session.shared
+        for url in urls.dropFirst() {
+            guard let id = session.change({ $0.openTab(url, in: spaceID) }) else { continue }
+            withAnimation(.bar) { show(tab: id, inSpace: spaceID) }
+        }
         focusPage()
     }
 
@@ -1277,6 +1309,7 @@ final class WindowModel: ObservableObject, PageHost {
         case .settings: Session.shared.openSettings?()
         case .pinTab: togglePin()
         case .bookmark: toggleBookmark()
+        case .bookmarkManager: bookmarkManagerShown = true
         case .spaceSettings: spacesPanel = .edit(spaceID)
         case .contentBlocking: toggleBlocking()
         case .find: startFinding()
@@ -1297,7 +1330,7 @@ final class WindowModel: ObservableObject, PageHost {
         case .reloadOrigin: toolsPage?.reloadFromOrigin()
         case .measure: page?.toggleMeasuring()
         case .developerMode: toggleDeveloperMode()
-        case .diagnostics, .siteMode, .linkMenu: break
+        case .diagnostics, .siteMode, .linkMenu, .summarizePage: break
         }
     }
 
@@ -1305,7 +1338,8 @@ final class WindowModel: ObservableObject, PageHost {
     static let commands: [Command] = [
         .newTab, .closeTab, .reopenTab, .reload, .stop, .back, .forward, .nextTab, .previousTab,
         .nextSpace, .previousSpace, .newSpace, .newWindow, .closeWindow, .tabBar, .settings, .pinTab,
-        .bookmark, .spaceSettings, .contentBlocking, .find, .handoff, .handoffFile, .splitTab, .history, .copyLink,
+        .bookmark, .bookmarkManager, .spaceSettings, .contentBlocking, .find, .handoff, .handoffFile, .splitTab, .history,
+        .copyLink,
         .acceptWritingSuggestion,
         .inspector, .console, .selectElement, .elementPicture, .reloadOrigin, .measure, .developerMode,
     ]
@@ -1331,6 +1365,7 @@ final class WindowModel: ObservableObject, PageHost {
         case .settings: return "⌘,"
         case .pinTab: return "⇧⌘D"
         case .bookmark: return "⌘D"
+        case .bookmarkManager: return "⌥⌘B"
         case .find: return "⌘F"
         case .history: return "⌘Y"
         case .copyLink: return "⇧⌘C"

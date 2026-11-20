@@ -96,8 +96,9 @@ struct StartPage: View {
         } else {
             TileGrid {
                 ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                    BookmarkTile(item: item, colour: space?.color ?? .blue,
-                                 targets: targets(for: item, among: places), act: act, open: {
+                    let isBar = item.id == space?.bar?.id
+                    BookmarkTile(item: item, colour: space?.color ?? .blue, isBar: isBar,
+                                 targets: isBar ? [] : targets(for: item, among: places), act: act, open: {
                         if item.isFolder {
                             withAnimation(.bar) { path.append(item.id) }
                         } else if let url = item.url {
@@ -195,6 +196,20 @@ struct StartPage: View {
                 .lineLimit(1)
             Spacer(minLength: 0)
             Button {
+                act(.command(.bookmarkManager))
+            } label: {
+                Image(systemName: Command.bookmarkManager.symbol)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Palette.ink)
+                    .frame(width: window.phone ? 44 : Metrics.target, height: window.phone ? 44 : Metrics.target)
+                    .contentShape(Rectangle())
+                    .contentShape(.hoverEffect, Circle().inset(by: Metrics.ring))
+            }
+            .buttonStyle(PressScale())
+            .hoverEffect(.highlight)
+            .help("Bookmark Manager")
+            .accessibilityLabel("Bookmark Manager")
+            Button {
                 folderName = ""
                 askingFolder = true
             } label: {
@@ -249,6 +264,8 @@ private struct MoveTarget: Identifiable {
 private struct BookmarkTile: View {
     let item: Bookmark
     let colour: SpaceColor
+    /// The space's bookmarks bar keeps its name and its place, and is never deleted.
+    let isBar: Bool
     let targets: [MoveTarget]
     let act: (BarAction) -> Void
     let open: () -> Void
@@ -269,7 +286,9 @@ private struct BookmarkTile: View {
                 Button("Open in New Tab", systemImage: "plus.square.on.square") { act(.openInNewTab(url)) }
                 Button("Copy Address", systemImage: "doc.on.doc") { act(.copy(url)) }
             }
-            Button("Rename…", systemImage: "pencil") { rename() }
+            if !isBar {
+                Button("Rename…", systemImage: "pencil") { rename() }
+            }
             if !targets.isEmpty {
                 Menu("Move to…", systemImage: "folder") {
                     ForEach(targets) { target in
@@ -279,9 +298,13 @@ private struct BookmarkTile: View {
                     }
                 }
             }
-            Button(item.isFolder ? "Delete Folder" : "Delete Bookmark", systemImage: "trash", role: .destructive) {
-                act(.removeBookmark(item.id))
+            if !isBar {
+                Button(item.isFolder ? "Delete Folder" : "Delete Bookmark", systemImage: "trash", role: .destructive) {
+                    act(.removeBookmark(item.id))
+                }
             }
+            Divider()
+            Button("Bookmark Manager", systemImage: Command.bookmarkManager.symbol) { act(.command(.bookmarkManager)) }
         }
         .accessibilityLabel(item.isFolder ? String(localized: "\(item.label), folder") : item.label)
     }

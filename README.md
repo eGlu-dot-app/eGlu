@@ -130,6 +130,8 @@ The address field and the command palette are one bar. On iPad it floats over th
 - **With Apple Intelligence** (iOS and iPadOS 26, macOS 26), Apple's on-device model also finds tabs, bookmarks, pages in your history and commands by what your words mean ("that article about window glass"), in any language it knows, and sends nothing anywhere.
 - The search engine's suggestions come without cookies; recognized complete addresses are excluded, though a partial address may be sent before it is recognized. Settings › Search chooses the engine (Google, DuckDuckGo, Bing, Ecosia, Startpage, Kagi, Brave Search or Qwant) and turns suggestions off.
 
+With Handoff turned on and Apple Intelligence available, **Summarize Page** (⌃⌥U) on iPhone and iPad reads the current page on the device. Its sheet shows the summary as it is written, with Copy summary and Handoff; it sends nothing to a server and is never offered on protected sign-in pages.
+
 ### History
 
 Show All History (⌘Y on a Mac, ⌃⌥Y on iPad, or the page menu's History) lists the space's pages by day, each page once a day, and searches them as the command bar does. With Apple Intelligence, press Return to search by what you remember: "the glass article from last Friday", "지난 금요일에 본 기사". A page goes from history with a swipe or its menu, a day with its Clear, and Clear History takes the last hour, today, today and yesterday, or everything, in one space or all of them; closed tabs from that time go from Reopen Closed Tab too. Each handoff an app took is in History too, as a row of its own: choosing it offers its Markdown file again (the share sheet; Quick Look on a Mac), the filter shows handoffs or pages alone, and clearing a time takes its handoffs and their files. Handoffs stay on the device that made them, even with Sync history on.
@@ -489,7 +491,10 @@ node Tests/bridge.mjs webkit                # the same in Playwright's WebKit
 node Tests/extension-shim.mjs               # the Mac's shim for Chrome extensions, against a stand-in for WebKit
 node Tests/passkeys.mjs                     # the Mac's passkey scripts, against stand-ins for WebKit and the app
 python3 Tests/passkeys-rehearsal.py <app>   # the Mac's passkeys in a Debug test copy, with made-up passkeys
+xcodebuild -scheme eGlu -destination 'platform=iOS Simulator,name=iPhone 17' test CODE_SIGNING_ALLOWED=NO
 ```
+
+The iOS summary UI tests use a bundled page and a deterministic, streamed PageMind, not the simulator's Apple Intelligence. In a Debug build, `-UITestPageMind` opens that page in a separate test workspace and enables Handoff for the run; add `-UITestPageMindFailure` or `-UITestPageMindEmpty` to exercise an unavailable answer. These launch arguments have no effect in Release builds.
 
 `Tests/bridge.html` also runs on its own in Safari: `python3 -m http.server 8642` at the root, then open `http://localhost:8642/Tests/bridge.html`. `Tests/blocker.html`, `Tests/scriptlets.html` and `Tests/markdown.html` run the same way, each loading the script as it ships, and say at the bottom of the page whether every check passed. `Tests/handoff.html` reads the pages in `Tests/handoff/` (one of our own for each kind of page) with `markdown.js` and says whether the reading kept beside each is still what the script gives; the package's tests turn each reading into the file Handoff would hand off and hold it against the `.md` kept there.
 

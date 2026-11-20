@@ -124,6 +124,37 @@ struct BrowserView: View {
         .sheet(isPresented: $model.historyClearing) {
             ClearHistoryView(spaceID: model.spaceID) { model.historyClearing = false }
         }
+        .sheet(isPresented: $model.bookmarkManagerShown) {
+            BookmarkManagerView(spaceID: model.spaceID) { urls, newTab in
+                model.open(urls, newTab: newTab)
+            } done: {
+                model.bookmarkManagerShown = false
+            }
+            .frame(minWidth: 680, idealWidth: 820, minHeight: 460, idealHeight: 620)
+        }
+        #if DEBUG
+        // `-bookmarkManagerTest YES`: a space without bookmarks given a few,
+        // in the bar and out of it, and the manager open on them, for a picture.
+        .task {
+            guard UserDefaults.standard.bool(forKey: "bookmarkManagerTest") else { return }
+            try? await Task.sleep(for: .seconds(1))
+            let space = model.spaceID
+            if session.workspace.space(space)?.bookmarks.isEmpty == true {
+                session.change { w in
+                    let figma = URL(string: "https://www.figma.com/files")!
+                    guard let bar = w.makeBar(in: space),
+                          let docs = w.addFolder(named: "Docs", in: bar, of: space) else { return }
+                    w.addBookmark(URL(string: "https://app.slack.com/client")!, title: "Slack", into: bar, in: space)
+                    w.addBookmark(URL(string: "https://www.notion.so/")!, title: "Notion", into: docs, in: space)
+                    w.addBookmark(URL(string: "https://developer.apple.com/design/")!, title: "Apple Design", into: docs, in: space)
+                    w.addBookmark(figma, title: "Figma", into: nil, in: space)
+                    let reading = w.addFolder(named: "Reading", in: nil, of: space)
+                    w.addBookmark(URL(string: "https://news.ycombinator.com/")!, title: "Hacker News", into: reading, in: space)
+                }
+            }
+            model.bookmarkManagerShown = true
+        }
+        #endif
         .sheet(isPresented: $askingWriting) {
             WritingQuestion(offersOtherApps: true,
                             check: { otherApps in
@@ -219,8 +250,8 @@ struct BrowserView: View {
                     .onTapGesture(perform: dismissCommandBar)
                     .accessibilityHidden(true)
                 let top = max(box.size.height * 0.16, 48)
-                // The rows have what is left under the field, down to a margin at the window's foot.
-                CommandBar(model: model, purpose: purpose, room: max(box.size.height - top - 56 - 24, 120))
+                // Leave room for the field and its explicit action, down to the window's foot.
+                CommandBar(model: model, purpose: purpose, room: max(box.size.height - top - CommandBar.controlsHeight - 24, 120))
                     .id(purpose)
                     .frame(width: min(660, box.size.width - 48))
                     .padding(.top, top)
@@ -237,8 +268,7 @@ struct BrowserView: View {
 
     private func dismissCommandBar() {
         guard model.commandBar != nil else { return }
-        model.commandBar = nil
-        model.focusPage()
+        model.dismissCommandBar()
     }
 }
 

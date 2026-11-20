@@ -193,7 +193,7 @@ public enum Handoff {
         let said = cut(whole, to: 300)
         // Only what the page's own words bear out, and not its description over again: the model often gives that back word for word.
         if let summary {
-            let made = sentences(of: unrepeated(grounded(hardened(summary), in: reading, title: name)), upTo: summaryRoom)
+            let made = fileSummary(summary, reading: reading, title: name)
             if made.isEmpty {
                 about.append("- Summary: none. " + (hardened(summary).isEmpty ? "The on-device model found too little on the page to make one."
                     : "What the on-device model wrote was not borne out by the page's own words."))
@@ -526,6 +526,16 @@ public enum Handoff {
 
     /// How long a summary may be in the file.
     public static let summaryRoom = 500
+
+    /// The model's summary as it goes in the file: plain words on one line
+    /// (hardened), only the sentences the page's own words bear out
+    /// (grounded), none said twice, within the room a summary has. Empty
+    /// where nothing of it is left. What the sheet shows once the model
+    /// is done (HandoffGuide) is this, so it shows what the file says.
+    public static func fileSummary(_ summary: String, reading: PageReading, title: String) -> String {
+        let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return sentences(of: unrepeated(grounded(hardened(summary), in: reading, title: name)), upTo: summaryRoom)
+    }
 
     /// A summary within `room` characters, by whole sentences: one that
     /// does not fit is left out with those after it, so that it never

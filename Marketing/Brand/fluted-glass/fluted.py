@@ -55,8 +55,8 @@ GLOW_SIZE = 1.25  # Size of the blurred blue against the globe's rim.
 GLOW_BLUR = 135.0  # Blur radius (Gaussian sigma) of the blue.
 MIX_LIFT = 2.5  # OKLab lightness added for each unit of chroma the blue and the ivory lose where they mix, so they meet in white, not grey.
 AXIS_B = 304.75  # Vertical globe semi-axis.
-DARK_CORNER = (0.07, 0.08, 0.09)  # Deepest dark blue-grey at the bottom right.
-DARK_GLOW = (0.15, 0.17, 0.19)  # Brightest dark blue-grey at the top left.
+SYSTEM_DARK_TOP = 0.133  # Dark mode: the grey (sRGB) of Icon Composer's own dark ground at its top, measured from ictool; the glass is drawn see-through over it.
+SYSTEM_DARK_BOTTOM = 0.053  # The same grey at its foot.
 BACKGROUND_HORIZONTAL = 0.32  # Left-to-right contribution to the light falloff.
 BACKGROUND_VERTICAL = 0.68  # Top-to-bottom contribution to the light falloff.
 BACKGROUND_RADIAL = 0.85  # Light mode: share of the light that gathers round a point, against the share that falls from the top left.
@@ -64,10 +64,7 @@ LIGHT_X = 440.0  # The x the gathered light is centred on.
 LIGHT_Y = 400.0  # The y the gathered light is centred on.
 VIGNETTE_LIGHT = 0.55  # How far the light background turns towards aged ivory at its corners.
 VIGNETTE_IVORY = (0.98, 0.91, 0.74)  # The aged ivory, as an old CRT's case yellows: it reaches the corners through the blue.
-VIGNETTE_DARK = 0.20  # How far the dark background lifts towards white at its corners.
-VIGNETTE_WHITE = (0.80, 0.86, 0.90)  # The milky white the dark background lifts towards.
 VIGNETTE_INNER = 0.25  # Distance from the centre, as a share of the half-diagonal, where the light vignette begins.
-VIGNETTE_DARK_INNER = 0.38  # Where the dark background's lift towards white begins.
 VIGNETTE_OUTER = 1.0  # Distance where the vignette is full.
 
 # The globe out of focus, more towards the left, where the waves are.
@@ -94,7 +91,8 @@ VALLEY = 0.19  # Strength of the fine dark line between rods.
 VALLEY_WIDTH = 0.032  # Valley width as a fraction of the rod half-width.
 HIGHLIGHT_POSITION = -0.73  # Position of the top-left highlight within a rod.
 HIGHLIGHT_WIDTH = 0.065  # Highlight width as a fraction of the rod half-width.
-DARK_HIGHLIGHTS = 0.42  # Dark appearance reflection and milkiness multiplier.
+DARK_HIGHLIGHTS = 0.42  # Dark appearance reflection and highlight multiplier.
+DARK_MILK = 0.0  # Dark appearance milkiness multiplier: none, so the system's dark ground shows through true, not faded.
 GRAIN = 0.0025  # Monochrome photographic grain standard deviation in sRGB.
 SEED = 7319  # Fixed seed of the repeatable grain field.
 
@@ -223,8 +221,8 @@ def progressive_blur(rgba, p):
     return np.concatenate((blurred[..., :3] / np.maximum(alpha, 1e-6), alpha), axis=2)
 
 
-def vignette(rgb, x, y, appearance, p):
-    """Light: turned towards aged ivory at the corners. Dark: lifted towards a milky white there.
+def vignette(rgb, x, y, p):
+    """Light: turned towards aged ivory at the corners.
 
     The blue covers nearly the whole square, so the ivory ground alone shows
     only at its foot; drawn over the blue here, it reaches every corner. A
@@ -232,34 +230,35 @@ def vignette(rgb, x, y, appearance, p):
     """
     centre = 511.5
     distance = np.sqrt(((x - centre) / centre) ** 2 + ((y - centre) / centre) ** 2) / np.sqrt(2)
-    inner = p.vignette_dark_inner if appearance == "Dark" else p.vignette_inner
-    edge = smoothstep(inner, p.vignette_outer, distance)
-    if appearance == "Dark":
-        return rgb + p.vignette_dark * edge[..., None] * (linear(np.array(p.vignette_white)) - rgb)
+    edge = smoothstep(p.vignette_inner, p.vignette_outer, distance)
     return mix(rgb, linear(np.array(p.vignette_ivory)), p.vignette_light * edge, p)
 
 
-def background(x, y, appearance, p):
+def background(x, y, appearance, p, grey=None):
+    """The ground behind the globe. Dark: a flat grey (sRGB), one of the two the see-through plate is separated from."""
+    if appearance == "Dark":
+        return np.full(x.shape + (3,), linear(np.float32(grey)), dtype=np.float32)
     direction = (p.background_horizontal * x + p.background_vertical * y)
     direction /= 1023 * (p.background_horizontal + p.background_vertical)
     gathered = np.clip(np.hypot(x - p.light_x, y - p.light_y) / (512 * np.sqrt(2)), 0, 1)
-    radial = 0 if appearance == "Dark" else p.background_radial
-    direction = direction * (1 - radial) + gathered * radial
+    direction = direction * (1 - p.background_radial) + gathered * p.background_radial
     glow = 1 - smoothstep(0, 1, direction)
-    if appearance == "Dark":
-        colour = np.array(p.dark_corner) + glow[..., None] * (np.array(p.dark_glow) - p.dark_corner)
-    else:
-        colour = np.array(p.light_corner) + np.minimum(2 * glow, 1)[..., None] * (np.array(p.light_mid) - p.light_corner)
-        colour += np.maximum(2 * glow - 1, 0)[..., None] * (np.array(p.light_glow) - p.light_mid)
+    colour = np.array(p.light_corner) + np.minimum(2 * glow, 1)[..., None] * (np.array(p.light_mid) - p.light_corner)
+    colour += np.maximum(2 * glow - 1, 0)[..., None] * (np.array(p.light_glow) - p.light_mid)
     rgb = linear(colour)
-    if appearance != "Dark":
-        # The blue, blurred behind the globe, deeper towards its bottom.
-        inside = (((x - p.center_x) / (p.axis_a * p.glow_size)) ** 2 + ((y - p.center_y) / (p.axis_b * p.glow_size)) ** 2) <= 1
-        cover = gaussian_filter(inside.astype(np.float32), p.glow_blur) * p.glow_strength
-        t = np.clip((y - (p.center_y - p.axis_b)) / (2 * p.axis_b), 0, 1)[..., None]
-        blue = linear(np.array(p.glow_top)) * (1 - t) + linear(np.array(p.glow_bottom)) * t
-        rgb = mix(rgb, blue, cover, p)
-    return vignette(rgb, x, y, appearance, p).astype(np.float32)
+    # The blue, blurred behind the globe, deeper towards its bottom.
+    inside = (((x - p.center_x) / (p.axis_a * p.glow_size)) ** 2 + ((y - p.center_y) / (p.axis_b * p.glow_size)) ** 2) <= 1
+    cover = gaussian_filter(inside.astype(np.float32), p.glow_blur) * p.glow_strength
+    t = np.clip((y - (p.center_y - p.axis_b)) / (2 * p.axis_b), 0, 1)[..., None]
+    blue = linear(np.array(p.glow_top)) * (1 - t) + linear(np.array(p.glow_bottom)) * t
+    rgb = mix(rgb, blue, cover, p)
+    return vignette(rgb, x, y, p).astype(np.float32)
+
+
+def system_dark(shape, p):
+    """Icon Composer's dark ground, top to foot, in sRGB: what the dark previews show behind the see-through plate."""
+    t = np.linspace(0, 1, shape[0], dtype=np.float32)[:, None, None]
+    return np.broadcast_to(p.system_dark_top + (p.system_dark_bottom - p.system_dark_top) * t, shape + (3,))
 
 
 def safe_coordinates(x, y, safe):
@@ -292,7 +291,7 @@ def finish(version, p):
     return {name: getattr(p, name) if getattr(p, name) is not None else value for name, value in values.items()}
 
 
-def prepare_scene(folder, appearance, settings, p):
+def prepare_scene(folder, appearance, settings, p, grey=None):
     silhouette = Image.open(folder / "squircle-mask.png").convert("L")
     layer = Image.open(folder / f"globe-layer-{appearance}.png")
     cursor_image = Image.open(folder / f"cursor-{appearance}.png")
@@ -302,7 +301,7 @@ def prepare_scene(folder, appearance, settings, p):
     cursor = Image.fromarray(clean_layer(cursor_image), "RGBA")
     alpha = np.asarray(silhouette, dtype=np.float32) / 255
     y, x = np.indices(alpha.shape, dtype=np.float32)
-    ground = background(x, y, appearance, p)
+    ground = background(x, y, appearance, p, grey)
     original = linear(globe[..., :3]) * globe[..., 3:] + ground * (1 - globe[..., 3:])
     valid = minimum_filter(alpha, size=3, mode="constant", cval=0) == 1
     nearest = distance_transform_edt(~valid, return_distances=False, return_indices=True)
@@ -368,13 +367,12 @@ def shade(transmitted, geometry, _grade, settings, appearance, p):
     highlight = np.exp(-0.5 * ((u - p.highlight_position) / p.highlight_width) ** 2)
     colour *= (transmission * (1 - p.valley * valley))[..., None]
     colour += (settings["specular"] * quiet * highlight)[..., None] * (0.72, 0.85, 0.93)
-    milk = settings["milkiness"] * quiet
+    milk = settings["milkiness"] * (p.dark_milk if appearance == "Dark" else 1)
     return colour * (1 - milk) + np.array((0.65, 0.77, 0.83)) * milk
 
 
-def composite_cursor(rgb, silhouette, cursor, grain, p):
-    colour = np.clip(srgb(rgb) + grain[..., None] * p.grain, 0, 1)
-    result = Image.fromarray(np.uint8(colour * 255 + 0.5), "RGB").convert("RGBA")
+def composite_cursor(colour, silhouette, cursor):
+    result = Image.fromarray(np.uint8(np.clip(colour, 0, 1) * 255 + 0.5), "RGB").convert("RGBA")
     result.putalpha(silhouette)
     result = Image.alpha_composite(result, cursor)
     result.putalpha(silhouette)
@@ -386,7 +384,45 @@ def composite_cursor(rgb, silhouette, cursor, grain, p):
 def render(folder, version, appearance, p):
     started = time.perf_counter()
     settings = finish(version, p)
-    original, scene, ground, silhouette, cursor, safe, boundary = prepare_scene(folder, appearance, settings, p)
+    if appearance == "Dark":
+        # See-through: drawn over the darkest and the lightest grey of Icon
+        # Composer's dark ground, the difference says how much of the ground
+        # shows through each pixel, and the rest is the glass's own colour.
+        low, high = p.system_dark_bottom, p.system_dark_top
+        under_low, silhouette, cursor, boundary = optics(folder, version, appearance, settings, p, low)
+        under_high = optics(folder, version, appearance, settings, p, high)[0]
+        alpha = np.clip(1 - (under_high - under_low).mean(axis=2) / (high - low), 0, 1)
+        colour = (under_low - (1 - alpha[..., None]) * low) / np.maximum(alpha[..., None], 1e-4)
+    else:
+        colour, silhouette, cursor, boundary = optics(folder, version, appearance, settings, p)
+        alpha = None
+    grain = np.random.default_rng(p.seed).normal(size=boundary.shape).astype(np.float32) * boundary
+    colour = np.clip(colour + grain[..., None] * p.grain, 0, 1)
+    if p.plates:
+        # The app icon's own layer: the whole square, no cursor (Icon Composer
+        # draws it on top) and no outline (Icon Composer cuts its own). The
+        # dark one is see-through, over Icon Composer's own dark ground.
+        name = "glass-dark.png" if appearance == "Dark" else "glass-light.png"
+        Path(p.plates).mkdir(parents=True, exist_ok=True)
+        pixels = colour if alpha is None else np.concatenate((colour, alpha[..., None]), axis=2)
+        Image.fromarray(np.uint8(pixels * 255 + 0.5), "RGB" if alpha is None else "RGBA").save(Path(p.plates) / name, optimize=True)
+        print(f"{name}: {time.perf_counter() - started:.2f} s", flush=True)
+        return None
+    if alpha is not None:
+        colour = colour * alpha[..., None] + system_dark(alpha.shape, p) * (1 - alpha[..., None])
+    result = composite_cursor(colour, silhouette, cursor)
+    output_folder = folder if version == "graded" else folder / "others"
+    output_folder.mkdir(exist_ok=True)
+    destination = output_folder / f"vertical-{version}-{appearance}.png"
+    result.save(destination)
+    print(f"{destination.name}: {time.perf_counter() - started:.2f} s, strength {settings['strength']:g}, "
+          f"frosting {settings['frosting']:g} px", flush=True)
+    return result
+
+
+def optics(folder, version, appearance, settings, p, grey=None):
+    """The glass over its scene, in sRGB without grain, with the outline, the cursor and the glass's fade at the edge."""
+    original, scene, ground, silhouette, cursor, safe, boundary = prepare_scene(folder, appearance, settings, p, grey)
     y, x = np.indices(original.shape[:2], dtype=np.float32)
     accumulated = np.zeros_like(original)
     for sy in range(p.supersample):
@@ -408,24 +444,7 @@ def render(folder, version, appearance, p):
             accumulated += glass * boundary[..., None] + original * (1 - boundary[..., None])
     accumulated /= p.supersample ** 2
     accumulated[boundary == 0] = original[boundary == 0]
-    grain = np.random.default_rng(p.seed).normal(size=boundary.shape).astype(np.float32) * boundary
-    if p.plates:
-        # The app icon's own layer: the whole square, no cursor (Icon Composer
-        # draws it on top) and no outline (Icon Composer cuts its own).
-        colour = np.clip(srgb(accumulated) + grain[..., None] * p.grain, 0, 1)
-        name = "glass-dark.png" if appearance == "Dark" else "glass-light.png"
-        Path(p.plates).mkdir(parents=True, exist_ok=True)
-        Image.fromarray(np.uint8(colour * 255 + 0.5), "RGB").save(Path(p.plates) / name, optimize=True)
-        print(f"{name}: {time.perf_counter() - started:.2f} s", flush=True)
-        return None
-    result = composite_cursor(accumulated, silhouette, cursor, grain, p)
-    output_folder = folder if version == "graded" else folder / "others"
-    output_folder.mkdir(exist_ok=True)
-    destination = output_folder / f"vertical-{version}-{appearance}.png"
-    result.save(destination)
-    print(f"{destination.name}: {time.perf_counter() - started:.2f} s, strength {settings['strength']:g}, "
-          f"frosting {settings['frosting']:g} px", flush=True)
-    return result
+    return srgb(accumulated), silhouette, cursor, boundary
 
 
 def previews(folder, p):
@@ -488,10 +507,10 @@ def arguments():
         parser.error("View and graded transition ends must exceed their starts")
     if not 0 < p.core_alpha <= 1:
         parser.error("--core-alpha must be greater than 0 and at most 1")
-    if p.vignette_outer <= max(p.vignette_inner, p.vignette_dark_inner) or p.blur_end <= p.blur_start:
+    if p.vignette_outer <= p.vignette_inner or p.blur_end <= p.blur_start:
         parser.error("Vignette and blur ends must exceed their starts")
     for name in ("weight", "depth", "edge_hold", "grain", "scatter_radius", "lenticular_frost", "reeded_frost", "colour_smooth",
-                 "blur_right", "blur_left", "blur_curve", "vignette_light", "vignette_dark", "mix_lift"):
+                 "blur_right", "blur_left", "blur_curve", "vignette_light", "mix_lift"):
         if getattr(p, name) < 0:
             parser.error(f"--{name.replace('_', '-')} cannot be negative")
     for name in ("strength", "frosting", "scatter", "milkiness", "specular", "bulge"):
