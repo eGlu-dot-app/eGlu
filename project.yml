@@ -167,6 +167,9 @@ targets:
         # Everything on the main actor unless it says otherwise: what works
         # off it (the snapshots' files, the share sheet's file) says so.
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+      configs:
+        Release:
+          EXCLUDED_SOURCE_FILE_NAMES: "$(inherited) SummaryFixture.html"
   # eGlu's tile in the Dock while eGlu isn't open, a plug-in the Dock loads
   # from both Mac apps (Mac/DockTile/DockTile.swift): the icon chosen in
   # Settings › General › App Icon.
@@ -217,6 +220,17 @@ targets:
         SWIFT_STRICT_CONCURRENCY: complete
         SWIFT_APPROACHABLE_CONCURRENCY: YES
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+  eGlu Summary UI Tests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: Tests/PageSummaryUI
+    dependencies:
+      - target: eGlu
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: net.taehee.safience.summary-ui-tests
+        GENERATE_INFOPLIST_FILE: YES
   # Exercise the production UIKit/SwiftUI motion without loading the browser,
   # its website stores, or the app's newer-SDK-only device integrations.
   eGlu Command Bar Motion Tests:
@@ -335,6 +349,10 @@ schemes:
     build:
       targets:
         eGlu: all
+        eGlu Summary UI Tests: [test]
+    test:
+      targets:
+        - eGlu Summary UI Tests
     run:
       config: Debug
     archive:

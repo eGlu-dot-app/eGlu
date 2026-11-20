@@ -249,6 +249,7 @@ extension Command {
         case .contentBlocking: return "shield"
         case .linkMenu: return "contextualmenu.and.cursorarrow"
         case .find: return "text.magnifyingglass"
+        case .summarizePage: return "text.quote"
         case .handoff: return "arrowshape.turn.up.right"
         case .handoffFile: return "arrow.up.doc"
         case .acceptWritingSuggestion: return "character.cursor.ibeam"
