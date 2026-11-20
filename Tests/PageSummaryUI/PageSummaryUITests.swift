@@ -108,6 +108,9 @@ final class PageSummaryUITests: XCTestCase {
         let copy = app.buttons["summary-copy"]
         let ready = expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: copy)
         await fulfillment(of: [ready], timeout: 15)
+        XCTAssertEqual(copy.label, "Copy summary")
+        XCTAssertEqual(copy.frame.width, copy.frame.height, accuracy: 1)
+        XCTAssertGreaterThanOrEqual(copy.frame.width, 44)
         copy.tap()
         XCTAssertEqual(copy.label, "Copied")
         XCTAssertTrue(app.buttons["summary-handoff"].exists)
