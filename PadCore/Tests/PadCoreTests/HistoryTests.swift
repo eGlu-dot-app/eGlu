@@ -48,6 +48,12 @@ final class HistoryTests: XCTestCase {
 
     // MARK: Finding it again
 
+    func testSearchCapIsOnlyReachedAtTheLimit() {
+        XCTAssertFalse(History.searchIsCapped(count: 0))
+        XCTAssertFalse(History.searchIsCapped(count: History.searchLimit - 1))
+        XCTAssertTrue(History.searchIsCapped(count: History.searchLimit))
+    }
+
     func testWordsForWhenAreTakenOutAndNameAStretchOfTime() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "Asia/Seoul")!
@@ -199,6 +205,18 @@ final class HistoryTests: XCTestCase {
         XCTAssertEqual(byAddress.map(\.title), ["Onboarding flow"], "every word, from the address and the name")
         let elsewhere = try await history.search(space: UUID(), query: HistoryQuery(words: "figma"))
         XCTAssertTrue(elsewhere.isEmpty, "each space its own")
+    }
+
+    func testHistorySearchUsesTheSharedLimit() async throws {
+        let history = try store()
+        for index in 0...History.searchLimit {
+            try await history.record(try visit("https://example.com/match/\(index)", title: "Match \(index)"), now: now)
+        }
+        let matches = try await history.search(space: space, query: HistoryQuery(words: "match"), limit: History.searchLimit)
+        XCTAssertEqual(matches.count, History.searchLimit)
+        XCTAssertTrue(History.searchIsCapped(count: matches.count))
+        let empty = try await history.search(space: space, query: HistoryQuery(words: "absent"), limit: History.searchLimit)
+        XCTAssertFalse(History.searchIsCapped(count: empty.count))
     }
 
     func testAPageGoneToAgainIsOnePageCountedTwiceAndWantedMore() async throws {
