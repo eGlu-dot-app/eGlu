@@ -4,8 +4,9 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
-- On iPhone and iPad, fix a build failure caused by the pinned panel's rows sharing a type name with the shared pinned layout. Nothing changes in use.
+- Pages with the content blocker on spend less time before they show: its hiding rules are weighed once for each page and frame, not again for every image, script and request the page loads. Lists are made again once, on the first launch after the update.
 - On iPhone with iOS 27, the pinned tabs' list opens out of the pinned tab's button as the system's menus open out of theirs: the button's glass grows into the list and, put away, goes back into the button. The system places the list and draws its card, without the dimmed page behind it; held open, it still follows the finger from row to row. Before iOS 27 it is as it was.
+- On iPhone and iPad, fix a build failure caused by the pinned panel's rows sharing a type name with the shared pinned layout. Nothing changes in use.
 - The Engineer icon in satin chrome: a terminal window bevelled along every edge on a green dot-matrix screen, with a mint neon line just inside the screen's edge. The e globe and the I-beam keep their pixel drawings, the beam's cells in chrome, and the window's three lights are Liquid Glass.
 - eGlu's icon in dark: the system's own dark ground shows through under the fluted glass, with no milky veil on the glass.
 - On iPad, and on the iPhone Duo with the sidebar, two fingers on the trackpad or one finger swept sideways across the sidebar go to the next or the previous space, as on the Mac; a sweep that sets out up or down still scrolls the tabs. With more spaces than the sidebar has room for, the row of spaces scrolls and keeps the one you are in at its middle.
