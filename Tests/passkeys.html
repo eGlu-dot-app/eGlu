@@ -1,0 +1,215 @@
+<!doctype html>
+<!--
+  eGlu's passkeys (Mac/Sources/Passkeys.swift, Scripts/passkeys.js) in the
+  real app, on a test build's rehearsal: `-passkeyRehearsal YES` puts them in
+  pages without Apple's entitlement and answers with credentials made up
+  after the same checks, so no sheet comes up and no real passkey is listed.
+  Run by Tests/passkeys-rehearsal.py, which serves this page on three ports
+  (`?other=` and `?third=` name the others, for the frames) and reads the
+  report it posts.
+  Without the rehearsal the page reports that navigator.credentials is
+  WebKit's own, as it must be in any build without the entitlement.
+-->
+<meta charset="utf-8">
+<title>passkeys</title>
+<style>
+  body { font: 13px -apple-system, system-ui, sans-serif; margin: 24px; max-width: 760px; }
+  label { display: block; margin: 16px 0 4px; }
+  input { font: inherit; padding: 6px 8px; width: 280px; }
+  .ok { color: #1a7f37; } .bad { color: #cf222e; }
+  #out { white-space: pre-wrap; font: 12px ui-monospace, monospace; }
+</style>
+<label for="name">Name (offers passkeys under it)</label>
+<input id="name" autocomplete="username webauthn">
+<div id="out">running</div>
+<script>
+(async function () {
+  const params = new URLSearchParams(location.search);
+  const marked = () => !!CredentialsContainer.prototype[Symbol.for('eglu.passkeys')];
+  const b64 = (buffer) => btoa(String.fromCharCode(...new Uint8Array(buffer))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const client = (credential) => JSON.parse(new TextDecoder().decode(credential.response.clientDataJSON));
+  const challenge = () => crypto.getRandomValues(new Uint8Array(32));
+
+  // A frame of this test: it asks once and tells the page what it got. Two
+  // only hold another, each allowed passkeys: "nest", of another site, holds
+  // one of the page's site; "bounce", of the page's site on the other port,
+  // holds one of the page's own origin.
+  const frame = params.get('frame');
+  if (frame === 'nest' || frame === 'bounce') {
+    const inner = document.createElement('iframe');
+    inner.src = frame === 'nest'
+      ? `http://127.0.0.1:${location.port}${location.pathname}?frame=inner`
+      : `http://127.0.0.1:${params.get('top')}${location.pathname}?frame=back`;
+    inner.allow = 'publickey-credentials-get';
+    document.body.append(inner);
+    return;
+  }
+  if (frame) {
+    let said;
+    try {
+      // "make" makes a passkey, with no click in it; the rest sign in.
+      const got = frame === 'make'
+        ? await navigator.credentials.create({ publicKey: { challenge: challenge(), rp: { name: 'Test' },
+            user: { id: new Uint8Array([1]), name: 'probe', displayName: '' }, pubKeyCredParams: [{ type: 'public-key', alg: -7 }] } })
+        : await navigator.credentials.get({ publicKey: { challenge: challenge(), rpId: location.hostname } });
+      const data = client(got);
+      said = { got: got.type, origin: data.origin, topOrigin: data.topOrigin || null, crossOrigin: data.crossOrigin };
+    } catch (e) {
+      said = { error: e.name, message: e.message };
+    }
+    top.postMessage({ frame, said }, '*');
+    return;
+  }
+
+  const results = [];
+  const check = (name, ok, detail = '') => results.push({ name, ok: !!ok, detail: String(detail) });
+  const refusal = async (promise) => { try { await promise; return 'resolved'; } catch (e) { return e.name; } };
+  const out = document.getElementById('out');
+  const show = () => {
+    out.innerHTML = results.map((r) => `<span class="${r.ok ? 'ok' : 'bad'}">${r.ok ? 'ok ' : 'NO '}</span>${r.name}${r.detail ? ': ' + r.detail : ''}`).join('\n');
+  };
+  const report = async (done) => {
+    show();
+    if (params.get('report')) {
+      await fetch('/report', { method: 'POST', body: JSON.stringify({ relayed: marked(), done, results }) }).catch(() => {});
+    }
+  };
+
+  if (params.get('expect') === 'native') {
+    check('navigator.credentials is WebKit\'s own', !marked() && /\[native code\]/.test(String(CredentialsContainer.prototype.get)),
+      String(CredentialsContainer.prototype.get).slice(0, 60));
+    check('no eGlu global in the page', !('__egluPasskeys' in window) && !('egluBridge' in window)
+    && !(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.egluPasskeys));
+    return report(true);
+  }
+
+  check('passkeys.js is in the page', marked());
+  // A page's own answer, sent with the token of a request on its way, is let
+  // go: only the app's carries the bridge's secret.
+  const forging = (event) => {
+    const asked = JSON.parse(event.detail);
+    if (asked.kind !== 'get') return;
+    dispatchEvent(new CustomEvent('eglu-passkeys-answer', { detail: JSON.stringify({ token: asked.token,
+      reply: { kind: 'get', id: 'RkFLRQ', clientDataJSON: 'e30', authenticatorData: 'AA', signature: 'AA', userHandle: null } }) }));
+  };
+  addEventListener('eglu-passkeys-ask', forging);
+  const real = await navigator.credentials.get({ publicKey: { challenge: challenge() } }).then((c) => c.id, (e) => e.name);
+  removeEventListener('eglu-passkeys-ask', forging);
+  check('a page\'s own forged answer is let go', real !== 'RkFLRQ' && real !== 'NotAllowedError', real);
+  check('no eGlu global in the page', !('__egluPasskeys' in window) && !('egluBridge' in window)
+    && !(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.egluPasskeys));
+  check('a platform authenticator is offered', await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable());
+  check('passkeys under the field are offered', await PublicKeyCredential.isConditionalMediationAvailable());
+  // The bridge reads whether a frame was just clicked from here; without it,
+  // no frame of another origin could ever make a passkey.
+  check('WebKit says whether the page was just clicked', !!navigator.userActivation && typeof navigator.userActivation.isActive === 'boolean');
+  check('a sign-in without the person gives none', await navigator.credentials.get({ mediation: 'silent', publicKey: { challenge: challenge() } }) === null);
+
+  // A new passkey, with PRF.
+  const made = challenge();
+  try {
+    const created = await navigator.credentials.create({ publicKey: {
+      challenge: made, rp: { name: 'Test' }, user: { id: new Uint8Array([1, 2, 3]), name: 'probe', displayName: 'Probe' },
+      pubKeyCredParams: [{ type: 'public-key', alg: -7 }], extensions: { credProps: true, prf: { eval: { first: new Uint8Array(32) } } }
+    } });
+    const data = client(created);
+    check('create gives a PublicKeyCredential', created instanceof PublicKeyCredential && created.type === 'public-key');
+    check('create: an attestation response', created.response instanceof AuthenticatorAttestationResponse);
+    check('create: client data of this origin and challenge', data.type === 'webauthn.create' && data.origin === location.origin && data.challenge === b64(made),
+      JSON.stringify(data));
+    check('create: its public key, DER P-256', created.response.getPublicKey().byteLength === 91 && created.response.getPublicKeyAlgorithm() === -7);
+    check('create: credProps says discoverable', created.getClientExtensionResults().credProps?.rk === true);
+    const prf = created.getClientExtensionResults().prf;
+    const expected = b64(await crypto.subtle.digest('SHA-256', new TextEncoder().encode('rehearsal')));
+    check('create: PRF output, unsealed in the page', prf?.enabled === true && prf.results && b64(prf.results.first) === expected,
+      JSON.stringify(prf && { enabled: prf.enabled, first: prf.results && b64(prf.results.first) }));
+    const json = created.toJSON();
+    check('create: toJSON in the standard shape', json.type === 'public-key' && json.id === created.id && json.response.attestationObject
+      && json.clientExtensionResults.prf?.results?.first === expected, JSON.stringify(json.clientExtensionResults));
+    check('create: toJSON can be replaced, as webauthn-json does', (() => { try { created.toJSON = () => 1; return created.toJSON() === 1; } catch (e) { return false; } })());
+  } catch (e) {
+    check('create gives a PublicKeyCredential', false, e.name + ': ' + e.message);
+  }
+
+  // Signing in.
+  const asked = challenge();
+  try {
+    const got = await navigator.credentials.get({ publicKey: { challenge: asked, allowCredentials: [] } });
+    const data = client(got);
+    check('get gives an assertion', got.response instanceof AuthenticatorAssertionResponse);
+    check('get: client data of this origin and challenge', data.type === 'webauthn.get' && data.origin === location.origin && data.challenge === b64(asked)
+      && data.crossOrigin === false && !('topOrigin' in data), JSON.stringify(data));
+    check('get: the user handle', new TextDecoder().decode(got.response.userHandle) === 'user');
+    check('get: toJSON', got.toJSON().response.signature && got.toJSON().id === got.id);
+  } catch (e) {
+    check('get gives an assertion', false, e.name + ': ' + e.message);
+  }
+
+  check('another site as relying party is refused', await refusal(navigator.credentials.get({ publicKey: { challenge: challenge(), rpId: 'example.com' } })) === 'SecurityError');
+  check('a user id of 65 bytes is refused', await refusal(navigator.credentials.create({ publicKey: {
+    challenge: challenge(), rp: { name: 'Test' }, user: { id: new Uint8Array(65), name: 'probe', displayName: '' },
+    pubKeyCredParams: [{ type: 'public-key', alg: -7 }] } })) === 'TypeError');
+  check('a passkey made quietly is refused', await refusal(navigator.credentials.create({ mediation: 'conditional', publicKey: {
+    challenge: challenge(), rp: { name: 'Test' }, user: { id: new Uint8Array(1), name: 'p', displayName: '' }, pubKeyCredParams: [] } })) === 'NotAllowedError');
+  const gone = new AbortController();
+  gone.abort();
+  check('an aborted request is refused at once', await refusal(navigator.credentials.get({ signal: gone.signal, publicKey: { challenge: challenge() } })) === 'AbortError');
+  check('PRF salts for a passkey not allowed are refused', await refusal(navigator.credentials.get({ publicKey: {
+    challenge: challenge(), extensions: { prf: { evalByCredential: { AAAA: { first: new Uint8Array(32) } } } } } })) === 'NotSupportedError');
+
+  // Frames: one of this site on another port (another origin, as Apple's
+  // sign-in is), and one of another site.
+  const other = params.get('other');
+  if (other) {
+    const frames = {};
+    const heard = new Promise((resolve) => {
+      addEventListener('message', (event) => {
+        if (!event.data || !event.data.frame) return;
+        frames[event.data.frame] = event.data.said;
+        if (Object.keys(frames).length === 6) resolve();
+      });
+    });
+    // Each allowed passkeys by its frame element but "undelegated", as the
+    // standard's permissions policy asks of a frame of another origin.
+    for (const [name, host] of [['same', '127.0.0.1'], ['undelegated', '127.0.0.1'], ['other', 'localhost'], ['nest', 'localhost'],
+                                ['bounce', '127.0.0.1'], ['make', '127.0.0.1']]) {
+      const frame = document.createElement('iframe');
+      // The one not allowed on an origin of its own: frames of one origin can
+      // reach each other, so what one is allowed counts for its origin.
+      const port = name === 'undelegated' ? params.get('third') : other;
+      frame.src = `http://${host}:${port}${location.pathname}?frame=${name}&top=${location.port}`;
+      if (name !== 'undelegated') frame.allow = 'publickey-credentials-get; publickey-credentials-create';
+      frame.style.cssText = 'width: 10px; height: 10px; border: 0;';
+      document.body.append(frame);
+    }
+    await Promise.race([heard, new Promise((resolve) => setTimeout(resolve, 8000))]);
+    const same = frames.same, foreign = frames.other, carried = frames.inner, bounced = frames.back, undelegated = frames.undelegated,
+      made = frames.make;
+    check('a frame of another origin can\'t make a passkey unclicked', made && made.error === 'NotAllowedError', JSON.stringify(made));
+    check('a frame of this site the page doesn\'t let ask is refused', undelegated && undelegated.error === 'NotAllowedError', JSON.stringify(undelegated));
+    check('a frame of this site the page lets ask may, its page named as topOrigin', same && same.got === 'public-key' && same.topOrigin === location.origin && same.crossOrigin === true,
+      JSON.stringify(same));
+    check('a frame of another site is refused', foreign && foreign.error === 'NotAllowedError', JSON.stringify(foreign));
+    check('a frame of this site inside another site\'s frame is refused', carried && carried.error === 'NotAllowedError', JSON.stringify(carried));
+    check('this origin inside another origin is refused, the frame element between unread', bounced && bounced.error === 'NotAllowedError',
+      JSON.stringify(bounced));
+  }
+  await report(false);
+
+  // Under the field: the request waits, the app lists the made-up passkey
+  // under the field while it has the keyboard, and a pick answers it.
+  const waited = challenge();
+  const pending = navigator.credentials.get({ mediation: 'conditional', publicKey: { challenge: waited } });
+  document.getElementById('name').focus();
+  const picked = await Promise.race([pending.then((got) => got, (e) => e), new Promise((resolve) => setTimeout(() => resolve('timeout'), Number(params.get('pickWithin') || 60) * 1000))]);
+  if (picked === 'timeout') {
+    check('under the field: a passkey picked answers the page', false, 'nothing picked');
+  } else if (picked instanceof Error) {
+    check('under the field: a passkey picked answers the page', false, picked.name + ': ' + picked.message);
+  } else {
+    const data = client(picked);
+    check('under the field: a passkey picked answers the page', data.type === 'webauthn.get' && data.challenge === b64(waited), JSON.stringify(data));
+  }
+  await report(true);
+})();
+</script>

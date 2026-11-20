@@ -594,3 +594,22 @@ On a Mac and an iPhone or iPad, with Handoff on (Settings › Handoff).
 Results, Mac:
 
 Results, iPhone or iPad:
+
+## 31. Passkeys on a Mac, once Apple grants the entitlement
+
+Not before: nothing here can be tried until Apple has granted `com.apple.developer.web-browser.public-key-credential`, the capability is on for the app's identifier on developer.apple.com, and `PASSKEYS=1 Release/profile.py` has made and installed the profile (which it refuses to do while the capability is off). Then a DMG from `PASSKEYS=1 Release/mac.sh`, which refuses to build if the profile doesn't grant it. On a Mac signed in to iCloud Keychain, with a passkey or two in Passwords, and an iPhone nearby.
+
+Before that, a Debug build's rehearsal tries the page's side and the checks with made-up passkeys: `python3 Tests/passkeys-rehearsal.py <test copy>` (its top says how to build the copy), and `--native` for a build without them.
+
+- [ ] The DMG opens, without a warning, on a Mac that has never run eGlu. (An app signed with an entitlement its profile doesn't grant is one macOS won't open.)
+- [ ] The first site that asks for a passkey brings up macOS's question whether eGlu may use passkeys, once; the answer is kept in System Settings › Privacy & Security, where eGlu is listed (note the pane's name here).
+- [ ] passkeys.io: Create a passkey brings up the Mac's sheet with Touch ID, and the passkey is in Passwords afterwards; signing out and in with it works.
+- [ ] webauthn.io: Register and Authenticate, with Authenticator Attachment Platform, then Cross-Platform with an iPhone over the QR code, then a security key (USB, NFC if there is one). With Discoverable Credential required, then discouraged. Advanced Settings › PRF, where offered: registration says PRF is supported and authentication returns its output.
+- [ ] github.com › Settings › Password and authentication: Add a passkey, then sign out and Sign in with a passkey; GitHub's second step with a passkey too.
+- [ ] A site that offers your passkey under its sign-in field (github.com/login, passkeys.io): clicking the name field lists the site's passkeys under it, each with its account and where it is kept; typing still goes in the field; picking one brings up the Mac's sheet for that passkey alone and signs in. A click elsewhere puts the list away; a click in the field brings it back. Another tab, another window, or eGlu behind another app: no list, no sheet.
+- [ ] Quit eGlu (and once, force quit it) with such a sign-in page open, open it again: passkeys still work on every site, without restarting the Mac.
+- [ ] Google: accounts.google.com is hands-off, so it gets none of eGlu's passkey scripts and keeps WebKit's own, which Search found refuses sites other than the app's associated domains. Note what happens on Google's "Use your passkey" (the system's sheet, or a refusal), and that a Google account with a passkey can still sign in another way. Whether eGlu's passkeys should go into Google's sign-in is a decision to take, as it would break the hands-off rule.
+- [ ] A passkey inside a frame: Apple's sign-in at account.apple.com (a frame from idmsa.apple.com, whose frame element allows `publickey-credentials-get`) signs in with a passkey; if it is refused, note the frame element's `allow` attribute. A frame of another site asking for one is refused (webauthn.io's iframe test, if offered, or Tests/passkeys.html served on two hosts).
+- [ ] With Bitwarden and with 1Password installed and their apps unlocked: a site's passkey button, and the list under the field. Note whether the extension's own list, the Mac's sheet, or nothing comes up, and whether quitting eGlu with the page open leaves passkeys working (Search's `a868137`, not taken yet, is about this).
+- [ ] `defaults write net.taehee.safience passkeyRelay -bool NO` and a relaunch: eGlu's list under the field is gone and pages have WebKit's own `navigator.credentials` (a site's passkey button then fails, as without the entitlement). `defaults delete net.taehee.safience passkeyRelay` puts eGlu's back.
+- [ ] A build without the entitlement (`ICLOUD=1 Release/mac.sh`, or one from Xcode): pages have WebKit's own `navigator.credentials`, no list comes under a sign-in field, and passkey buttons fail as they do today. In Console, the app's log says nothing in the Passkeys category.
