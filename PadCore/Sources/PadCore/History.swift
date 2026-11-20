@@ -277,6 +277,19 @@ extension HistoryEntry {
     }
 }
 
+public enum HistorySelection: Hashable, Sendable {
+    case page(space: UUID, key: String)
+    case visit(UUID)
+    case handoff(UUID)
+    case morePages
+    case moreHandoffs
+
+    public static func firstNew(in rows: [Self], after previous: [Self]) -> Self? {
+        let loaded = Set(previous)
+        return rows.first { !loaded.contains($0) } ?? rows.last
+    }
+}
+
 public enum History {
     public static let searchLimit = 100
 

@@ -51,6 +51,7 @@ struct HistoryView: View {
     #if os(macOS)
     /// A handoff's file shown in Quick Look.
     @State private var previewed: URL?
+    @State private var selection: HistorySelection?
     #endif
     @State private var loadingProblem: HistoryOperationError?
     @State private var clearRequest: HistoryRecorder.ClearRequest?
@@ -125,7 +126,7 @@ struct HistoryView: View {
     @ViewBuilder
     private var list: some View {
         let searching = !text.trimmingCharacters(in: .whitespaces).isEmpty
-        List {
+        historyList {
             if clearBusy { ProgressView("Clearing history…") }
             if let issue = clearProblem {
                 Section {
@@ -144,7 +145,18 @@ struct HistoryView: View {
                 Section {
                     ForEach(found) { page in
                         row(page, time: page.last, day: true)
+                            #if os(macOS)
+                            .tag(HistorySelection.page(space: page.space, key: page.key))
+                            .id(HistorySelection.page(space: page.space, key: page.key))
+                            #endif
                     }
+                    #if os(macOS)
+                    if searchReady, History.searchIsCapped(count: found.count, limit: pageLimit) {
+                        morePagesRow
+                            .tag(HistorySelection.morePages)
+                            .id(HistorySelection.morePages)
+                    }
+                    #endif
                 } header: {
                     if loaded, loadingProblem == nil, searched == text.trimmingCharacters(in: .whitespaces),
                        History.searchIsCapped(count: found.count, limit: pageLimit) {
@@ -158,6 +170,7 @@ struct HistoryView: View {
                         Label(Self.describe(understood.query), systemImage: "sparkles")
                     }
                 } footer: {
+                    #if os(iOS)
                     if searchReady, History.searchIsCapped(count: found.count, limit: pageLimit) {
                         Button("Show More") { showMore(handoffs: false) }
                             .buttonStyle(.borderless)
@@ -165,12 +178,24 @@ struct HistoryView: View {
                             .accessibilityLabel(Text("Show \(History.searchLimit) more pages"))
                             .disabled(pageSearch != nil)
                     }
+                    #endif
                 }
                 if !foundHandoffs.isEmpty {
                     Section {
                         ForEach(foundHandoffs) { handoff in
                             row(handoff, day: true)
+                                #if os(macOS)
+                                .tag(HistorySelection.handoff(handoff.id))
+                                .id(HistorySelection.handoff(handoff.id))
+                                #endif
                         }
+                        #if os(macOS)
+                        if searchReady, History.searchIsCapped(count: foundHandoffs.count, limit: handoffLimit) {
+                            moreHandoffsRow
+                                .tag(HistorySelection.moreHandoffs)
+                                .id(HistorySelection.moreHandoffs)
+                        }
+                        #endif
                     } header: {
                         Text("Handoffs")
                         if loaded, loadingProblem == nil, searched == text.trimmingCharacters(in: .whitespaces),
@@ -180,6 +205,7 @@ struct HistoryView: View {
                                 .foregroundStyle(.secondary)
                         }
                     } footer: {
+                        #if os(iOS)
                         if searchReady, History.searchIsCapped(count: foundHandoffs.count, limit: handoffLimit) {
                             Button("Show More") { showMore(handoffs: true) }
                                 .buttonStyle(.borderless)
@@ -187,6 +213,7 @@ struct HistoryView: View {
                                 .accessibilityLabel(Text("Show \(History.searchLimit) more handoffs"))
                                 .disabled(handoffSearch != nil)
                         }
+                        #endif
                     }
                 }
             } else {
@@ -200,6 +227,10 @@ struct HistoryView: View {
                                     row(entry.page, time: entry.time, day: false)
                                 }
                             }
+                            #if os(macOS)
+                            .tag(entry.handoff.map { HistorySelection.handoff($0.id) } ?? .visit(entry.id))
+                            .id(entry.handoff.map { HistorySelection.handoff($0.id) } ?? .visit(entry.id))
+                            #endif
                             .onAppear { if entry.id == days.last?.entries.last?.id { showOlder() } }
                         }
                     } header: {
@@ -247,6 +278,76 @@ struct HistoryView: View {
             }
         }
     }
+
+    @ViewBuilder
+    private func historyList<Content: View>(@ViewBuilder content: @escaping () -> Content) -> some View {
+        #if os(macOS)
+        ScrollViewReader { proxy in
+            List(selection: $selection, content: content)
+                .contextMenu(forSelectionType: HistorySelection.self) { _ in
+                } primaryAction: { rows in
+                    if let row = rows.first { activate(row) }
+                }
+                .onChange(of: selection) { _, row in
+                    if let row { proxy.scrollTo(row) }
+                }
+        }
+        #else
+        List(content: content)
+        #endif
+    }
+
+    #if os(macOS)
+    private var morePagesRow: some View {
+        Button { showMore(handoffs: false) } label: { moreLabel }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .accessibilityLabel(Text("Show \(History.searchLimit) more pages"))
+            .disabled(pageSearch != nil)
+    }
+
+    private var moreHandoffsRow: some View {
+        Button { showMore(handoffs: true) } label: { moreLabel }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .accessibilityLabel(Text("Show \(History.searchLimit) more handoffs"))
+            .disabled(handoffSearch != nil)
+    }
+
+    private func activate(_ row: HistorySelection) {
+        guard !clearBusy else { return }
+        switch row {
+        case .page(let space, let key):
+            if let page = found.first(where: { $0.space == space && $0.key == key }) {
+                open(page.url, false)
+                done()
+            }
+        case .visit(let id):
+            if let entry = entries.first(where: { $0.id == id }) {
+                open(entry.page.url, false)
+                done()
+            }
+        case .handoff(let id):
+            if let handoff = foundHandoffs.first(where: { $0.id == id }) ?? entries.compactMap(\.handoff).first(where: { $0.id == id }) {
+                previewed = handoff.file
+            }
+        case .morePages:
+            if searchReady, pageSearch == nil { showMore(handoffs: false) }
+        case .moreHandoffs:
+            if searchReady, handoffSearch == nil { showMore(handoffs: true) }
+        }
+    }
+
+    private var moreLabel: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text("Show More")
+            Text(" ").font(.subheadline).hidden().accessibilityHidden(true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 2)
+        .contentShape(Rectangle())
+    }
+    #endif
 
     // MARK: The filter
 
@@ -438,7 +539,12 @@ struct HistoryView: View {
                 let result = await recorder.handoffSearchResult(space: spaceID, query: parsed, limit: limit, filter: filter)
                 guard !Task.isCancelled, identity == searchIdentity else { return }
                 switch result {
-                case .success(let rows): foundHandoffs = rows; handoffLimit = limit
+                case .success(let rows):
+                    #if os(macOS)
+                    selection = HistorySelection.firstNew(in: rows.map { .handoff($0.id) }, after: foundHandoffs.map { .handoff($0.id) })
+                    #endif
+                    foundHandoffs = rows
+                    handoffLimit = limit
                 case .failure(let issue): loadingProblem = issue
                 }
                 handoffSearch = nil
@@ -446,7 +552,12 @@ struct HistoryView: View {
                 let result = await recorder.searchResult(space: spaceID, query: parsed, limit: limit, filter: filter)
                 guard !Task.isCancelled, identity == searchIdentity else { return }
                 switch result {
-                case .success(let rows): found = rows; pageLimit = limit
+                case .success(let rows):
+                    #if os(macOS)
+                    selection = HistorySelection.firstNew(in: rows.map { .page(space: $0.space, key: $0.key) }, after: found.map { .page(space: $0.space, key: $0.key) })
+                    #endif
+                    found = rows
+                    pageLimit = limit
                 case .failure(let issue): loadingProblem = issue
                 }
                 pageSearch = nil
@@ -490,6 +601,9 @@ struct HistoryView: View {
 
     private func load() async {
         stopPaging()
+        #if os(macOS)
+        selection = nil
+        #endif
         stopSearchPaging()
         pageLimit = History.searchLimit
         handoffLimit = History.searchLimit

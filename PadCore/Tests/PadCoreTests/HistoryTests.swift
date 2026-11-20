@@ -48,6 +48,28 @@ final class HistoryTests: XCTestCase {
 
     // MARK: Finding it again
 
+    func testHistorySelectionIDsKeepKindsSpacesAndVisitsApart() {
+        let id = UUID()
+        let rows: Set<HistorySelection> = [
+            .page(space: space, key: id.uuidString),
+            .page(space: UUID(), key: id.uuidString),
+            .visit(id), .visit(UUID()), .handoff(id), .morePages, .moreHandoffs
+        ]
+        XCTAssertEqual(rows.count, 7)
+    }
+
+    func testHistorySelectionAfterLoadingMore() {
+        let first = HistorySelection.page(space: space, key: "first")
+        let next = HistorySelection.page(space: space, key: "next")
+        XCTAssertEqual(HistorySelection.firstNew(in: [first, next], after: [first]), next)
+        XCTAssertEqual(HistorySelection.firstNew(in: [next, first], after: [first]), next)
+        XCTAssertEqual(HistorySelection.firstNew(in: [first, next], after: [first, next]), next)
+        XCTAssertNil(HistorySelection.firstNew(in: [], after: []))
+        let handoff = HistorySelection.handoff(UUID())
+        XCTAssertEqual(HistorySelection.firstNew(in: [handoff], after: []), handoff)
+        XCTAssertEqual(HistorySelection.firstNew(in: [handoff], after: [handoff]), handoff)
+    }
+
     func testSearchCapIsOnlyReachedAtTheLimit() {
         XCTAssertFalse(History.searchIsCapped(count: 0))
         XCTAssertFalse(History.searchIsCapped(count: History.searchLimit - 1))
