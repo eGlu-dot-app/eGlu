@@ -164,6 +164,12 @@ final class Session: ObservableObject {
     // MARK: The welcome
 
     private static let welcomeKey = "welcome"
+    private static let welcomeProgressKey = "welcomeProgress"
+
+    private var setupProgress: SetupProgress? {
+        SetupProgress.restore(data: UserDefaults.standard.data(forKey: Self.welcomeProgressKey),
+                              legacyState: UserDefaults.standard.string(forKey: Self.welcomeKey))
+    }
 
     /// A first launch whose welcome hasn't been finished or skipped yet: kept
     /// across launches, so quitting halfway brings it back.
@@ -171,7 +177,29 @@ final class Session: ObservableObject {
         #if DEBUG
         if PageMindTesting.enabled { return false }
         #endif
-        return canUseWorkspace && UserDefaults.standard.string(forKey: Session.welcomeKey) == "pending"
+        return canUseWorkspace && setupProgress?.isPending == true
+    }
+
+    var skippedSetup: Bool { setupProgress?.completion == .skipped }
+
+    func resumeWelcome(in preferredSpaceID: UUID) -> SetupProgress? {
+        guard needsWelcome,
+              let progress = setupProgress?.resuming(spaceIDs: workspace.spaces.map(\.id),
+                                                    preferredSpaceID: preferredSpaceID,
+                                                    asksWriting: WritingChecker.canCheck && !WritingAsked.wasAsked) else { return nil }
+        keepSetupProgress(progress)
+        return progress
+    }
+
+    func visitWelcome(_ step: SetupProgress.Step) {
+        guard var progress = setupProgress, progress.isPending else { return }
+        progress.visit(step)
+        keepSetupProgress(progress)
+    }
+
+    private func keepSetupProgress(_ progress: SetupProgress) {
+        guard let data = try? JSONEncoder().encode(progress) else { return }
+        UserDefaults.standard.set(data, forKey: Self.welcomeProgressKey)
     }
 
     /// A workspace just made for a first launch: its welcome, unless one was seen already.
@@ -181,11 +209,17 @@ final class Session: ObservableObject {
         }
     }
 
-    func finishWelcome() async -> Bool {
+    func finishWelcome(_ reason: SetupProgress.Completion) async -> Bool {
         guard !finishingWelcome else { return false }
         finishingWelcome = true
         defer { finishingWelcome = false }
         guard await saveWorkspaceNow(), !persistence.state.isDirty else { return false }
+        guard var progress = setupProgress, progress.isPending else { return false }
+        // Skipping declines unanswered setup prompts; it never enables a
+        // preference. Mark only after saving, so a failed exit stays pending.
+        if reason == .skipped { WritingAsked.markAsked() }
+        progress.complete(reason)
+        keepSetupProgress(progress)
         UserDefaults.standard.set("done", forKey: Session.welcomeKey)
         return true
     }

@@ -15,15 +15,11 @@ import UniformTypeIdentifiers
 struct Welcome: View {
     @ObservedObject var session: Session
     let spaceID: UUID
-    let done: () -> Void
+    let done: (SetupProgress.Completion) -> Void
 
-    enum Step: Int, CaseIterable {
-        case hello, space, bookmarks, writing, finish
-    }
+    typealias Step = SetupProgress.Step
 
-    @State private var step: Step = .hello
-    /// Which way the step last went, so the pages move the way it did.
-    @State private var forward = true
+    @State private var step: Step
     @State private var name = ""
     @State private var importing = false
     @State private var imported: BookmarkImportOutcome?
@@ -39,6 +35,13 @@ struct Welcome: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var phase
 
+    init(session: Session, spaceID: UUID, step: Step, done: @escaping (SetupProgress.Completion) -> Void) {
+        self.session = session
+        self.spaceID = spaceID
+        _step = State(initialValue: step)
+        self.done = done
+    }
+
     private var space: Space? {
         session.workspace.space(spaceID)
     }
@@ -46,7 +49,7 @@ struct Welcome: View {
     /// The steps this welcome shows, in order: the ones forward and back go
     /// through, the dots count, and VoiceOver numbers.
     private var steps: [Step] {
-        Step.allCases.filter { $0 != .writing || asksWriting }
+        Step.offered(asksWriting: asksWriting)
     }
 
     /// The space's colour is the welcome's own: choosing one shows at once on
@@ -58,23 +61,19 @@ struct Welcome: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            ZStack {
-                page
-                    .id(step)
-                    .transition(turn)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            // What scrolls under the button fades out before it, in place of a hard edge.
-            .overlay(alignment: .bottom) {
-                LinearGradient(colors: [Palette.ground.opacity(0), Palette.ground], startPoint: .top, endPoint: .bottom)
-                    .frame(height: 20)
-                    .allowsHitTesting(false)
-            }
+            page
+                .id(step)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // What scrolls under the button fades out before it, in place of a hard edge.
+                .overlay(alignment: .bottom) {
+                    LinearGradient(colors: [Palette.ground.opacity(0), Palette.ground], startPoint: .top, endPoint: .bottom)
+                        .frame(height: 20)
+                        .allowsHitTesting(false)
+                }
             footer
         }
         .background(Palette.ground)
         .tint(colour.color)
-        .animation(.bar, value: step)
         .onAppear { name = space?.name ?? "" }
         .onChange(of: name) { _, new in session.change { $0.renameSpace(spaceID, to: new) } }
         // Back from Settings: the answer may have changed there.
@@ -92,29 +91,28 @@ struct Welcome: View {
         }
     }
 
-    /// A short slide the way the step went, and a fade: the page before
-    /// leaves by less than it arrived, so the new one is what the eye follows.
-    private var turn: AnyTransition {
-        guard !reduceMotion else { return .opacity }
-        let side: CGFloat = forward ? 1 : -1
-        return .asymmetric(insertion: .offset(x: 28 * side).combined(with: .opacity),
-                           removal: .offset(x: -12 * side).combined(with: .opacity))
-    }
-
     private func go(to next: Step) {
-        forward = next.rawValue > step.rawValue
-        step = next
+        // SwiftUI's default-action Button does not distinguish Return from
+        // a tap. Snap both paths rather than decorate keyboard navigation;
+        // the progress geometry and page swap share the same transaction.
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            step = next
+            session.visitWelcome(next)
+        }
     }
 
     private func advance() {
-        guard let at = steps.firstIndex(of: step), at + 1 < steps.count else { return done() }
+        guard let at = steps.firstIndex(of: step), at + 1 < steps.count else { return done(.completed) }
         go(to: steps[at + 1])
     }
 
     // MARK: The frame around the pages
 
     private var header: some View {
-        ZStack {
+        VStack(spacing: 4) {
+            controls
             HStack(spacing: 6) {
                 ForEach(steps, id: \.self) { each in
                     Capsule()
@@ -124,29 +122,32 @@ struct Welcome: View {
             }
             .accessibilityElement()
             .accessibilityLabel("Step \((steps.firstIndex(of: step) ?? 0) + 1) of \(steps.count)")
-            HStack {
-                Button {
-                    if let at = steps.firstIndex(of: step), at > 0 { go(to: steps[at - 1]) }
-                } label: {
-                    Image(systemName: "chevron.backward")
-                        .font(.system(size: 17, weight: .semibold))
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(PressScale())
-                .accessibilityLabel("Back")
-                .opacity(step == .hello ? 0 : 1)
-                .disabled(step == .hello)
-                Spacer()
-                Button("Skip Setup", action: done)
-                    .font(.body)
-                    .frame(minWidth: 44, minHeight: 44)
-                    .contentShape(Rectangle())
-                    .opacity(step == .finish ? 0 : 1)
-                    .disabled(step == .finish)
-            }
-            .foregroundStyle(Palette.muted)
         }
+    }
+
+    private var controls: some View {
+        HStack {
+            Button {
+                if let at = steps.firstIndex(of: step), at > 0 { go(to: steps[at - 1]) }
+            } label: {
+                Image(systemName: "chevron.backward")
+                    .font(.system(size: 17, weight: .semibold))
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(PressScale())
+            .accessibilityLabel("Back")
+            .opacity(step == .hello ? 0 : 1)
+            .disabled(step == .hello)
+            Spacer()
+            Button("Skip Setup") { done(.skipped) }
+                .font(.body)
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
+                .opacity(step == .finish ? 0 : 1)
+                .disabled(step == .finish || importWorking)
+        }
+        .foregroundStyle(Palette.muted)
         .padding(.horizontal, 12)
         .padding(.top, 8)
     }
@@ -232,6 +233,7 @@ struct Welcome: View {
         VStack(spacing: 8) {
             Text(title)
                 .font(.title.bold())
+                .accessibilityAddTraits(.isHeader)
                 .tracking(-0.4)
                 .multilineTextAlignment(.center)
             Text(text)
@@ -435,7 +437,7 @@ struct Welcome: View {
             .foregroundStyle(colour.ink)
             .frame(width: 72, height: 72)
             .background(colour.color, in: RoundedRectangle(cornerRadius: 72 * 0.225, style: .continuous))
-            .animation(.bar, value: colour)
+            .animation(reduceMotion ? nil : .bar, value: colour)
             .accessibilityHidden(true)
     }
 }

@@ -10,7 +10,7 @@ public enum WritingAsk {
     /// Asked already: nothing shows.
     case nothing
 
-    public static func decision(welcomePending: Bool, asked: Bool) -> WritingAsk {
-        asked ? .nothing : welcomePending ? .welcomeStep : .sheet
+    public static func decision(welcomePending: Bool, asked: Bool, setupSkipped: Bool = false) -> WritingAsk {
+        asked || setupSkipped ? .nothing : welcomePending ? .welcomeStep : .sheet
     }
 }
