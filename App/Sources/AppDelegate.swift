@@ -75,6 +75,13 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         let browser = Browser(state: initialState ?? WindowState(activity: nil))
         self.browser = browser
         window.rootViewController = BrowserNavigation(browser: browser)
+        #if DEBUG
+        if PageMindTesting.enabled,
+           let url = Bundle.main.url(forResource: "SummaryFixture", withExtension: "html") {
+            browser.openLink(url)
+            return
+        }
+        #endif
         if let pendingURL {
             self.pendingURL = nil
             browser.openLink(pendingURL)
