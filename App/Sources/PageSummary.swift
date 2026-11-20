@@ -62,6 +62,33 @@ struct PageSummarySheet: View {
     @State private var copied = false
     @Environment(\.dismiss) private var dismiss
 
+    @ViewBuilder
+    private var copyButton: some View {
+        let button = Button {
+            UIPasteboard.general.string = job.text
+            copied = true
+        } label: {
+            Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                .font(.system(size: 16, weight: .medium))
+                .frame(width: 48, height: 48)
+                .contentShape(Circle())
+        }
+        .disabled(job.state != .ready)
+        .accessibilityLabel("Copy summary")
+        .accessibilityValue(copied ? "Copied" : "")
+        .accessibilityIdentifier("summary-copy")
+
+        if #available(iOS 26.0, *) {
+            button
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+        } else {
+            button
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.circle)
+        }
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -116,22 +143,7 @@ struct PageSummarySheet: View {
                         .font(.caption)
                         .foregroundStyle(Palette.muted)
                     HStack(spacing: 12) {
-                        Button {
-                            UIPasteboard.general.string = job.text
-                            copied = true
-                        } label: {
-                            Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundStyle(Palette.ink.opacity(job.state == .ready ? 1 : 0.4))
-                                .frame(width: 48, height: 48)
-                                .background(Palette.ink.opacity(job.state == .ready ? 0.15 : 0.07),
-                                            in: RoundedRectangle(cornerRadius: 12))
-                                .contentShape(.rect)
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(job.state != .ready)
-                        .accessibilityLabel(copied ? "Copied" : "Copy summary")
-                        .accessibilityIdentifier("summary-copy")
+                        copyButton
                         Button(action: handoff) {
                             Label("Handoff…", systemImage: Command.handoff.symbol)
                                 .frame(maxWidth: .infinity)
