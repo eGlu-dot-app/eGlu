@@ -201,7 +201,7 @@ public struct PlannedList: Equatable, Sendable {
 public enum ContentBlocking {
     /// Moves on when the conversion changes, so lists compiled by an older
     /// one are made again.
-    public static let converterVersion = 2
+    public static let converterVersion = 3
     /// WebKit's limit for one list (an Apple engineer on the developer forums, thread 734111).
     public static let rulesPerList = 150_000
     /// Blocking in lists of at most this many rules, each ending with the
@@ -1039,6 +1039,12 @@ struct HidingBuilder {
         return true
     }
 
+    /// Hiding is told by the document's own load, a frame's included. Without
+    /// this, WebKit weighs every hiding rule again for each image, script
+    /// and request the page makes, on the page's own thread, to add
+    /// selectors it already has.
+    static let documents = ["document"]
+
     func rules() -> [BlockingRule] {
         var out: [BlockingRule] = []
         let noGeneric = noHiding.union(noGenericHiding).map { "*" + $0 }.sorted()
@@ -1046,13 +1052,13 @@ struct HidingBuilder {
         for selector in generic where !genericNowhere.contains(selector) {
             if let except = genericExceptions[selector] {
                 let unless = Set(except.map { "*" + $0 }).union(noGeneric).sorted()
-                out.append(BlockingRule(trigger: .init(unlessDomain: unless), action: .hide(selector)))
+                out.append(BlockingRule(trigger: .init(resourceType: Self.documents, unlessDomain: unless), action: .hide(selector)))
             } else {
                 plain.append(selector)
             }
         }
         for group in Self.chunks(plain) {
-            out.append(BlockingRule(trigger: .init(unlessDomain: noGeneric.isEmpty ? nil : noGeneric),
+            out.append(BlockingRule(trigger: .init(resourceType: Self.documents, unlessDomain: noGeneric.isEmpty ? nil : noGeneric),
                                     action: .hide(group.joined(separator: ", "))))
         }
         for key in specificOrder {
@@ -1066,7 +1072,7 @@ struct HidingBuilder {
                 return seen.insert(selector).inserted
             }
             for group in Self.chunks(selectors) {
-                out.append(BlockingRule(trigger: .init(ifDomain: domains), action: .hide(group.joined(separator: ", "))))
+                out.append(BlockingRule(trigger: .init(resourceType: Self.documents, ifDomain: domains), action: .hide(group.joined(separator: ", "))))
             }
         }
         return out
