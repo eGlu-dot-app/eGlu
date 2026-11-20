@@ -170,9 +170,9 @@ struct SideTabs: View {
 /// rows and buttons a little taller, for a finger.
 enum Side {
     static let gap: CGFloat = 8
-    static let control: CGFloat = 32
-    static let field: CGFloat = 34
-    static let row: CGFloat = 36
+    static let control: CGFloat = 44
+    static let field: CGFloat = 44
+    static let row: CGFloat = 44
     static let rowCorner: CGFloat = 12
     static let tile: CGFloat = 44
     static let tileIcon: CGFloat = 18
@@ -257,11 +257,12 @@ private struct SidePlainBody: View {
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
         configuration.label
-            .font(.system(size: 14, weight: .medium))
+            .font(.system(size: 16, weight: .medium))
             .foregroundStyle(enabled ? Palette.ink.opacity(0.8) : Palette.ink.opacity(0.25))
-            .frame(width: Side.control, height: Side.control)
+            .frame(width: Metrics.control, height: Metrics.control)
             .background(shape.fill(configuration.isPressed && enabled ? Side.press : hovering && enabled ? Side.hover : .clear))
-            .contentShape(shape)
+            .frame(width: Side.control, height: Side.control)
+            .contentShape(Rectangle())
             .onHover { hovering = $0 }
             .animation(.easeOut(duration: 0.12), value: hovering)
     }
@@ -344,8 +345,9 @@ private struct SideAddress: View {
 struct SidePageMenu: View {
     let window: WindowModel
     let act: (BarAction) -> Void
-    /// In a tab, as small as its ✕ (SideClose).
+    /// In a tab, the same compact mark and touch cell as its ✕ (SideClose).
     var inTab = false
+    var compactToolbar = false
     @State private var hovering = false
 
     var body: some View {
@@ -353,11 +355,12 @@ struct SidePageMenu: View {
             if inTab {
                 Menu { items } label: {
                     Image(systemName: "ellipsis")
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(hovering ? Palette.ink : Side.secondary)
-                        .frame(width: 20, height: 20)
+                        .frame(width: 28, height: 28)
                         .background(Circle().fill(hovering ? Side.hover : .clear))
-                        .contentShape(Circle().inset(by: -6))
+                        .frame(width: Side.control, height: Side.control)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(PressScale())
                 .onHover { hovering = $0 }
@@ -375,6 +378,14 @@ struct SidePageMenu: View {
     @ViewBuilder
     private var items: some View {
         PageItems(window: window, act: act)
+        if compactToolbar {
+            Section {
+                Toggle(isOn: Binding(get: { Session.shared.preferences.bookmarksBar },
+                                     set: { Session.shared.preferences.bookmarksBar = $0 })) {
+                    Label("Show Bookmarks Bar", systemImage: "star.square.on.square")
+                }
+            }
+        }
         Section { AppItems(act: act) }
     }
 }
@@ -986,10 +997,11 @@ struct SideClose: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: "xmark")
-                .font(.system(size: 10, weight: .bold))
-                .frame(width: 20, height: 20)
-                .background(Circle().fill(hovering ? Side.hover : .clear))
-                .contentShape(Circle().inset(by: -6))
+                .font(.system(size: 12, weight: .semibold))
+                .frame(width: 28, height: 28)
+                .background(Circle().fill(hovering ? Side.hover : Side.wash))
+                .frame(width: Side.control, height: Side.control)
+                .contentShape(Rectangle())
         }
         .buttonStyle(PressScale())
         .foregroundStyle(hovering ? Palette.ink : Side.secondary)
@@ -1017,7 +1029,6 @@ struct SideSpaces: View {
         let space = session.workspace.space(window.spaceID)
         let unpinned = space?.otherTabs.map(\.id) ?? []
         HStack(spacing: 2) {
-            // With one space there is nowhere to go: its buttons are left out, as on the Mac (a phone's bar keeps them).
             if session.workspace.spaces.count > 1 {
                 ViewThatFits(in: .horizontal) {
                     spaces(compact: false)
@@ -1032,11 +1043,14 @@ struct SideSpaces: View {
                             .onChange(of: window.spaceID) { _, space in
                                 withAnimation(reduceMotion ? nil : .bar) { reader.scrollTo(space, anchor: .center) }
                             }
+                            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { _ in
+                                DispatchQueue.main.async { reader.scrollTo(window.spaceID, anchor: .center) }
+                            }
                     }
-                    .padding(3)
-                    .liquidGlass(reacting: false, in: Capsule(), otherwise: Palette.wash)
+                    .frame(minWidth: Side.control + 6)
+                    .padding(.horizontal, 3)
+                    .background { spaceGlass() }
                 }
-                // In the row, a gap from the plain buttons either side, which are 2 points from each other.
                 .padding(.horizontal, inRow ? Side.gap - 2 : 0)
             }
             if !inRow {
@@ -1051,6 +1065,7 @@ struct SideSpaces: View {
         }
         .frame(height: Side.field)
     }
+
 
     @ViewBuilder
     private func spaces(compact: Bool, glass: Bool = true) -> some View {
@@ -1072,10 +1087,16 @@ struct SideSpaces: View {
         // Under Reduce Motion the disc is at the chosen space at once, not slid there.
         .animation(reduceMotion ? nil : .bar, value: window.spaceID)
         if glass {
-            row.padding(3).liquidGlass(reacting: false, in: Capsule(), otherwise: Palette.wash)
+            row.padding(.horizontal, 3).background { spaceGlass() }
         } else {
             row
         }
+    }
+
+    private func spaceGlass() -> some View {
+        Color.clear
+            .frame(height: Metrics.control)
+            .liquidGlass(reacting: false, in: Capsule(), otherwise: Palette.wash)
     }
 }
 
@@ -1095,7 +1116,7 @@ private struct SideSpaceButton: View {
 
     var body: some View {
         let chosen = window.spaceID == space.id
-        let side: CGFloat = compact ? 24 : 28
+        let side: CGFloat = compact ? 22 : 26
         Button {
             act(.switchSpace(space.id))
         } label: {
@@ -1105,7 +1126,8 @@ private struct SideSpaceButton: View {
                 .frame(width: side, height: side)
                 .matchedGeometryEffect(id: Self.place(space.id, compact: compact), in: places, isSource: true)
                 .background { if !chosen { Circle().fill(hovering ? Side.hover : .clear) } }
-                .contentShape(Circle())
+                .frame(width: Side.control, height: Side.control)
+                .contentShape(Rectangle())
         }
         .buttonStyle(PressScale())
         .onHover { inside in withAnimation(.easeOut(duration: 0.12)) { hovering = inside } }

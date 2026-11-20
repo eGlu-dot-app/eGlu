@@ -1,15 +1,10 @@
 import PadCore
 import SwiftUI
 
-/// The tabs along the top on iPad, drawn as the Mac's row is (TopTabBar)
-/// and with the sidebar's pieces (SideTabs.swift): back, forward, reload
-/// and the bookmarks bar's button; the space's pinned tabs as small tiles,
-/// in glass only on screen; its other tabs sharing what room there is
-/// (TabWidths), the one on screen raised in glass, wider, and the address,
-/// as Safari's compact tabs are: where the page is, a tap on it typing a new
-/// one in the command bar, and its … and ✕. Then New Tab, the spaces and
-/// Space Settings, each plain button 2 points from the next and the spaces'
-/// glass a gap from both.
+/// Navigation, the tab strip and icon-only Space buttons on iPad. In a narrow
+/// window the address stands alone so its menu and close cell stay visible;
+/// All Tabs opens the other tabs. Wide windows also show pinned tiles and
+/// the full tab strip, with the current address raised in glass.
 struct TopTabs: View {
     @ObservedObject var session: Session
     let window: WindowModel
@@ -28,8 +23,9 @@ struct TopTabs: View {
         let row = TabRow(tabs: (space?.tabs ?? []).filter(session.preferences.shows), splits: space?.splits ?? [],
                          current: window.tabID, barTabs: Set(barTabs.values.map(\.id)))
         let others = session.workspace.spaces.filter { $0.id != window.spaceID }
+        let compact = width < 1000
         HStack(spacing: Side.gap) {
-            HStack(spacing: 2) {
+            HStack(spacing: 0) {
                 SidePlainIcon("chevron.left", label: String(localized: "Back"), enabled: window.canGoBack) { act(.back) }
                 SidePlainIcon("chevron.right", label: String(localized: "Forward"), enabled: window.canGoForward) { act(.forward) }
                 if window.loading {
@@ -37,6 +33,11 @@ struct TopTabs: View {
                 } else {
                     SidePlainIcon("arrow.clockwise", label: String(localized: "Reload"), enabled: window.url != nil) { act(.reload) }
                 }
+            }
+            .background {
+                Capsule().fill(Side.wash).padding(.vertical, Metrics.ring)
+            }
+            if !compact {
                 let barShown = session.preferences.bookmarksBar
                 SidePlainIcon(barShown ? "star.square.on.square.fill" : "star.square.on.square",
                               label: barShown ? String(localized: "Hide Bookmarks Bar") : String(localized: "Show Bookmarks Bar")) {
@@ -45,7 +46,7 @@ struct TopTabs: View {
             }
             // The pinned tabs stay put while the others scroll beside them, spaced as the Mac's
             // are: each 4 points wider than a button, 4 apart, a step more open than the buttons.
-            if !row.pinned.isEmpty {
+            if !compact, !row.pinned.isEmpty {
                 // Past their share of the row, the unopened and the longest unseen go behind a button.
                 let split = PinnedOverflow.split(row.pinned, current: window.tabID,
                                                  live: Set(row.pinned.map(\.id).filter(session.pages.isLive)),
@@ -60,10 +61,10 @@ struct TopTabs: View {
                 }
                 .animation(.bar, value: split.shown.map(\.id))
             }
-            if let space, space.bar?.children?.isEmpty == false {
+            if !compact, let space, space.bar?.children?.isEmpty == false {
                 TopBarBookmarks(window: window, space: space, act: act)
             }
-            if !row.others.isEmpty, !row.pinned.isEmpty || space?.bar?.children?.isEmpty == false {
+            if !compact, !row.others.isEmpty, !row.pinned.isEmpty || space?.bar?.children?.isEmpty == false {
                 Rectangle()
                     .fill(Side.secondary.opacity(0.3))
                     .frame(width: 1, height: 16)
@@ -76,60 +77,67 @@ struct TopTabs: View {
                 let address = pinnedOnScreen != nil || row.others.contains { $0.id == window.tabID }
                 let widths = TabWidths.widths(count: row.others.count + (pinnedOnScreen == nil ? 0 : 1), room: box.size.width,
                                               gap: 4, address: address)
-                ScrollViewReader { reader in
-                    ScrollView(.horizontal) {
-                        HStack(spacing: 4) {
-                            if let pinnedOnScreen {
-                                TopTab(window: window, tab: pinnedOnScreen, row: row, others: others, address: true,
-                                       width: widths.current, act: act)
-                                    .id(pinnedOnScreen.id)
-                                    .transition(.opacity)
-                            }
-                            ForEach(row.items) { item in
-                                // A split's two side by side on a ground of their own, as one place in the row.
-                                HStack(spacing: 0) {
-                                    ForEach(item.tabs) { tab in
-                                        let current = tab.id == window.tabID
-                                        TopTab(window: window, tab: tab, row: row, others: others, address: address && current,
-                                               width: current ? widths.current : widths.each, act: act)
-                                            .id(tab.id)
+                if compact, let tab = pinnedOnScreen ?? row.others.first(where: { $0.id == window.tabID }) {
+                    TopTab(window: window, tab: tab, row: row, others: others, address: true,
+                           width: max(box.size.width, 0), compact: true, act: act)
+                } else {
+                    ScrollViewReader { reader in
+                        ScrollView(.horizontal) {
+                            HStack(spacing: 4) {
+                                if let pinnedOnScreen {
+                                    TopTab(window: window, tab: pinnedOnScreen, row: row, others: others, address: true,
+                                           width: widths.current, act: act)
+                                        .id(pinnedOnScreen.id)
+                                        .transition(.opacity)
+                                }
+                                ForEach(row.items) { item in
+                                    // A split's two side by side on a ground of their own, as one place in the row.
+                                    HStack(spacing: 0) {
+                                        ForEach(item.tabs) { tab in
+                                            let current = tab.id == window.tabID
+                                            TopTab(window: window, tab: tab, row: row, others: others, address: address && current,
+                                                   width: current ? widths.current : widths.each, act: act)
+                                                .id(tab.id)
+                                        }
+                                    }
+                                    .background {
+                                        if item.tabs.count > 1 {
+                                            RoundedRectangle(cornerRadius: TopTab.corner, style: .continuous)
+                                                .fill(Side.wash)
+                                                .padding(.vertical, Metrics.ring)
+                                        }
                                     }
                                 }
-                                .background {
-                                    if item.tabs.count > 1 {
-                                        RoundedRectangle(cornerRadius: TopTab.corner, style: .continuous).fill(Side.wash)
-                                    }
-                                }
+                            }
+                            // Room inside the scroll view, which clips, for the tab on screen's
+                            // glass: its rim at the ends, and its rim and shadow above and below,
+                            // as far as the bar's own edges (Metrics.bar).
+                            .padding(.horizontal, 3)
+                            .padding(.vertical, (Metrics.bar - Side.control) / 2)
+                            .animation(.bar, value: row.others.map(\.id))
+                            .animation(.bar, value: pinnedOnScreen?.id)
+                            .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(TopTabs.space)).minX } action: { _ in
+                                act(.hideTabHover)
                             }
                         }
-                        // Room inside the scroll view, which clips, for the tab on screen's
-                        // glass: its rim at the ends, and its rim and shadow above and below,
-                        // as far as the bar's own edges (Metrics.bar).
-                        .padding(.horizontal, 3)
-                        .padding(.vertical, (Metrics.bar - Side.control) / 2)
-                        .animation(.bar, value: row.others.map(\.id))
-                        .animation(.bar, value: pinnedOnScreen?.id)
-                        .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(TopTabs.space)).minX } action: { _ in
-                            act(.hideTabHover)
+                        .scrollIndicators(.never)
+                        .padding(.horizontal, -3)
+                        .padding(.vertical, -(Metrics.bar - Side.control) / 2)
+                        .feathered(.horizontal)
+                        // The tab on screen is always in view, however it came to be on screen.
+                        .onAppear {
+                            DispatchQueue.main.async { window.tabID.map { reader.scrollTo($0, anchor: .center) } }
                         }
-                    }
-                    .scrollIndicators(.never)
-                    .padding(.horizontal, -3)
-                    .padding(.vertical, -(Metrics.bar - Side.control) / 2)
-                    .feathered(.horizontal)
-                    // The tab on screen is always in view, however it came to be on screen.
-                    .onAppear {
-                        DispatchQueue.main.async { window.tabID.map { reader.scrollTo($0, anchor: .center) } }
-                    }
-                    .onChange(of: window.tabID) { _, tab in
-                        withAnimation(reduceMotion ? nil : .bar) { tab.map { reader.scrollTo($0) } }
+                        .onChange(of: window.tabID) { _, tab in
+                            withAnimation(reduceMotion ? nil : .bar) { tab.map { reader.scrollTo($0) } }
+                        }
                     }
                 }
             }
             .frame(height: Side.control)
             HStack(spacing: 2) {
                 AllTabsButton(count: space?.tabs.count ?? 0) { act(.showTabs) }
-                DownloadActivityButton { act(.downloads) }
+                if !compact { DownloadActivityButton { act(.downloads) } }
                 SidePlainIcon("plus", label: String(localized: "New Tab")) { act(.command(.newTab)) }
                     .contextMenu {
                         if space?.otherTabs.contains(where: { $0.id == window.tabID }) == true {
@@ -137,7 +145,7 @@ struct TopTabs: View {
                         }
                     }
                 SideSpaces(session: session, window: window, act: act, inRow: true)
-                    .fixedSize()
+                    .frame(maxWidth: max(width / 4, Side.control * 2 + Side.gap * 4))
                     .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { spacesWidth = $0 }
             }
         }
@@ -281,10 +289,11 @@ private struct TopTab: View {
     /// The tab on screen, standing for the address.
     let address: Bool
     let width: CGFloat
+    var compact = false
     let act: (BarAction) -> Void
     @State private var hovering = false
 
-    static let corner: CGFloat = 10
+    static let corner: CGFloat = 12
 
     var body: some View {
         let selected = tab.id == window.tabID
@@ -294,7 +303,7 @@ private struct TopTab: View {
         // show on the ground rather than meeting its edge.
         let inset: CGFloat = row.paired.contains(tab.id) ? 3 : 0
         let mark = RoundedRectangle(cornerRadius: Self.corner - inset, style: .continuous)
-        HStack(spacing: 7) {
+        HStack(spacing: 0) {
             Button { act(address ? .editAddress : .select(tab.id)) } label: {
                 HStack(spacing: 7) {
                     ZStack {
@@ -317,7 +326,7 @@ private struct TopTab: View {
                             .font(.subheadline)
                             .lineLimit(1)
                             // The end of the host is who you are talking to: it is the part kept.
-                            .truncationMode(.head)
+                            .truncationMode(window.url == nil ? .tail : .head)
                     } else {
                         Text(tab.label)
                             .font(.subheadline.weight(selected ? .semibold : .regular))
@@ -331,6 +340,7 @@ private struct TopTab: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .padding(.trailing, 8)
             .accessibilityRepresentation {
                 Button {
                     act(address ? .editAddress : .select(tab.id))
@@ -344,7 +354,7 @@ private struct TopTab: View {
             }
             // Always there, for a finger, which has no pointer to bring them out.
             if address {
-                SidePageMenu(window: window, act: act, inTab: true)
+                SidePageMenu(window: window, act: act, inTab: true, compactToolbar: compact)
             }
             // A pinned tab's address has no ✕: the tab stays, as its tile does.
             if selected || hovering, !tab.isPinned {
@@ -353,13 +363,16 @@ private struct TopTab: View {
             }
         }
         .padding(.leading, 10)
-        .padding(.trailing, 6)
         .frame(width: width, height: Side.control)
         .background {
             if selected {
-                Color.clear.liquidGlass(reacting: false, in: mark, otherwise: Palette.card).padding(inset)
+                Color.clear.liquidGlass(reacting: false, in: mark, otherwise: Palette.card)
+                    .padding(inset)
+                    .padding(.vertical, Metrics.ring)
             } else {
-                mark.fill(hovering ? Side.hover : .clear).padding(inset)
+                mark.fill(hovering ? Side.hover : .clear)
+                    .padding(inset)
+                    .padding(.vertical, Metrics.ring)
             }
         }
         .contentShape(shape)
@@ -397,7 +410,7 @@ private struct TopTab: View {
                     .foregroundStyle(Palette.ink)
             }
         } else {
-            Text(AddressEditor.placeholder)
+            Text(compact ? String(localized: "Search or address") : AddressEditor.placeholder)
                 .foregroundStyle(Side.secondary)
         }
     }

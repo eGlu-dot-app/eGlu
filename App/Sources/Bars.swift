@@ -953,7 +953,7 @@ struct HistoryButtons: View {
     }
 }
 
-/// A round glass button on a bar: 32 points drawn, 40 that answer.
+/// A round glass button on a bar: 32 points drawn, 44 that answer.
 struct BarButton: View {
     let symbol: String
     let label: String
