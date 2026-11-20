@@ -136,24 +136,19 @@ struct PageSummarySheet: View {
             }
             .background(Palette.ground)
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                VStack(spacing: 16) {
-                    Label("Apple Intelligence · On-device", systemImage: "sparkles")
-                        .font(.caption)
-                        .foregroundStyle(Palette.muted)
-                    HStack(spacing: 12) {
-                        copyButton
-                        Button(action: handoff) {
-                            Label("Handoff…", systemImage: Command.handoff.symbol)
-                                .frame(maxWidth: .infinity)
-                                .foregroundStyle(Palette.ground)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .accessibilityIdentifier("summary-handoff")
+                HStack(spacing: 12) {
+                    copyButton
+                    Button(action: handoff) {
+                        Label("Handoff…", systemImage: Command.handoff.symbol)
+                            .frame(maxWidth: .infinity)
+                            .foregroundStyle(Palette.ground)
                     }
-                    .controlSize(.large)
-                    .font(.subheadline.weight(.medium))
-                    .tint(Palette.ink)
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("summary-handoff")
                 }
+                .controlSize(.large)
+                .font(.subheadline.weight(.medium))
+                .tint(Palette.ink)
                 .padding(.horizontal, 24)
                 .padding(.top, 12)
                 .padding(.bottom, 16)
