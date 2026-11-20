@@ -22,24 +22,6 @@
         "ko" : { "stringUnit" : { "state" : "translated", "value" : "검색에서 연 항목" } }
       }
     },
-    "%@ · %lld of %lld" : {
-      "comment" : "Current setup step, step number, and total offered steps.",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@ · %2$lld of %3$lld"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@ · %3$lld단계 중 %2$lld단계"
-          }
-        }
-      }
-    },
     "Welcome" : {
       "extractionState" : "manual",
       "localizations" : {
