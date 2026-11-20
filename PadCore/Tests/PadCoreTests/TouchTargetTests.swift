@@ -98,4 +98,5 @@ struct TouchTargetTests {
         #expect(top.contains(".truncationMode(window.url == nil ? .tail : .head)"))
         #expect(top.contains(".accessibilityHint(address ? \"Type a new address or a search\" : \"\")"))
     }
+
 }
