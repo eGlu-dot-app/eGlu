@@ -86,3 +86,67 @@ final class SuggestionSizingTests: XCTestCase {
         return height
     }
 }
+
+/// Exercise the production UIKit constraints with content that wants more
+/// width than the page. A preferred width must not let the palette escape
+/// the page's edges when a sidebar leaves less room in portrait.
+@MainActor
+final class CommandBarWidthTests: XCTestCase {
+    func testPaletteFitsBesideSidebarWhileResizingInBothDirections() {
+        for direction in [UISemanticContentAttribute.forceLeftToRight, .forceRightToLeft] {
+            let (root, page, bar) = layout(sidebar: true, direction: direction)
+            for size in [CGSize(width: 1210, height: 834), CGSize(width: 834, height: 1210), CGSize(width: 1210, height: 834)] {
+                root.frame.size = size
+                root.setNeedsLayout()
+                root.layoutIfNeeded()
+                assertFits(bar, in: page)
+                if size.width == 1210 {
+                    XCTAssertEqual(bar.bounds.width, 680, accuracy: 0.5, "Preserve the wide palette")
+                }
+            }
+        }
+    }
+
+    func testPaletteFitsNarrowWindowWithoutSidebar() {
+        let (root, page, bar) = layout(sidebar: false)
+        root.frame.size = CGSize(width: 600, height: 834)
+        root.setNeedsLayout()
+        root.layoutIfNeeded()
+        assertFits(bar, in: page)
+    }
+
+    private func layout(
+        sidebar: Bool, direction: UISemanticContentAttribute = .forceLeftToRight
+    ) -> (UIView, UIView, UIView) {
+        let root = UIView(frame: CGRect(x: 0, y: 0, width: 1210, height: 834))
+        root.semanticContentAttribute = direction
+        let page = UIView()
+        let side = UIView()
+        let bar = WidePalette()
+        for child in [page, side, bar] {
+            child.translatesAutoresizingMaskIntoConstraints = false
+            root.addSubview(child)
+        }
+        // Content can outrank a preferred width, but never its required bounds.
+        bar.setContentCompressionResistancePriority(.init(751), for: .horizontal)
+        let constraints = ChromeConstraints()
+        constraints.pinStack(page, in: root)
+        constraints.pinSidebar(side, to: root.safeAreaLayoutGuide, stack: page)
+        constraints.placeStack(besideSidebar: sidebar)
+        constraints.pinCommandBar(bar, to: page)
+        bar.topAnchor.constraint(equalTo: root.topAnchor, constant: 160).isActive = true
+        return (root, page, bar)
+    }
+
+    private func assertFits(_ bar: UIView, in page: UIView, file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertGreaterThanOrEqual(bar.frame.minX, page.frame.minX + 16 - 0.5, file: file, line: line)
+        XCTAssertLessThanOrEqual(bar.frame.maxX, page.frame.maxX - 16 + 0.5, file: file, line: line)
+        XCTAssertEqual(bar.frame.midX, page.frame.midX, accuracy: 0.5, file: file, line: line)
+        XCTAssertLessThanOrEqual(bar.bounds.width, 680.5, file: file, line: line)
+    }
+}
+
+@MainActor
+private final class WidePalette: UIView {
+    override var intrinsicContentSize: CGSize { CGSize(width: 1100, height: 160) }
+}

@@ -857,13 +857,9 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
         bar.view.translatesAutoresizingMaskIntoConstraints = false
         bar.sizingOptions = .intrinsicContentSize
         bar.view.isHidden = true
-        let barWidth = bar.view.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -32)
-        barWidth.priority = .defaultHigh
+        chromeConstraints.pinCommandBar(bar.view, to: stack)
         let barTop = bar.view.topAnchor.constraint(equalTo: safe.topAnchor, constant: 96)
         NSLayoutConstraint.activate([
-            bar.view.centerXAnchor.constraint(equalTo: stack.centerXAnchor),
-            bar.view.widthAnchor.constraint(lessThanOrEqualToConstant: 680),
-            barWidth,
             barTop,
             bar.view.bottomAnchor.constraint(lessThanOrEqualTo: view.keyboardLayoutGuide.topAnchor, constant: -12),
         ])

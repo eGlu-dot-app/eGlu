@@ -4,7 +4,8 @@ import UIKit
 /// (Browser.show(_:)) and as its page turns into a card and back
 /// (Browser.card(_:)): the stack's edges, its start at the window's edge or
 /// beside the sidebar, the sidebar's width, and the phone bar's height and
-/// bottom. Each is made once, as its view goes on screen (Browser.build).
+/// bottom, and the command bar's width. Each is made once, as its view
+/// goes on screen (Browser.build).
 @MainActor
 final class ChromeConstraints {
     private var stackTop: NSLayoutConstraint?
@@ -68,6 +69,20 @@ final class ChromeConstraints {
             bar.trailingAnchor.constraint(equalTo: safe.trailingAnchor),
         ])
         phoneHeight = height
+    }
+
+    /// The command bar in the page's column, beside the sidebar when shown.
+    /// Hosted content can beat a preferred width: the column's inset is a
+    /// required bound too, so Cancel and the result badges stay on screen.
+    func pinCommandBar(_ bar: UIView, to stack: UIView) {
+        let width = bar.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -32)
+        width.priority = .defaultHigh
+        NSLayoutConstraint.activate([
+            bar.centerXAnchor.constraint(equalTo: stack.centerXAnchor),
+            bar.widthAnchor.constraint(lessThanOrEqualTo: stack.widthAnchor, constant: -32),
+            bar.widthAnchor.constraint(lessThanOrEqualToConstant: 680),
+            width,
+        ])
     }
 
     /// The stack's start beside the sidebar or at the window's edge. The

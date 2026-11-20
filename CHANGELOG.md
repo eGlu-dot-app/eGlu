@@ -4,6 +4,7 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 
 ## Unreleased
 
+- On iPad, the command bar stays inside the page column in portrait and narrow windows, keeping Cancel and result badges visible beside vertical tabs.
 - On iPhone and iPad, address-bar suggestions size themselves to their rendered text and headings, including larger accessibility text and wrapped labels. Short lists no longer hide results when there is room; longer lists still scroll above the keyboard.
 - On the Mac, the command bar has a clickable Open/Search action and a visible Cancel button. The action always submits what you typed; Return still takes the selected suggestion. Sending the unchanged address reloads the page.
 - Extension messages release their fallback timers as soon as an answer arrives, avoiding unnecessary wakeups after the message is settled.
