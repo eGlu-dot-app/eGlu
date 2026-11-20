@@ -47,9 +47,31 @@ struct TouchTargetTests {
 
     @Test func overflowingSpacesCannotPushTheTopToolbarOffscreen() throws {
         let top = try source("App/Sources/TopTabs.swift")
-        #expect(top.contains(".frame(maxWidth: max(width / 4, Side.control))"))
+        #expect(top.contains(".fixedSize(horizontal: true, vertical: false)"))
         let side = try source("App/Sources/SideTabs.swift")
+        #expect(side.contains("if inRow, let space {"))
+        #expect(side.contains("spacePicker(space)"))
+        #expect(side.contains(".frame(width: 152, height: 34)"))
+        #expect(side.contains(".accessibilityValue(current.name)"))
+        #expect(side.contains("Picker(\"Space\", selection:"))
+        #expect(side.contains("Label(space.name, systemImage: space.symbol).tag(space.id)"))
+        // The sidebar keeps its directly selectable, scrollable Space cells.
         #expect(side.contains("ScrollView(.horizontal) { spaces(compact: true, glass: false) }"))
         #expect(side.contains("reader.scrollTo(space, anchor: .center)"))
+    }
+
+    @Test func compactTopBarKeepsCurrentTabAndItsActionsOutsideTheScroller() throws {
+        let top = try source("App/Sources/TopTabs.swift")
+        let compact = try #require(top.range(of: "if compact, let tab = pinnedOnScreen"))
+        let scroller = try #require(top.range(of: "ScrollViewReader { reader in"))
+        let current = top[compact.lowerBound..<scroller.lowerBound]
+        #expect(current.contains("width: max(box.size.width, 0), compact: true"))
+        #expect(top.contains("AllTabsButton(count:"))
+        #expect(top.contains("SidePageMenu(window: window, act: act, inTab: true, compactToolbar: compact)"))
+        #expect(top.contains("SideClose { act(.close(tab.id)) }"))
+        let side = try source("App/Sources/SideTabs.swift")
+        #expect(side.contains("if compactToolbar {"))
+        #expect(side.contains("Label(\"Show Bookmarks Bar\", systemImage:"))
+        #expect(side.contains("Section { AppItems(act: act) }"))
     }
 }

@@ -257,11 +257,12 @@ private struct SidePlainBody: View {
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
         configuration.label
-            .font(.system(size: 14, weight: .medium))
+            .font(.system(size: 16, weight: .medium))
             .foregroundStyle(enabled ? Palette.ink.opacity(0.8) : Palette.ink.opacity(0.25))
-            .frame(width: Side.control, height: Side.control)
+            .frame(width: Metrics.control, height: Metrics.control)
             .background(shape.fill(configuration.isPressed && enabled ? Side.press : hovering && enabled ? Side.hover : .clear))
-            .contentShape(shape)
+            .frame(width: Side.control, height: Side.control)
+            .contentShape(Rectangle())
             .onHover { hovering = $0 }
             .animation(.easeOut(duration: 0.12), value: hovering)
     }
@@ -346,6 +347,7 @@ struct SidePageMenu: View {
     let act: (BarAction) -> Void
     /// In a tab, the same compact mark and touch cell as its ✕ (SideClose).
     var inTab = false
+    var compactToolbar = false
     @State private var hovering = false
 
     var body: some View {
@@ -353,9 +355,9 @@ struct SidePageMenu: View {
             if inTab {
                 Menu { items } label: {
                     Image(systemName: "ellipsis")
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(hovering ? Palette.ink : Side.secondary)
-                        .frame(width: 20, height: 20)
+                        .frame(width: 28, height: 28)
                         .background(Circle().fill(hovering ? Side.hover : .clear))
                         .frame(width: Side.control, height: Side.control)
                         .contentShape(Rectangle())
@@ -375,6 +377,14 @@ struct SidePageMenu: View {
     @ViewBuilder
     private var items: some View {
         PageItems(window: window, act: act)
+        if compactToolbar {
+            Section {
+                Toggle(isOn: Binding(get: { Session.shared.preferences.bookmarksBar },
+                                     set: { Session.shared.preferences.bookmarksBar = $0 })) {
+                    Label("Show Bookmarks Bar", systemImage: "star.square.on.square")
+                }
+            }
+        }
         Section { AppItems(act: act) }
     }
 }
@@ -986,9 +996,9 @@ struct SideClose: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: "xmark")
-                .font(.system(size: 10, weight: .bold))
-                .frame(width: 20, height: 20)
-                .background(Circle().fill(hovering ? Side.hover : .clear))
+                .font(.system(size: 12, weight: .semibold))
+                .frame(width: 28, height: 28)
+                .background(Circle().fill(hovering ? Side.hover : Side.wash))
                 .frame(width: Side.control, height: Side.control)
                 .contentShape(Rectangle())
         }
@@ -1018,8 +1028,9 @@ struct SideSpaces: View {
         let space = session.workspace.space(window.spaceID)
         let unpinned = space?.otherTabs.map(\.id) ?? []
         HStack(spacing: 2) {
-            // With one space there is nowhere to go: its buttons are left out, as on the Mac (a phone's bar keeps them).
-            if session.workspace.spaces.count > 1 {
+            if inRow, let space {
+                spacePicker(space)
+            } else if session.workspace.spaces.count > 1 {
                 ViewThatFits(in: .horizontal) {
                     spaces(compact: false)
                     spaces(compact: true)
@@ -1037,8 +1048,6 @@ struct SideSpaces: View {
                     .padding(.horizontal, 3)
                     .background { spaceGlass(compact: true) }
                 }
-                // In the row, a gap from the plain buttons either side, which are 2 points from each other.
-                .padding(.horizontal, inRow ? Side.gap - 2 : 0)
             }
             if !inRow {
                 Spacer(minLength: Side.gap)
@@ -1051,6 +1060,52 @@ struct SideSpaces: View {
             SidePlainIcon("gearshape", label: String(localized: "Settings")) { act(.command(.settings)) }
         }
         .frame(height: Side.field)
+    }
+
+    private func spacePicker(_ current: Space) -> some View {
+        Menu {
+            Picker("Space", selection: Binding(get: { window.spaceID }, set: { act(.switchSpace($0)) })) {
+                ForEach(session.workspace.spaces) { space in
+                    Label(space.name, systemImage: space.symbol).tag(space.id)
+                }
+            }
+            Section {
+                Button("Space Settings…", systemImage: "slider.horizontal.3") { act(.spaceSettings(current.id)) }
+                if window.makesWindows {
+                    Button("Open in New Window", systemImage: "macwindow.badge.plus") { act(.spaceInNewWindow(current.id)) }
+                }
+                Button("New Space…", systemImage: "plus") { act(.command(.newSpace)) }
+                if session.workspace.spaces.count > 1 {
+                    Button("Remove Space…", systemImage: "trash", role: .destructive) { act(.removeSpace(current.id)) }
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: current.symbol)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(current.color.ink)
+                    .frame(width: 28, height: 28)
+                    .background(current.color.color, in: Circle())
+                Text(current.name)
+                    .font(.system(size: 13, weight: .medium))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(Side.secondary)
+            }
+            .foregroundStyle(Palette.ink)
+            .padding(.horizontal, 7)
+            .frame(width: 152, height: 34)
+            .background(Side.wash, in: Capsule())
+            .frame(height: Side.control)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Switch Space")
+        .accessibilityValue(current.name)
+        .accessibilityHint("Shows all spaces")
     }
 
     @ViewBuilder
