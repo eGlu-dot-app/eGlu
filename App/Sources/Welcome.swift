@@ -110,16 +110,6 @@ struct Welcome: View {
 
     // MARK: The frame around the pages
 
-    private var stepTitle: String {
-        switch step {
-        case .hello: return String(localized: "Welcome")
-        case .space: return String(localized: "Space")
-        case .bookmarks: return String(localized: "Bookmarks")
-        case .writing: return String(localized: "Writing")
-        case .finish: return String(localized: "Finish")
-        }
-    }
-
     private var header: some View {
         VStack(spacing: 4) {
             controls
@@ -132,14 +122,6 @@ struct Welcome: View {
             }
             .accessibilityElement()
             .accessibilityLabel("Step \((steps.firstIndex(of: step) ?? 0) + 1) of \(steps.count)")
-            Text("\(stepTitle) · \((steps.firstIndex(of: step) ?? 0) + 1) of \(steps.count)")
-                .font(.caption)
-                .foregroundStyle(Palette.muted)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 24)
-                // The dots already expose the current step to VoiceOver.
-                .accessibilityHidden(true)
         }
     }
 
