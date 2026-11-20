@@ -102,6 +102,131 @@ function world({ protocol = 'chrome-extension:', apis = true, times = 1, reply, 
   return { context, chrome, native, target, run: (code) => vm.runInContext(code, context) };
 }
 
+// Message deadlines use a clock and channel under the fixture's control.
+{
+  const flush = async () => { for (let i = 0; i < 40; i++) await Promise.resolve(); };
+  const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
+  const fixture = ({ native = Promise.resolve(undefined), frames = Promise.resolve([]), reply } = {}) => {
+    let now = 0, next = 0;
+    const timers = new Map(), channels = [];
+    class Channel {
+      constructor(name) { this.name = name; this.sent = []; channels.push(this); }
+      postMessage(data) { this.sent.push(data); }
+    }
+    const app = 'chrome-extension://abcdefghijklmnopabcdefghijklmnop/app.html';
+    const w = world({ background: true, prototype: true, reply,
+      namespaces: { tabs: { sendMessage: () => native, get: async () => ({ id: 4, url: app }) }, webNavigation: { getAllFrames: () => frames } },
+      extra: { BroadcastChannel: Channel,
+        setTimeout: (f, ms) => { const id = ++next; timers.set(id, { f, at: now + ms }); return id; },
+        clearTimeout: (id) => timers.delete(id),
+      },
+    });
+    const channel = channels.find((c) => c.name === 'eglu-messages');
+    const relay = () => channel.sent.findLast((m) => m.id && m.relay !== undefined);
+    const say = (data) => channel.onmessage({ data: { from: 'peer', ...data } });
+    const advance = async (ms) => {
+      const end = now + ms;
+      for (;;) {
+        const due = [...timers].filter(([, t]) => t.at <= end).sort((a, b) => a[1].at - b[1].at)[0];
+        if (!due) break;
+        const [id, timer] = due;
+        now = timer.at; timers.delete(id); timer.f(); await flush();
+      }
+      now = end; await flush();
+    };
+    return { w, timers, relay, say, advance };
+  };
+  {
+    const f = fixture({ native: Promise.resolve('native answer') });
+    const answer = await f.w.run('chrome.tabs').sendMessage(4, { ping: 1 });
+    await flush();
+    check('an early native tab answer clears fallback timers', answer === 'native answer' && f.timers.size === 0);
+    check('an early native answer keeps extension-page routing', !!f.relay());
+  }
+  {
+    const frames = deferred();
+    const f = fixture({ native: Promise.resolve('early'), frames: frames.promise });
+    check('native tab answers do not wait for frame discovery', await f.w.run('chrome.tabs').sendMessage(4, {}) === 'early');
+    frames.resolve([]); await flush();
+    check('late frame discovery leaves no fallback timers after native success', !!f.relay() && f.timers.size === 0);
+  }
+  {
+    const native = deferred(), f = fixture({ native: native.promise });
+    const answer = f.w.run('chrome.tabs').sendMessage(4, {});
+    await flush();
+    check('tab fallback retains its 300 ms and 30 second deadlines', [...f.timers.values()].map((t) => t.at).sort((a, b) => a - b).join() === '300,30000');
+    native.resolve('native wins');
+    check('a native tab answer clears already pending fallback timers', await answer === 'native wins' && f.timers.size === 0);
+  }
+  {
+    const native = deferred(), f = fixture({ native: native.promise });
+    const answer = f.w.run('chrome.tabs').sendMessage(4, {});
+    await flush();
+    f.say({ answered: f.relay().id, value: 'relayed answer' });
+    check('a relayed tab answer wins and clears both timers', await answer === 'relayed answer' && f.timers.size === 0);
+    native.resolve('late native'); await flush();
+    check('a later native answer cannot restart tab timers', f.timers.size === 0);
+  }
+  for (const reject of [false, true]) {
+    const native = deferred(), f = fixture({ native: native.promise });
+    const answer = f.w.run('chrome.tabs').sendMessage(4, {}).then((value) => ({ value }), (error) => ({ error }));
+    if (reject) native.reject(new Error('native failure')); else native.resolve(undefined);
+    await flush();
+    let settled = false; answer.then(() => { settled = true; });
+    await f.advance(299);
+    check('tab fallback waits the full opening interval' + (reject ? ' after rejection' : ''), !settled);
+    await f.advance(1);
+    const result = await answer;
+    check(reject ? 'a native rejection waits for fallback then clears timers' : 'an unanswered tab message clears timers at 300 ms',
+      (reject ? result.error?.message === 'native failure' : result.value === undefined) && f.timers.size === 0);
+  }
+  {
+    const f = fixture();
+    const answer = f.w.run('chrome.tabs').sendMessage(4, {});
+    await flush();
+    f.say({ answering: f.relay().id });
+    let settled = false; answer.then(() => { settled = true; });
+    await f.advance(29999);
+    check('a claimed tab reply waits the full 30 second deadline', !settled && f.timers.size === 1);
+    await f.advance(1);
+    check('a tab reply deadline clears every timer', await answer === undefined && f.timers.size === 0);
+  }
+  {
+    const f = fixture();
+    const answer = f.w.run('chrome.runtime').sendMessage({ ask: 1 });
+    await flush();
+    f.say({ answering: f.relay().id }); await flush();
+    check('runtime waitFor replaces its opening timer with the reply deadline', f.timers.size === 1 && [...f.timers.values()][0].at === 30000);
+    f.say({ answered: f.relay().id, value: 'runtime reply' });
+    check('runtime waitFor clears its timer on an early relayed answer', await answer === 'runtime reply' && f.timers.size === 0);
+  }
+  {
+    const f = fixture();
+    const answer = f.w.run('chrome.runtime').sendMessage({ ask: 2 });
+    await flush();
+    f.say({ answered: f.relay().id, value: 'quick reply' });
+    check('runtime waitFor clears its opening timer on a direct reply', await answer === 'quick reply' && f.timers.size === 0);
+  }
+  for (const claimed of [false, true]) {
+    const f = fixture();
+    const answer = f.w.run('chrome.runtime').sendMessage({ ask: 3 });
+    await flush();
+    if (claimed) { f.say({ answering: f.relay().id }); await flush(); }
+    let settled = false; answer.then(() => { settled = true; });
+    const deadline = claimed ? 30000 : 300;
+    await f.advance(deadline - 1);
+    check('runtime waitFor keeps its ' + deadline + ' ms deadline', !settled);
+    await f.advance(1);
+    check('runtime waitFor expires without pending timers at ' + deadline + ' ms', await answer === undefined && f.timers.size === 0);
+  }
+  for (const rejected of [false, true]) {
+    const f = fixture({ reply: () => rejected ? Promise.reject(new Error('runtime failure')) : 'native runtime' });
+    const result = await f.w.run('chrome.runtime').sendMessage({ ask: 4 }).then((value) => value, (error) => error.message);
+    check('runtime native ' + (rejected ? 'rejection' : 'success') + ' leaves no waiting timers',
+      result === (rejected ? 'runtime failure' : 'native runtime') && f.timers.size === 0);
+  }
+}
+
 // Missing language detection is supplied locally, including content-script callers.
 {
   const result = { isReliable: true, languages: [{ language: 'en', percentage: 100 }] };
