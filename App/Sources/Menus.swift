@@ -65,7 +65,7 @@ enum Device {
         // it, no bar, no keys, no menu.
         case .reloadOrigin, .developerMode, .elementPicture: return !phone
         // Only where Settings has turned it on, and only with Apple Intelligence to ask.
-        case .handoff, .handoffFile: return Session.shared.preferences.handoff && Session.shared.hasIntelligence
+        case .summarizePage, .handoff, .handoffFile: return Session.shared.preferences.handoff && Session.shared.hasIntelligence
         case .diagnostics: return diagnostics
         // Only where Settings has turned checking on (Writing).
         case .acceptWritingSuggestion: return Session.shared.preferences.writing
@@ -76,6 +76,7 @@ enum Device {
     /// Whether this window offers the command: as offers(_:compact:) for
     /// its width, and New Window only where it can open one.
     static func offers(_ command: Command, in window: WindowModel) -> Bool {
+        if command == .summarizePage { return window.canHandoff }
         if command == .contentBlocking { return window.blocking != nil }
         if command == .linkMenu { return window.ownMenus != nil }
         // A command of the open card only (Decided 8).
@@ -171,6 +172,7 @@ extension Command {
         case .contentBlocking: return "shield"
         case .linkMenu: return "contextualmenu.and.cursorarrow"
         case .find: return "text.magnifyingglass"
+        case .summarizePage: return "text.quote"
         // Passed on, as a message is forwarded: not the share sheet's own arrow, which sits beside it.
         case .handoff: return "arrowshape.turn.up.right"
         // A file going up and out, apart from the page's own arrow.
