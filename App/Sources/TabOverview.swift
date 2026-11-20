@@ -16,6 +16,12 @@ import UIKit
 /// UIKit lets each one say.
 @MainActor
 final class TabOverviewController: UIViewController, UICollectionViewDelegate {
+    private struct InitialPosition {
+        let spaceID: UUID
+        let tabID: UUID?
+        var snapshotApplied = false
+    }
+
     // The data source compares these off the main actor.
     nonisolated private enum Section: Hashable {
         case tabs
@@ -47,7 +53,9 @@ final class TabOverviewController: UIViewController, UICollectionViewDelegate {
     private var watching: Set<AnyCancellable> = []
     private var applying = false
     private var shown = false
-    private var scrolledToCurrent = false
+    private var gridSpaceID: UUID?
+    private var snapshotGeneration = 0
+    private var initialPosition: InitialPosition?
 
     private static var headerHeight: CGFloat { max(52, UIFont.preferredFont(forTextStyle: .headline).lineHeight + 20) }
     private static var barHeight: CGFloat { max(64, UIFont.preferredFont(forTextStyle: .body).lineHeight + 30) }
@@ -161,13 +169,11 @@ final class TabOverviewController: UIViewController, UICollectionViewDelegate {
         let controlHeight = Self.barHeight - 20
         let fits = doneButton.sizeThatFits(CGSize(width: bounds.width - 100, height: controlHeight))
         doneButton.frame = CGRect(x: bounds.maxX - 16 - max(fits.width, 72), y: y, width: max(fits.width, 72), height: controlHeight)
-        // The tab on screen in the middle, once there is a grid to put it in.
-        if !scrolledToCurrent, collection.bounds.height > 0, let current = window.tabID,
-           let path = source.indexPath(for: .tab(current)) {
-            scrolledToCurrent = true
-            collection.layoutIfNeeded()
-            collection.scrollToItem(at: path, at: .centeredVertically, animated: false)
-        }
+        positionAtInitialTabIfReady()
+    }
+
+    func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        initialPosition = nil
     }
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
@@ -274,7 +280,7 @@ final class TabOverviewController: UIViewController, UICollectionViewDelegate {
                 var snapshot = source.snapshot()
                 if snapshot.itemIdentifiers.contains(.tab(id)) {
                     snapshot.reconfigureItems([.tab(id)])
-                    source.apply(snapshot, animatingDifferences: false)
+                    applySnapshot(snapshot, animatingDifferences: false, in: gridSpaceID ?? window.spaceID)
                 }
             }
             asking = nil
@@ -296,6 +302,11 @@ final class TabOverviewController: UIViewController, UICollectionViewDelegate {
 
     private func apply() {
         guard source != nil else { return }
+        let spaceID = window.spaceID
+        if gridSpaceID != spaceID {
+            gridSpaceID = spaceID
+            initialPosition = InitialPosition(spaceID: spaceID, tabID: window.tabID)
+        }
         // A pinned tab hidden on this device in Settings › Pinned Tabs stays
         // out of the dock, as out of the pinned list and the swipe, unless
         // it is the tab on screen (PageSlide).
@@ -314,8 +325,40 @@ final class TabOverviewController: UIViewController, UICollectionViewDelegate {
         // What a card says (its name, the ring of the tab on screen) can
         // change without the card coming or going.
         snapshot.reconfigureItems(snapshot.itemIdentifiers)
-        source.apply(snapshot, animatingDifferences: shown && !UIAccessibility.isReduceMotionEnabled)
+        applySnapshot(snapshot, animatingDifferences: shown && !UIAccessibility.isReduceMotionEnabled, in: spaceID)
         shown = true
+    }
+
+    private func applySnapshot(_ snapshot: NSDiffableDataSourceSnapshot<Section, Item>, animatingDifferences: Bool, in spaceID: UUID) {
+        snapshotGeneration += 1
+        let generation = snapshotGeneration
+        initialPosition?.snapshotApplied = false
+        source.apply(snapshot, animatingDifferences: animatingDifferences) { [weak self] in
+            guard let self else { return }
+            DispatchQueue.main.async { [weak self] in
+                guard let self, snapshotGeneration == generation, window.spaceID == spaceID,
+                      var initialPosition, initialPosition.spaceID == spaceID else { return }
+                initialPosition.snapshotApplied = true
+                self.initialPosition = initialPosition
+                view.setNeedsLayout()
+                view.layoutIfNeeded()
+                positionAtInitialTabIfReady()
+            }
+        }
+    }
+
+    private func positionAtInitialTabIfReady() {
+        guard let initialPosition, initialPosition.snapshotApplied,
+              initialPosition.spaceID == window.spaceID,
+              collection.bounds.width > 0, collection.bounds.height > 0 else { return }
+        collection.layoutIfNeeded()
+        let path = initialPosition.tabID.flatMap { source.indexPath(for: .tab($0)) }
+        self.initialPosition = nil
+        if let path {
+            collection.scrollToItem(at: path, at: .centeredVertically, animated: false)
+        } else {
+            collection.setContentOffset(.zero, animated: false)
+        }
     }
 
     // MARK: Taps and menus
