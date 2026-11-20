@@ -40,6 +40,14 @@ final class PageView: WKWebView {
     /// short above the keyboard, leaves the keyboard to WebKit instead.
     init(frame: CGRect, configuration: WKWebViewConfiguration, keyboardByWindow: Bool) {
         super.init(frame: frame, configuration: configuration)
+        // WebKit's own colour wherever it has none of the page's yet: as a
+        // page commits, before its colour comes, and while the view is
+        // see-through (holdBlankUntilFirstPage). Left to itself that is the
+        // system's background, black in dark mode; the app's ground follows
+        // the appearance as the rest of the window does, and is white in
+        // light mode, as before. A page's own colour still wins.
+        backgroundColor = Palette.UI.ground
+        holdBlankUntilFirstPage()
         guard keyboardByWindow else { return }
         for name in [UIResponder.keyboardWillShowNotification, UIResponder.keyboardWillHideNotification,
                      UIResponder.keyboardWillChangeFrameNotification, UIResponder.keyboardDidChangeFrameNotification] {
@@ -49,6 +57,31 @@ final class PageView: WKWebView {
 
     required init?(coder: NSCoder) {
         nil
+    }
+
+    /// A new view's first load paints WebKit's empty first document, white
+    /// whatever the window's appearance, for as long as the page takes to
+    /// answer: a white flash in dark mode. Until its first page commits the
+    /// view is see-through to WebKit (its own colour, the app's ground,
+    /// shows). From the first commit on, WebKit paints as it always has: a
+    /// page with no background of its own is white, and one that says it can
+    /// be dark (`color-scheme`) is dark.
+    private(set) var holdsBlank = false
+
+    private func holdBlankUntilFirstPage() {
+        holdsBlank = true
+        isOpaque = false
+    }
+
+    /// The first page has taken the empty document's place, so WebKit paints
+    /// its page ground again: left see-through, a page with no background of
+    /// its own would show the app's ground under its text instead of white.
+    /// Page's navigation delegate calls it as each page commits; only the
+    /// first changes anything.
+    func pageCommitted() {
+        guard holdsBlank else { return }
+        holdsBlank = false
+        isOpaque = true
     }
 
     override var safeAreaInsets: UIEdgeInsets {

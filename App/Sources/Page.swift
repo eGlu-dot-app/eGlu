@@ -1916,6 +1916,7 @@ extension Page: WKNavigationDelegate {
     }
 
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        view.pageCommitted()
         Session.shared.pages.navigationChanged(self, committed: true)
         cancelPendingDialog()
         loadState.commit()

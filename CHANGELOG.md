@@ -17,6 +17,7 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 - On iPad and Mac, a space's tabs come in from its side of the row of spaces: from the right going to a space on the right, from the left going back, whether it is chosen by its button, a sweep or Next and Previous Space. Before, on the Mac they always came in from the right, and on iPad they didn't slide at all. Under Reduce Motion they only fade.
 - On iPhone and iPad, Summarize Page opens a summary over the page, written as Apple Intelligence reads it on the device. Copy its words or continue to Handoff; nothing is sent anywhere. It is offered only with Handoff turned on and Apple Intelligence available, never on protected sign-in pages. The page menu, command bar and ⌃⌥U open it.
 - The bundled page used by the summary UI tests is left out of Release builds.
+- On the Mac, iPhone and iPad, a new tab, or a tab loading again after a launch, no longer flashes white in dark mode while its page is on the way: until the page arrives the page area shows the window's own ground, dark in dark mode, where WebKit painted an empty white page. On iPhone and iPad the black that showed for a moment as a page arrived goes too. Pages look as they did once they show, one with no background of its own still white, and light mode is unchanged.
 
 ## 1.1.3
 

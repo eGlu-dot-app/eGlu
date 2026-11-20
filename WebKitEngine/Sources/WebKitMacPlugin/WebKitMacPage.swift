@@ -34,6 +34,7 @@ public final class WebKitMacPage: WebMacPage {
         ruleListTarget = WebKitRuleListTarget(controller: controller)
         channels = WebKitMessageChannels(controller: controller, appWorld: Self.appWorld)
         let view = WebKitPageView(frame: .zero, configuration: config)
+        view.holdBlankUntilFirstPage()
         webView = view
         scripting = WebKitPageScripts(view: view, controller: controller)
         services = WebKitPageServices(view: view)

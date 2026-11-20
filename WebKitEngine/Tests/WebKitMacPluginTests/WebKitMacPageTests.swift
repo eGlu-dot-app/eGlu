@@ -109,6 +109,27 @@ final class WebKitMacPageTests: XCTestCase {
         recorder.finished = nil
     }
 
+    /// No white empty document before the first page: the view paints no
+    /// page ground of its own until its first page commits, and from then on
+    /// paints as WebKit always has.
+    @MainActor
+    func testNewViewPaintsNoPageGroundUntilItsFirstPageCommits() async throws {
+        let page = WebKitMacPage(configuration: configuration())
+        let recorder = PageRecorder()
+        connect(page, recorder)
+        defer { page.stopObserving(); page.tearDown() }
+        try XCTSkipUnless(page.webView.responds(to: NSSelectorFromString("_setDrawsBackground:")),
+                          "This WebKit has no switch for its page ground")
+        XCTAssertTrue(page.webView.holdsBlank)
+        XCTAssertFalse(page.webView.isOpaque)
+        await load(page, recorder)
+        XCTAssertFalse(page.webView.holdsBlank)
+        XCTAssertTrue(page.webView.isOpaque)
+        // A later page changes nothing.
+        await load(page, recorder, html: "<!doctype html><title>Second</title><p>again</p>")
+        XCTAssertTrue(page.webView.isOpaque)
+    }
+
     @MainActor
     func testObservationsMatchWebKitsOrderAndStateSynchronously() async {
         let page = WebKitMacPage(configuration: configuration())

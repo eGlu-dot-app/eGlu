@@ -157,6 +157,7 @@ public final class WebKitNavigationAdapter: NSObject, WKNavigationDelegate, WebR
     }
 
     public func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        (webView as? WebKitPageView)?.pageCommitted()
         events?.navigationCommitted(url: webView.url)
     }
 
