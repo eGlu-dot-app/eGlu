@@ -3638,6 +3638,7 @@ final class Browser: UIViewController, PageHost, UIAdaptivePresentationControlle
             self?.dismiss(animated: true) { self?.focusPage() }
         })
         settings.modalPresentationStyle = .formSheet
+        if !Device.phone { settings.preferredContentSize = CGSize(width: 1000, height: 760) }
         settings.presentationController?.delegate = self
         present(settings, animated: true)
     }

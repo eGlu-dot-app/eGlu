@@ -13,73 +13,135 @@ struct SettingsView: View {
     var padLayout = !Device.phone
     let done: () -> Void
     @State private var keyboard = GCKeyboard.coalesced != nil
-    @State private var path: [SettingsGroup] = []
+    @State private var navigation = SettingsNavigation()
     @State private var openedAnchor = false
-    /// What Settings' own search field has, and the part last chosen from it.
+    /// Settings' search text survives switching between the sidebar and the stack.
     @State private var query = ""
-    @State private var found: SettingsAnchor?
     // Import failures and parsed-file recovery survive returning to categories.
     @State private var importing = false
     @State private var imported: BookmarkImportOutcome?
     @State private var importWorking = false
 
     var body: some View {
-        NavigationStack(path: $path) {
-            List {
-                if !query.isEmpty {
-                    SettingsResults(matches: Device.settingsSearch(phoneLayout: phoneLayout, padLayout: padLayout, keyboard: keyboard)
-                        .find(query).filter { $0.anchor.group.shown(padLayout: padLayout, keyboard: keyboard) },
-                                    query: query, padLayout: padLayout) { destination in
-                        found = destination.anchor
-                        path = [destination.anchor.group]
+        GeometryReader { geometry in
+            let sidebar = SettingsNavigation.usesSidebar(pad: !Device.phone, width: geometry.size.width)
+            Group {
+                if sidebar { split } else { stack }
+            }
+            .onChange(of: sidebar, initial: true) { _, wide in
+                navigation.adapt(sidebar: wide)
+            }
+        }
+        .task {
+            guard !openedAnchor else { return }
+            openedAnchor = true
+            if let anchor, anchor.group.shown(padLayout: padLayout, keyboard: keyboard) {
+                navigation.reveal(anchor)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .GCKeyboardDidConnect)) { _ in keyboard = true }
+        .onReceive(NotificationCenter.default.publisher(for: .GCKeyboardDidDisconnect)) { _ in
+            keyboard = GCKeyboard.coalesced != nil
+        }
+    }
+
+    private var split: some View {
+        NavigationSplitView(columnVisibility: .constant(.all)) {
+            List(selection: selection) { categories }
+                .listStyle(.sidebar)
+                .navigationTitle("Settings")
+                .navigationBarTitleDisplayMode(.inline)
+                .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 320)
+                .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always),
+                            prompt: Text("Search Settings"))
+                .autocorrectionDisabled()
+                .toolbar(removing: .sidebarToggle)
+        } detail: {
+            NavigationStack(path: $navigation.detailPath) {
+                page(navigation.selection ?? .group(.general))
+                    .navigationDestination(for: SettingsNavigation.Page.self) { page($0) }
+            }
+        }
+        .navigationSplitViewStyle(.balanced)
+    }
+
+    private var stack: some View {
+        NavigationStack(path: $navigation.path) {
+            List { categories }
+                .navigationTitle("Settings")
+                .navigationBarTitleDisplayMode(.inline)
+                .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always),
+                            prompt: Text("Search Settings"))
+                .autocorrectionDisabled()
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) { Button("Done", action: done) }
+                }
+                .navigationDestination(for: SettingsNavigation.Page.self) { page($0) }
+        }
+    }
+
+    @ViewBuilder private var categories: some View {
+        if !query.isEmpty {
+            SettingsResults(matches: Device.settingsSearch(phoneLayout: phoneLayout, padLayout: padLayout, keyboard: keyboard)
+                .find(query).filter { $0.anchor.group.shown(padLayout: padLayout, keyboard: keyboard) },
+                            query: query, padLayout: padLayout) { destination in
+                navigation.reveal(destination.anchor)
+            }
+        } else {
+            ForEach(SettingsGroup.allCases.filter {
+                $0.shown(padLayout: padLayout, keyboard: keyboard)
+            }, id: \.self) { group in
+                NavigationLink(value: SettingsNavigation.Page.group(group)) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(group.shownTitle(padLayout: padLayout))
+                        Text(group.shownDetail)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                     }
-                } else {
-                ForEach(SettingsGroup.allCases.filter {
-                    $0.shown(padLayout: padLayout, keyboard: keyboard)
-                }, id: \.self) { group in
-                    NavigationLink(value: group) {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(group.shownTitle(padLayout: padLayout))
-                            Text(group.shownDetail)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(.vertical, 2)
-                    }
+                    .padding(.vertical, 2)
                 }
-                // Last, as an app's acknowledgements are.
-                Section {
-                    NavigationLink(String(localized: "Acknowledgements")) { LicencesView() }
+                .tag(SettingsNavigation.Page.group(group))
+            }
+            Section {
+                NavigationLink(String(localized: "Acknowledgements"), value: SettingsNavigation.Page.acknowledgements)
+                    .tag(SettingsNavigation.Page.acknowledgements)
+            }
+        }
+    }
+
+    private var selection: Binding<SettingsNavigation.Page?> {
+        Binding { navigation.selection } set: { page in
+            if let page { navigation.show(page) }
+        }
+    }
+
+    @ViewBuilder private func page(_ page: SettingsNavigation.Page) -> some View {
+        switch page {
+        case .group(let group):
+            SettingsDetail(session: session, spaceID: spaceID, group: group,
+                           anchor: navigation.anchor?.group == group ? navigation.anchor : nil,
+                           requestID: navigation.requestID,
+                           phoneLayout: phoneLayout, padLayout: padLayout,
+                           done: done, keyboard: keyboard,
+                           importing: $importing, imported: $imported, importWorking: $importWorking)
+                .id(group)
+        case .acknowledgements:
+            LicencesView()
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) { Button("Done", action: done) }
                 }
-                }
-            }
-            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always),
-                        prompt: Text("Search Settings"))
-            .autocorrectionDisabled()
-            .navigationTitle("Settings")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("Done", action: done) }
-            }
-            .navigationDestination(for: SettingsGroup.self) { group in
-                SettingsDetail(session: session, spaceID: spaceID, group: group,
-                               anchor: (found ?? anchor)?.group == group ? (found ?? anchor) : nil,
-                               phoneLayout: phoneLayout, padLayout: padLayout,
-                               done: done, keyboard: keyboard,
-                               importing: $importing, imported: $imported, importWorking: $importWorking)
-            }
-            .task {
-                guard !openedAnchor else { return }
-                openedAnchor = true
-                if let anchor,
-                   anchor.group.shown(padLayout: padLayout, keyboard: keyboard) {
-                    path = [anchor.group]
-                }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .GCKeyboardDidConnect)) { _ in keyboard = true }
-            .onReceive(NotificationCenter.default.publisher(for: .GCKeyboardDidDisconnect)) { _ in
-                keyboard = GCKeyboard.coalesced != nil
-            }
+        case .spaces:
+            SpaceList(session: session)
+        case .space(let id):
+            SpaceEditor(session: session, spaceID: id)
+        case .pinnedTabs:
+            PinnedTabList(session: session)
+        case .writingRules:
+            WritingRulesPage().navigationTitle("Rules")
+        case .ownMenuSites:
+            OwnMenuSites(session: session)
+        case .filterLists:
+            FilterListsView(session: session)
         }
     }
 }
@@ -123,11 +185,14 @@ private struct SettingsResults: View {
 
 private struct SettingsDetail: View {
     @ObservedObject var session: Session
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The space of the window Settings opened from, which imports go into.
     let spaceID: UUID
     let group: SettingsGroup
     /// The part to open at, when the address bar sent one (SettingsAnchor).
     var anchor: SettingsAnchor?
+    /// Re-selecting the same search result must reveal it again after scrolling away.
+    var requestID: UUID?
     /// Which layouts' parts to have (Device.settingsLayouts): a phone-width
     /// window's (one bar at the bottom, Desktop View), an iPad's (the tabs'
     /// place, the trackpad, shortcuts), or, on the iPhone Duo, both.
@@ -258,9 +323,7 @@ private struct SettingsDetail: View {
 
                 if group == .spaces {
                     Section {
-                        NavigationLink {
-                            SpaceList(session: session)
-                        } label: {
+                        NavigationLink(value: SettingsNavigation.Page.spaces) {
                             HStack {
                                 Text("Spaces")
                                 Spacer()
@@ -269,9 +332,7 @@ private struct SettingsDetail: View {
                                     .monospacedDigit()
                             }
                         }
-                        NavigationLink {
-                            PinnedTabList(session: session)
-                        } label: {
+                        NavigationLink(value: SettingsNavigation.Page.pinnedTabs) {
                             HStack {
                                 Text("Pinned Tabs")
                                 Spacer()
@@ -510,14 +571,17 @@ private struct SettingsDetail: View {
                     .frame(height: anchor == nil ? 0 : SettingsHeader.room)
                     .allowsHitTesting(false)
             }
-            .task {
+            .task(id: requestID) {
+                lit = nil
                 guard let anchor else { return }
                 // Once the list has its rows: before that there is nowhere to scroll to.
                 try? await Task.sleep(for: .milliseconds(120))
+                guard !Task.isCancelled else { return }
                 scroller.scrollTo(anchor, anchor: .top)
                 lit = anchor
                 try? await Task.sleep(for: .seconds(2))
-                withAnimation(.easeOut(duration: 0.6)) { lit = nil }
+                guard !Task.isCancelled else { return }
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { lit = nil }
             }
             }
     }
@@ -620,10 +684,7 @@ private struct WritingSection: View {
             }
             Section {
                 // A page of their own, a step below, where they can be searched: there are many.
-                NavigationLink {
-                    WritingRulesPage()
-                        .navigationTitle("Rules")
-                } label: {
+                NavigationLink(value: SettingsNavigation.Page.writingRules) {
                     HStack {
                         Text("Rules")
                         Spacer()
@@ -689,9 +750,7 @@ private struct LinkMenuSection: View {
         let kept = OwnMenus.builtIn.filter { session.preferences.keepsOwnMenus(onHost: $0.host) }.count
             + session.preferences.addedOwnMenuSites.count
         Section {
-            NavigationLink {
-                OwnMenuSites(session: session)
-            } label: {
+            NavigationLink(value: SettingsNavigation.Page.ownMenuSites) {
                 LabeledContent("Sites with their own menus") {
                     Text(kept.formatted(.number)).monospacedDigit()
                 }
@@ -780,9 +839,7 @@ private struct BlockingSection: View {
         Section {
             Toggle("Block ads and trackers", isOn: $session.preferences.blocksContent)
             if session.preferences.blocksContent {
-                NavigationLink {
-                    FilterListsView(session: session)
-                } label: {
+                NavigationLink(value: SettingsNavigation.Page.filterLists) {
                     LabeledContent("Filter lists") {
                         let on = session.preferences.filterLists(languages: ContentBlocker.languages, region: ContentBlocker.region).count
                         Text("\(on) on").monospacedDigit()
