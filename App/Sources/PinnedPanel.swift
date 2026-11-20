@@ -324,7 +324,7 @@ private struct PinnedMenu: ViewModifier {
         if #available(iOS 27.0, *) {
             content.popover(isPresented: $shown) {
                 if let list {
-                    PinnedRows(panel: list)
+                    PinnedPanelRows(panel: list)
                         // A list opened again is another panel: another view.
                         .id(ObjectIdentifier(list))
                         .frame(width: list.size.width, height: list.size.height)
@@ -340,7 +340,7 @@ private struct PinnedMenu: ViewModifier {
 }
 
 /// The panel's rows in the popover.
-private struct PinnedRows: UIViewRepresentable {
+private struct PinnedPanelRows: UIViewRepresentable {
     let panel: PinnedPanel
 
     func makeUIView(context: Context) -> PinnedPanel {

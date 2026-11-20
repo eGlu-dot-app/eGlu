@@ -168,6 +168,8 @@ targets:
         # off it (the snapshots' files, the share sheet's file) says so.
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
       configs:
+        Release:
+          EXCLUDED_SOURCE_FILE_NAMES: "$(inherited) SummaryFixture.html"
         # Hosted iOS layout tests use their own sandbox and preferences.
         Test:
           PRODUCT_BUNDLE_IDENTIFIER: net.taehee.safience.suggestiontests
@@ -237,6 +239,17 @@ targets:
         TEST_HOST: $(BUILT_PRODUCTS_DIR)/eGlu.app/eGlu
         BUNDLE_LOADER: $(TEST_HOST)
         TARGETED_DEVICE_FAMILY: "1,2"
+  eGlu Summary UI Tests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: Tests/PageSummaryUI
+    dependencies:
+      - target: eGlu
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: net.taehee.safience.summary-ui-tests
+        GENERATE_INFOPLIST_FILE: YES
   # The Mac app's Page against a real WKWebView (Tests/MacPage), inside
   # eGlu Mac as the Test configuration builds it (scheme eGlu Mac Page Tests).
   eGlu Mac Page Tests:
@@ -342,6 +355,10 @@ schemes:
     build:
       targets:
         eGlu: all
+        eGlu Summary UI Tests: [test]
+    test:
+      targets:
+        - eGlu Summary UI Tests
     run:
       config: Debug
     archive:

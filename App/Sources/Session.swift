@@ -62,6 +62,13 @@ final class Session: ObservableObject {
 
     /// Asked from any thread: the filter lists are read and written away from the main one.
     nonisolated static var folder: URL {
+        #if DEBUG
+        if PageMindTesting.enabled {
+            let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+                ?? FileManager.default.temporaryDirectory
+            return support.appendingPathComponent("SafienceSummaryUITests", isDirectory: true)
+        }
+        #endif
         #if DEBUG && targetEnvironment(simulator)
         if ProcessInfo.processInfo.environment["EGLU_ISOLATED_QA"] == "1",
            let path = ProcessInfo.processInfo.environment["EGLU_DATA_ROOT"], !path.isEmpty, path.hasPrefix("/") {
@@ -82,7 +89,17 @@ final class Session: ObservableObject {
         workspace = opened.workspace
         workspaceProblem = opened.problem
         if opened.created { Session.welcomeIfNew() }
+        #if DEBUG
+        var initialPreferences = Preferences.stored(in: .standard, key: Session.preferencesKey)
+        if PageMindTesting.enabled {
+            initialPreferences.handoff = !ProcessInfo.processInfo.arguments.contains("-UITestHandoffOff")
+            initialPreferences.iCloudSync = false
+        }
+        preferences = initialPreferences
+        if PageMindTesting.enabled { hasIntelligence = true }
+        #else
         preferences = Preferences.stored(in: .standard, key: Session.preferencesKey)
+        #endif
     }
 
     /// Once, at launch, before the first window.
@@ -151,7 +168,10 @@ final class Session: ObservableObject {
     /// A first launch whose welcome hasn't been finished or skipped yet: kept
     /// across launches, so quitting halfway brings it back.
     var needsWelcome: Bool {
-        canUseWorkspace && UserDefaults.standard.string(forKey: Session.welcomeKey) == "pending"
+        #if DEBUG
+        if PageMindTesting.enabled { return false }
+        #endif
+        return canUseWorkspace && UserDefaults.standard.string(forKey: Session.welcomeKey) == "pending"
     }
 
     /// A workspace just made for a first launch: its welcome, unless one was seen already.
