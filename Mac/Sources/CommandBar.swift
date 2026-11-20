@@ -116,10 +116,11 @@ final class Suggestions: ObservableObject {
         selection = next < 0 ? nil : min(next, rows.count - 1)
     }
 
-    /// What Return does with nothing chosen, said at the field's end.
+    /// The explicit action always describes the field, not a selected row.
     func sendLabel(for text: String) -> String? {
         let typed = text.trimmingCharacters(in: .whitespaces)
-        guard !typed.isEmpty, typed != start else { return nil }
+        guard !typed.isEmpty else { return nil }
+        if typed == start { return String(localized: "Reload") }
         let engine = Session.shared.preferences.engine
         // What isn't a search is an address.
         if let url = Destination.url(for: typed, engine: engine), url != Destination.search(typed, engine: engine) {
@@ -261,6 +262,7 @@ extension Command {
         case .contentBlocking: return "shield"
         case .linkMenu: return "contextualmenu.and.cursorarrow"
         case .find: return "text.magnifyingglass"
+        case .summarizePage: return "text.quote"
         case .handoff: return "arrowshape.turn.up.right"
         case .handoffFile: return "arrow.up.doc"
         case .acceptWritingSuggestion: return "character.cursor.ibeam"
@@ -289,6 +291,10 @@ extension Command {
 /// is the space's colour, as the sidebar's ground is, so it reads as the
 /// browser's and not as more of the page it lies over.
 struct CommandBar: View {
+    static let fieldHeight: CGFloat = 56
+    static let actionHeight: CGFloat = 52
+    static let controlsHeight = fieldHeight + actionHeight
+
     @ObservedObject var model: WindowModel
     @Environment(\.colorScheme) private var scheme
     @ObservedObject var suggestions: Suggestions
@@ -298,6 +304,7 @@ struct CommandBar: View {
     @State private var text = ""
     /// What the field held as it opened: the page's address, or nothing.
     @State private var started = ""
+    @FocusState private var submitFocused: Bool
 
     init(model: WindowModel, purpose: CommandBarPurpose, room: CGFloat) {
         self.model = model
@@ -321,22 +328,53 @@ struct CommandBar: View {
                     case .up: suggestions.move(-1)
                     case .down: suggestions.move(1)
                     case .cancel: close()
-                    case .send: send()
+                    case .send: send(taking: suggestions.selected)
                     }
                 }
-                if let label = suggestions.selected == nil ? suggestions.sendLabel(for: text) : nil {
-                    HStack(spacing: 4) {
-                        Text(label).lineLimit(1)
-                        Image(systemName: "return")
-                    }
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .fixedSize()
-                    .transition(.opacity)
-                }
+                Button("Cancel", action: close)
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("commandBar.cancel")
             }
             .padding(.horizontal, 18)
-            .frame(height: 56)
+            .frame(height: Self.fieldHeight)
+            Divider().opacity(0.6)
+            let label = suggestions.sendLabel(for: text) ?? String(localized: "Open")
+            Button { send() } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.up.right")
+                        .accessibilityHidden(true)
+                    Text(verbatim: label)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer(minLength: 0)
+                    if suggestions.selected == nil {
+                        Image(systemName: "return")
+                            .accessibilityHidden(true)
+                    }
+                }
+                .font(.system(size: 13, weight: .medium))
+                .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(CommandSubmitStyle())
+            .disabled(suggestions.sendLabel(for: text) == nil)
+            .focusable()
+            .focused($submitFocused)
+            .onKeyPress(.return) {
+                guard submitFocused else { return .ignored }
+                send()
+                return .handled
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.accentColor, lineWidth: 2)
+                    .opacity(submitFocused ? 1 : 0)
+                    .allowsHitTesting(false)
+            }
+            .accessibilityLabel(Text(verbatim: label))
+            .accessibilityIdentifier("commandBar.submit")
+            .padding(.horizontal, 8)
+            .frame(height: Self.actionHeight)
             if !suggestions.rows.isEmpty {
                 Divider().opacity(0.6)
                 SuggestionRows(suggestions: suggestions, tint: model.space?.color.color ?? .accentColor,
@@ -364,25 +402,52 @@ struct CommandBar: View {
         .onChange(of: text) { _, now in suggestions.typed(now, in: model) }
     }
 
-    private func send() {
-        if let row = suggestions.selected {
-            model.run(row, purpose: purpose)
-            return
-        }
-        let typed = text.trimmingCharacters(in: .whitespaces)
-        guard !typed.isEmpty else { return close() }
-        model.commandBar = nil
-        // The page's own address sent again is a reload, as in Safari.
-        if purpose == .here, typed == started {
-            model.reload()
-        } else {
-            model.go(typed, newTab: purpose == .newTab)
-        }
+    private func send(taking selection: Suggestion? = nil) {
+        model.sendCommandBar(text, started: started, purpose: purpose, taking: selection)
     }
 
     private func close() {
-        model.commandBar = nil
-        model.focusPage()
+        model.dismissCommandBar()
+    }
+}
+
+/// Draw the action's whole target as SwiftUI content. AppKit's bordered
+/// style can leave the spacer between the title and Return unclickable.
+private struct CommandSubmitStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 4)
+            .background(.primary.opacity(configuration.isPressed ? 0.16 : 0.08),
+                        in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .contentShape(Rectangle())
+    }
+}
+
+extension WindowModel {
+    /// Return can take a chosen suggestion; the pointer action sends only
+    /// the field's words, even while a different suggestion is highlighted.
+    func sendCommandBar(_ text: String, started: String, purpose: CommandBarPurpose, taking selection: Suggestion? = nil) {
+        if let selection {
+            run(selection, purpose: purpose)
+            return
+        }
+        let typed = text.trimmingCharacters(in: .whitespaces)
+        guard !typed.isEmpty else { return dismissCommandBar() }
+        commandBar = nil
+        // The page's own address sent again is a reload, as in Safari.
+        if purpose == .here, typed == started {
+            reload()
+            focusPage()
+        } else {
+            go(typed, newTab: purpose == .newTab)
+        }
+    }
+
+    func dismissCommandBar() {
+        commandBar = nil
+        focusPage()
     }
 }
 

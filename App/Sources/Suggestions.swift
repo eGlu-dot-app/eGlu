@@ -56,7 +56,7 @@ final class Suggestions: ObservableObject {
     /// what they were made from: made again only when the spaces, their
     /// tabs or bookmarks are other ones, or the window's width is, not for
     /// every letter.
-    private var index: (made: Autocomplete.Index, space: UUID, tab: UUID?, phone: Bool, windows: Bool, spaces: [Space])?
+    private var index: (made: Autocomplete.Index, space: UUID, tab: UUID?, phone: Bool, windows: Bool, canHandoff: Bool, spaces: [Space])?
 
     var selected: Suggestion? {
         selection.flatMap { rows.indices.contains($0) ? rows[$0] : nil }
@@ -181,11 +181,11 @@ final class Suggestions: ObservableObject {
         let spaces = Session.shared.workspace.spaces
         // The commands and Settings' parts a window has go with its width.
         if let kept = index, kept.space == window.spaceID, kept.tab == window.tabID, kept.phone == window.phone,
-           kept.windows == window.makesWindows, kept.spaces == spaces {
+           kept.windows == window.makesWindows, kept.canHandoff == window.canHandoff, kept.spaces == spaces {
             return kept.made
         }
         let made = Autocomplete.Index(candidates(for: window))
-        index = (made, window.spaceID, window.tabID, window.phone, window.makesWindows, spaces)
+        index = (made, window.spaceID, window.tabID, window.phone, window.makesWindows, window.canHandoff, spaces)
         return made
     }
 
