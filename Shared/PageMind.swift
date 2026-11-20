@@ -3,6 +3,28 @@ import Foundation
 import FoundationModels
 import PadCore
 
+enum PageSkill: String, CaseIterable {
+    case summary, keyPoints, explainSimply, actionItems
+
+    var title: String {
+        switch self {
+        case .summary: String(localized: "Summary")
+        case .keyPoints: String(localized: "Key points")
+        case .explainSimply: String(localized: "Simpler")
+        case .actionItems: String(localized: "Actions")
+        }
+    }
+
+    var instruction: String {
+        switch self {
+        case .summary: ""
+        case .keyPoints: "Read the page brief and list its key points using only its facts, in the page's language. Return plain text with one short • bullet per line, starting each line with ‘• ’. No heading or other Markdown."
+        case .explainSimply: "Read the page brief and explain it in simple, everyday words for a reader new to the topic, in the page's language. Use only its facts and keep its meaning. Return plain text without Markdown."
+        case .actionItems: "Read the page brief and list concrete action items supported by its facts, in the page's language. Return plain text with one short • bullet per line, starting each line with ‘• ’. No heading or other Markdown. If there are no action items, say so; do not invent tasks."
+        }
+    }
+}
+
 /// What the model is asked about a page for a handoff: what it reads
 /// (Handoff.brief), from the fullest to the shortest, the shorter ones for
 /// a prompt that turned out too long, and whether it is also to pick parts
@@ -10,6 +32,13 @@ import PadCore
 struct PageQuestion {
     let briefs: [String]
     let picks: Bool
+    let skill: PageSkill
+
+    init(briefs: [String], picks: Bool, skill: PageSkill = .summary) {
+        self.briefs = briefs
+        self.picks = picks
+        self.skill = skill
+    }
 }
 
 /// Apple Intelligence's on-device model, asked once for a handoff what the
@@ -139,8 +168,21 @@ private final class TestPageMind: PageMind {
 
     func read(_ question: PageQuestion, looks: Bool, picture: @MainActor () async -> CGImage?,
               writing: @escaping @MainActor (String) -> Void) async -> PageAnswer? {
-        let parts = ["A quieter way to browse.", " Keep related pages in spaces,",
+        let parts: [String]
+        switch question.skill {
+        case .summary:
+            parts = ["A quieter way to browse.", " Keep related pages in spaces,",
                      " find what matters,", " and carry on without losing your place."]
+        case .keyPoints:
+            parts = ["• Keep related pages in spaces.", "\n• Find what matters.",
+                     "\n• Read on-device summaries.", "\n• Carry on without losing your place."]
+        case .explainSimply:
+            parts = ["Think of spaces as shelves", " for your open pages.",
+                     " A short summary helps you understand a page", " before you keep reading."]
+        case .actionItems:
+            parts = ["• Put related pages in a space.", "\n• Find the page you need.",
+                     "\n• Read its summary.", "\n• Continue where you left off."]
+        }
         var summary = ""
         for part in parts {
             do { try await Task.sleep(for: .seconds(2)) } catch { return nil }
@@ -207,7 +249,7 @@ private final class OnDevicePageMind: PageMind {
         for attempt in tries {
             guard !Task.isCancelled else { return nil }
             writing("")
-            if let answer = await ask(model, attempt.brief, picture: attempt.picture, picks: question.picks, writing: writing) {
+            if let answer = await ask(model, attempt.brief, picture: attempt.picture, picks: question.picks, skill: question.skill, writing: writing) {
                 return answer
             }
         }
@@ -219,8 +261,34 @@ private final class OnDevicePageMind: PageMind {
     /// is the same as the whole of it at once, the sampling being greedy.
     /// The summary comes first in the answer's shape, ahead of the kind
     /// and the picks, so it is what is written first.
-    private func ask(_ model: SystemLanguageModel, _ brief: String, picture: CGImage?, picks: Bool,
+    private func ask(_ model: SystemLanguageModel, _ brief: String, picture: CGImage?, picks: Bool, skill: PageSkill,
                      writing: @escaping @MainActor (String) -> Void) async -> PageAnswer? {
+        if skill != .summary {
+            let session = LanguageModelSession(model: model, instructions: skill.instruction)
+            let options = GenerationOptions(samplingMode: .greedy)
+            let stream: LanguageModelSession.ResponseStream<String>
+            if #available(iOS 27.0, macOS 27.0, *), let picture {
+                stream = session.streamResponse(options: options) {
+                    brief
+                    Attachment(picture)
+                }
+            } else {
+                stream = session.streamResponse(to: brief, options: options)
+            }
+            var last: String?
+            do {
+                for try await snapshot in stream {
+                    guard !Task.isCancelled else { return nil }
+                    last = snapshot.content
+                    writing(snapshot.content)
+                }
+            } catch {
+                return nil
+            }
+            guard let last, !last.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  !Task.isCancelled else { return nil }
+            return PageAnswer(kind: .other, about: last)
+        }
         let instructions = Handoff.kindInstructions + (picks ? Handoff.pickInstructions : "")
         let session = LanguageModelSession(model: model, instructions: instructions)
         let options = GenerationOptions(samplingMode: .greedy)

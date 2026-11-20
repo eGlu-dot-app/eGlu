@@ -13,7 +13,7 @@ final class PageSummaryJob {
     private(set) var state = State.reading
     @ObservationIgnored private weak var source: Page?
     @ObservationIgnored private let allowed: () -> Bool
-    @ObservationIgnored private var started = false
+    @ObservationIgnored private var generation = UUID()
 
     init(source: Page, url: URL, allowed: @escaping () -> Bool) {
         self.source = source
@@ -22,32 +22,54 @@ final class PageSummaryJob {
         self.allowed = allowed
     }
 
-    func read() async {
-        guard !started else { return }
-        started = true
-        guard allowed(), let source, let mind = await PageMinds.mind(), !Task.isCancelled, allowed() else {
+    func read(skill: PageSkill) async {
+        guard !Task.isCancelled else { return }
+        let run = UUID()
+        generation = run
+        text = ""
+        state = .reading
+        guard allowed(), let source else {
+            fail()
+            return
+        }
+        let mind = await PageMinds.mind()
+        guard isCurrent(run) else { return }
+        guard allowed(), let mind else {
             fail()
             return
         }
         let outcome = await source.readingForHandoff(limit: Handoff.limit, into: FileManager.default.temporaryDirectory,
                                                     fetchDocuments: false)
-        guard !Task.isCancelled, allowed(), case .content(let reading) = outcome else {
+        guard isCurrent(run) else { return }
+        guard allowed(), case .content(let reading) = outcome else {
             fail()
             return
         }
-        let question = PageQuestion(briefs: Handoff.briefs(title: title, url: url, reading: reading, candidates: []), picks: false)
+        let question = PageQuestion(briefs: Handoff.briefs(title: title, url: url, reading: reading, candidates: []), picks: false, skill: skill)
         let answer = await mind.read(question, looks: false, picture: { nil }) { [weak self] words in
-            guard let self, !Task.isCancelled, self.allowed() else { return }
-            self.text = Handoff.hardened(words)
+            guard let self, self.isCurrent(run), self.allowed() else { return }
+            self.text = Self.formatted(words, skill: skill)
             self.state = .writing
         }
-        guard !Task.isCancelled else { return }
-        guard allowed(), let answer, !Handoff.hardened(answer.about).isEmpty else {
+        guard isCurrent(run) else { return }
+        guard allowed(), let answer, !Self.formatted(answer.about, skill: skill).isEmpty else {
             fail()
             return
         }
-        text = Handoff.hardened(answer.about)
+        text = Self.formatted(answer.about, skill: skill)
         state = .ready
+    }
+
+    private static func formatted(_ words: String, skill: PageSkill) -> String {
+        if skill == .summary { return Handoff.hardened(words) }
+        return words.components(separatedBy: .newlines)
+            .map { Handoff.hardened($0) }
+            .joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func isCurrent(_ run: UUID) -> Bool {
+        generation == run && !Task.isCancelled
     }
 
     private func fail() {
@@ -60,6 +82,7 @@ struct PageSummarySheet: View {
     @State var job: PageSummaryJob
     let handoff: () -> Void
     @State private var copied = false
+    @State private var skill = PageSkill.summary
     @Environment(\.dismiss) private var dismiss
 
     @ViewBuilder
@@ -101,6 +124,15 @@ struct PageSummarySheet: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
 
+                    Picker("Page skill", selection: $skill) {
+                        ForEach(PageSkill.allCases, id: \.self) { skill in
+                            Text(skill.title)
+                                .tag(skill)
+                                .accessibilityIdentifier("summary-skill-\(skill.rawValue)")
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
                     if job.state == .failed {
                         VStack(alignment: .leading, spacing: 10) {
                             Label("Couldn't summarize this page", systemImage: "exclamationmark.bubble")
@@ -121,7 +153,7 @@ struct PageSummarySheet: View {
                         if job.state != .ready {
                             HStack(spacing: 10) {
                                 ProgressView()
-                                Text(job.state == .reading ? "Reading the page…" : "Writing summary…")
+                                Text(job.state == .reading ? "Reading the page…" : "Writing…")
                                     .font(.subheadline)
                                     .foregroundStyle(Palette.muted)
                             }
@@ -168,6 +200,9 @@ struct PageSummarySheet: View {
                 }
             }
         }
-        .task { await job.read() }
+        .task(id: skill) {
+            copied = false
+            await job.read(skill: skill)
+        }
     }
 }

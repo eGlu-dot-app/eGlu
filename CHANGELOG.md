@@ -17,6 +17,8 @@ What changes in eGlu (called Safience up to 1.0.7) from one version to the next,
 - On iPad and Mac, a space's tabs come in from its side of the row of spaces: from the right going to a space on the right, from the left going back, whether it is chosen by its button, a sweep or Next and Previous Space. Before, on the Mac they always came in from the right, and on iPad they didn't slide at all. Under Reduce Motion they only fade.
 - On iPhone and iPad, Summarize Page opens a summary over the page, written as Apple Intelligence reads it on the device. Copy its words or continue to Handoff; nothing is sent anywhere. It is offered only with Handoff turned on and Apple Intelligence available, never on protected sign-in pages. The page menu, command bar and ⌃⌥U open it.
 - The bundled page used by the summary UI tests is left out of Release builds.
+- Page skills in the summary sheet turn the page into key points, a simpler explanation or action items. Switch while it writes, and copy the result; Apple Intelligence still works only on the device, with Handoff turned on.
+- Page skills ask for their own plain-text answers, so Key points and Actions can use bullet lists without Handoff's sentence-only format.
 
 ## 1.1.3
 

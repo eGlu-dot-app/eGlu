@@ -492,6 +492,8 @@ node Tests/extension-shim.mjs               # the Mac's shim for Chrome extensio
 xcodebuild -scheme eGlu -destination 'platform=iOS Simulator,name=iPhone 17' test CODE_SIGNING_ALLOWED=NO
 ```
 
+The summary sheet's Page skills offer Summary, Key points, Simpler and Actions, using Apple Intelligence on the device. Switching skills stops the previous answer and starts a new one; Copy takes the current result. They use the same Handoff opt-in and protected-page rules, without changing what Handoff shares.
+
 The iOS summary UI tests use a bundled page and a deterministic, streamed PageMind, not the simulator's Apple Intelligence. In a Debug build, `-UITestPageMind` opens that page in a separate test workspace and enables Handoff for the run; add `-UITestPageMindFailure` or `-UITestPageMindEmpty` to exercise an unavailable answer. These launch arguments have no effect in Release builds.
 
 `Tests/bridge.html` also runs on its own in Safari: `python3 -m http.server 8642` at the root, then open `http://localhost:8642/Tests/bridge.html`. `Tests/blocker.html`, `Tests/scriptlets.html` and `Tests/markdown.html` run the same way, each loading the script as it ships, and say at the bottom of the page whether every check passed. `Tests/handoff.html` reads the pages in `Tests/handoff/` (one of our own for each kind of page) with `markdown.js` and says whether the reading kept beside each is still what the script gives; the package's tests turn each reading into the file Handoff would hand off and hold it against the `.md` kept there.
