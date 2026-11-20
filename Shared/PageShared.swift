@@ -61,11 +61,13 @@ extension Page {
     /// page and changing nothing. Never on a hands-off page, bridge or no
     /// bridge. Says why there is nothing to read as text: a picture, a
     /// page that failed. A PDF is read as the document it is.
-    func readingForHandoff(limit: Int, into folder: URL, telling: Handoff.Telling? = nil) async -> Handoff.ReadOutcome {
+    func readingForHandoff(limit: Int, into folder: URL, telling: Handoff.Telling? = nil, fetchDocuments: Bool = true) async -> Handoff.ReadOutcome {
         // The document of an earlier handoff is not this one's: the tab may have gone on to an article since.
         handoffDocument = nil
         guard !HandsOff.covers(pageURL), !HandsOff.covers(committed) else { return .protectedPage() }
         if let mimeType, let declared = FileFormat(mimeType: mimeType) {
+            // A summary reads what is here; it never fetches a document again.
+            guard fetchDocuments else { return .noReadableContent }
             // A file in the tab is a document — a PDF, or a text, CSV,
             // JSON or XML page: fetched through the tab's own web view
             // into the job's folder (its sign-ins come with it) and read

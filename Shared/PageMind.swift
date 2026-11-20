@@ -65,6 +65,9 @@ enum PageMinds {
     /// must bring its sheet. Past that the handoff goes without the model,
     /// and the next one finds what the look came to.
     @MainActor static func mind() async -> PageMind? {
+        #if DEBUG
+        if PageMindTesting.enabled { return TestPageMind() }
+        #endif
         guard #available(iOS 26.0, *), !spares else { return nil }
         let mind = kept ?? OnDevicePageMind()
         kept = mind
@@ -84,6 +87,9 @@ enum PageMinds {
     /// framework's first use reads what the device can do and loads
     /// libraries of its own. The model itself is not loaded.
     static func intelligence() async -> Bool {
+        #if DEBUG
+        if PageMindTesting.enabled { return true }
+        #endif
         guard #available(iOS 26.0, *) else { return false }
         return await Task.detached(priority: .utility) { SystemLanguageModel.default.isAvailable }.value
     }
@@ -121,6 +127,33 @@ enum PageMinds {
         return process.isLowPowerModeEnabled || process.thermalState == .serious || process.thermalState == .critical
     }
 }
+
+#if DEBUG
+enum PageMindTesting {
+    nonisolated static var enabled: Bool { ProcessInfo.processInfo.arguments.contains("-UITestPageMind") }
+}
+
+@MainActor
+private final class TestPageMind: PageMind {
+    func isThere() async -> Bool { true }
+
+    func read(_ question: PageQuestion, looks: Bool, picture: @MainActor () async -> CGImage?,
+              writing: @escaping @MainActor (String) -> Void) async -> PageAnswer? {
+        let parts = ["A quieter way to browse.", " Keep related pages in spaces,",
+                     " find what matters,", " and carry on without losing your place."]
+        var summary = ""
+        for part in parts {
+            do { try await Task.sleep(for: .seconds(2)) } catch { return nil }
+            summary += part
+            writing(summary)
+        }
+        if ProcessInfo.processInfo.arguments.contains("-UITestPageMindFailure") { return nil }
+        return PageAnswer(kind: .article, about: ProcessInfo.processInfo.arguments.contains("-UITestPageMindEmpty") ? "" : summary)
+    }
+
+    func describe(_ picture: CGImage) async -> String? { nil }
+}
+#endif
 
 @available(iOS 26.0, *)
 @MainActor
